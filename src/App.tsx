@@ -246,8 +246,8 @@ export default function App() {
 
         // Load user's bookings and owner listings (including archived)
         const [userBookings, ownerItems] = await Promise.all([
-          fetchUserBookingsFromFirestore(profile.uid),
-          fetchOwnerListings(profile.uid),
+          fetchUserBookingsFromFirestore(profile.uid).catch(() => []),
+          fetchOwnerListings(profile.uid).catch(() => []),
         ]);
         setBookings(userBookings);
         if (ownerItems.length > 0) {
@@ -264,8 +264,27 @@ export default function App() {
             return Array.from(byId.values());
           });
         }
-      } catch (err) {
-        console.error('Failed to load Firestore user profile:', err);
+      } catch {
+        const fallbackNow = new Date().toISOString();
+        setUserProfile({
+          uid: fbUser.uid,
+          name:
+            fbUser.displayName ||
+            (fbUser.email ? fbUser.email.split('@')[0] : 'BorrowBox Member'),
+          email: fbUser.email || '',
+          phone: '',
+          photoURL: fbUser.photoURL || '',
+          city: 'Bengaluru',
+          neighborhood: 'Indiranagar',
+          canRent: true,
+          canList: true,
+          activeMode: 'renter',
+          createdAtISO: fallbackNow,
+          updatedAtISO: fallbackNow,
+          isAdmin:
+            (fbUser.email || '').trim().toLowerCase() ===
+            'marukrutarth@gmail.com',
+        });
       } finally {
         setIsAuthLoading(false);
       }
