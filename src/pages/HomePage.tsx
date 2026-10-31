@@ -1,23 +1,29 @@
 import React, { useMemo, useState } from 'react';
 import {
   AlertCircle,
+  ArrowRight,
   Calculator,
   Camera,
+  CheckCircle2,
   Compass,
   Cpu,
   Gamepad2,
   GraduationCap,
   Info,
-  Loader2,
+  Lock,
   MapPin,
   Music,
   PlusCircle,
+  QrCode,
   RotateCcw,
   Search,
   ShieldCheck,
   Sparkles,
+  TrendingUp,
   Wrench,
+  Zap,
 } from 'lucide-react';
+import { motion } from 'motion/react';
 import { CATEGORY_DIRECTORY } from '../data/demoCatalog';
 import {
   CategoryName,
@@ -35,6 +41,7 @@ import {
 } from '../utils/rentalLogic';
 import { PageRoute } from '../components/Navbar';
 import { ProductCard } from '../components/ProductCard';
+import { ProductImage } from '../components/ProductImage';
 
 interface HomePageProps {
   listings: ProductListing[];
@@ -47,14 +54,14 @@ interface HomePageProps {
 }
 
 const CATEGORY_ICONS: Record<CategoryName, React.ReactNode> = {
-  Photography: <Camera className="w-5 h-5 text-indigo-600" />,
-  Gaming: <Gamepad2 className="w-5 h-5 text-indigo-600" />,
-  Electronics: <Cpu className="w-5 h-5 text-indigo-600" />,
-  Tools: <Wrench className="w-5 h-5 text-indigo-600" />,
-  Outdoor: <Compass className="w-5 h-5 text-indigo-600" />,
-  'Musical Instruments': <Music className="w-5 h-5 text-indigo-600" />,
-  Events: <Sparkles className="w-5 h-5 text-indigo-600" />,
-  Education: <GraduationCap className="w-5 h-5 text-indigo-600" />,
+  Photography: <Camera className="w-5 h-5 text-[#8B5CF6]" />,
+  Gaming: <Gamepad2 className="w-5 h-5 text-[#8B5CF6]" />,
+  Electronics: <Cpu className="w-5 h-5 text-[#8B5CF6]" />,
+  Tools: <Wrench className="w-5 h-5 text-[#8B5CF6]" />,
+  Outdoor: <Compass className="w-5 h-5 text-[#8B5CF6]" />,
+  'Musical Instruments': <Music className="w-5 h-5 text-[#8B5CF6]" />,
+  Events: <Sparkles className="w-5 h-5 text-[#8B5CF6]" />,
+  Education: <GraduationCap className="w-5 h-5 text-[#8B5CF6]" />,
 };
 
 export const HomePage: React.FC<HomePageProps> = ({
@@ -105,12 +112,13 @@ export const HomePage: React.FC<HomePageProps> = ({
     });
   }, [listings, selectedCity, heroCategory]);
 
-  const heroShowcaseListing = useMemo(() => {
+  const heroArrangementListings = useMemo(() => {
     const cityMatches = filterAndSortListings(listings, {
       city: selectedCity,
       sortBy: 'featured',
     });
-    return cityMatches[0] || listings[0];
+    const base = cityMatches.length >= 3 ? cityMatches : listings;
+    return base.slice(0, 3);
   }, [listings, selectedCity]);
 
   const nearbyListings = useMemo(() => {
@@ -168,29 +176,47 @@ export const HomePage: React.FC<HomePageProps> = ({
   };
 
   return (
-    <div className="bg-white">
+    <div className="bg-transparent text-[#F8FAFC]">
       {/* 1. Hero Section */}
-      <section className="border-b border-slate-200 bg-gradient-to-b from-slate-50/70 to-white pt-10 pb-14 lg:pt-16 lg:pb-20">
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center mb-10">
-            <div className="lg:col-span-7 transition-opacity duration-200">
-              <p className="text-sm font-semibold text-indigo-600 tracking-tight mb-3">
-                Rent What You Need. Earn From What You Own.
-              </p>
+      <section className="relative border-b border-white/[0.08] pt-12 pb-16 lg:pt-20 lg:pb-24 overflow-hidden bb-grid-pattern">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[420px] bg-gradient-to-b from-[#8B5CF6]/15 via-[#06B6D4]/5 to-transparent blur-3xl -z-10"
+        />
+
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center mb-12">
+            {/* Hero Left Copy & CTAs */}
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
+              className="lg:col-span-7 space-y-6"
+            >
+              <div className="inline-flex items-center gap-2 text-xs font-semibold tracking-wider uppercase text-[#06B6D4]">
+                <Zap className="w-3.5 h-3.5 text-[#8B5CF6]" />
+                <span>Rent What You Need. Earn From What You Own.</span>
+              </div>
+
               <h1
-                className="text-4xl sm:text-5xl lg:text-[3.25rem] font-bold text-slate-900 tracking-tight leading-[1.12] mb-5"
+                className="text-4xl sm:text-5xl lg:text-[3.5rem] font-extrabold text-[#F8FAFC] tracking-tight leading-[1.08]"
                 style={{ textWrap: 'balance' }}
               >
-                Why Buy It When You Can Borrow It?
+                Why Buy It When You Can{' '}
+                <span className="bg-gradient-to-r from-[#8B5CF6] via-[#A78BFA] to-[#06B6D4] bg-clip-text text-transparent">
+                  Borrow It?
+                </span>
               </h1>
-              <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl mb-8">
-                Borrow cameras, gaming consoles, power tools, trekking gear, and
-                projectors from neighbors across Indian cities — or list your
-                unused belongings and earn extra income in Indian Rupees (₹).
+
+              <p className="text-base sm:text-lg text-[#94A3B8] leading-relaxed max-w-2xl">
+                Access pro cameras, PS5 consoles, power tools, trekking gear,
+                and 4K projectors from verified neighbors across Indian cities —
+                or list your idle equipment to earn recurring income in Indian
+                Rupees (₹).
               </p>
 
-              {/* Two Prominent CTAs required by Phase 1: Rent an Item & List Your Item */}
-              <div className="flex flex-wrap items-center gap-3.5">
+              {/* Prominent CTAs: Explore Items (Rent an Item) & List Your Item */}
+              <div className="flex flex-wrap items-center gap-4 pt-1">
                 <button
                   type="button"
                   onClick={() => {
@@ -200,9 +226,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                     });
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  className="inline-flex items-center gap-2 px-6 py-3.5 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-semibold rounded-xl transition-all bb-glow-button whitespace-nowrap shrink-0 cursor-pointer"
                 >
-                  Rent an Item
+                  <span>Explore Items</span>
+                  <ArrowRight className="w-4 h-4" />
                 </button>
                 <button
                   type="button"
@@ -210,61 +237,150 @@ export const HomePage: React.FC<HomePageProps> = ({
                     onNavigate({ page: 'list-item' });
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className="px-6 py-3 bg-white hover:bg-slate-50 text-slate-900 border border-slate-300 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  className="px-6 py-3.5 bg-[#161E2E] hover:bg-[#1D293B] text-[#F8FAFC] border border-white/[0.12] hover:border-[#8B5CF6]/50 text-sm font-semibold rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   List Your Item
                 </button>
-                <span className="text-xs text-slate-500 pl-1">
-                  Bengaluru · Mumbai · Delhi NCR · Hyderabad · Pune · Chennai
-                </span>
               </div>
-            </div>
 
-            {/* Right Column: Showcase Card with Explicit Sample Preview Attribution */}
-            {heroShowcaseListing && (
-              <div className="lg:col-span-5 space-y-2 transition-opacity duration-200">
-                <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-                  <span className="font-medium text-slate-700">
-                    {heroShowcaseListing.isDemoData
-                      ? 'Sample Catalog Preview (Demonstration Only)'
-                      : 'Community Listing Spotlight'}
-                  </span>
-                  <span>Click to inspect ₹ quote</span>
-                </div>
-                <ProductCard
-                  listing={heroShowcaseListing}
-                  onSelect={(itemId) => {
-                    onNavigate({ page: 'details', itemId });
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                />
+              {/* Supported Hubs */}
+              <div className="pt-2 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-[#94A3B8]">
+                <span className="font-semibold text-[#F8FAFC]">
+                  Active Hubs:
+                </span>
+                <span>Bengaluru</span>
+                <span>·</span>
+                <span>Mumbai</span>
+                <span>·</span>
+                <span>Delhi NCR</span>
+                <span>·</span>
+                <span>Hyderabad</span>
+                <span>·</span>
+                <span>Pune</span>
+                <span>·</span>
+                <span>Chennai</span>
               </div>
-            )}
+            </motion.div>
+
+            {/* Hero Right: Multi-Card Interactive Product Arrangement */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.45, delay: 0.1, ease: 'easeOut' }}
+              className="lg:col-span-5 space-y-4"
+            >
+              {heroArrangementListings[0] && (
+                <div className="bg-[#161E2E] border border-white/[0.08] rounded-2xl p-4 shadow-2xl space-y-4 relative overflow-hidden">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-[#8B5CF6]">
+                      {heroArrangementListings[0].isDemoData
+                        ? 'Featured Catalog Spotlight'
+                        : 'Community Listing Spotlight'}
+                    </span>
+                    <span className="text-[#94A3B8] font-mono-tabular">
+                      Instant ₹ Quote & QR Handover
+                    </span>
+                  </div>
+
+                  {/* Primary Spotlight Product */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onNavigate({
+                        page: 'details',
+                        itemId: heroArrangementListings[0].id,
+                      });
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="group w-full text-left rounded-xl overflow-hidden bg-[#111827] border border-white/[0.08] hover:border-[#8B5CF6]/50 transition-all cursor-pointer"
+                  >
+                    <div className="aspect-[16/10] w-full overflow-hidden relative">
+                      <ProductImage
+                        srcKeyOrUrl={heroArrangementListings[0].imageUrl}
+                        alt={heroArrangementListings[0].title}
+                        className="w-full h-full group-hover:scale-105 transition-transform duration-500"
+                      />
+                      <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
+                        <div className="bg-[#0B0F19]/85 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/[0.1]">
+                          <p className="text-xs font-semibold text-[#F8FAFC] truncate max-w-[24ch]">
+                            {heroArrangementListings[0].title}
+                          </p>
+                          <p className="text-[11px] text-[#94A3B8]">
+                            {heroArrangementListings[0].neighborhood},{' '}
+                            {heroArrangementListings[0].city}
+                          </p>
+                        </div>
+                        <div className="bg-[#8B5CF6] text-white px-3 py-1.5 rounded-lg font-mono-tabular text-xs font-bold shrink-0">
+                          {formatINR(heroArrangementListings[0].dailyPriceINR)}
+                          /day
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Secondary Mini Arrangement Pair */}
+                  {heroArrangementListings.length > 1 && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {heroArrangementListings.slice(1, 3).map((mini) => (
+                        <button
+                          key={mini.id}
+                          type="button"
+                          onClick={() => {
+                            onNavigate({ page: 'details', itemId: mini.id });
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          className="group text-left p-2.5 rounded-xl bg-[#111827] border border-white/[0.08] hover:border-[#06B6D4]/50 transition-all flex items-center gap-3 cursor-pointer"
+                        >
+                          <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-white/[0.08]">
+                            <ProductImage
+                              srcKeyOrUrl={mini.imageUrl}
+                              alt={mini.title}
+                              className="w-full h-full group-hover:scale-110 transition-transform duration-300"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-[#F8FAFC] truncate group-hover:text-[#06B6D4] transition-colors">
+                              {mini.title}
+                            </p>
+                            <p className="text-[11px] font-mono-tabular text-[#8B5CF6] font-semibold mt-0.5">
+                              {formatINR(mini.dailyPriceINR)}/day
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </motion.div>
           </div>
 
-          {/* Location-Aware Search Bar */}
-          <form
+          {/* Prominent Search Bar */}
+          <motion.form
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.18 }}
             onSubmit={handleHeroSearch}
             aria-label="Search rental items"
-            className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs"
+            className="bg-[#161E2E]/90 backdrop-blur-xl border border-white/[0.08] rounded-2xl p-4 sm:p-5 shadow-2xl"
           >
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-              <div className="md:col-span-4">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 items-center">
+              <div className="md:col-span-5">
                 <label
                   htmlFor="hero-search-product"
-                  className="block text-xs font-medium text-slate-600 mb-1"
+                  className="block text-xs font-medium text-[#94A3B8] mb-1.5"
                 >
-                  Product Name
+                  Product Name or Equipment
                 </label>
                 <div className="relative">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <Search className="w-4 h-4 text-[#94A3B8] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     id="hero-search-product"
                     type="text"
                     value={heroSearchQuery}
                     onChange={(e) => setHeroSearchQuery(e.target.value)}
-                    placeholder="Try Sony A7 IV, PS5, Drill, Tent..."
-                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50/70 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-indigo-600"
+                    placeholder="Try Sony A7 IV, PS5, Bosch Drill, Camping Tent..."
+                    className="w-full pl-10 pr-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:bg-[#1D293B] focus:outline-none focus:border-[#8B5CF6] transition-colors"
                   />
                 </div>
               </div>
@@ -272,7 +388,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               <div className="md:col-span-3">
                 <label
                   htmlFor="hero-search-location"
-                  className="block text-xs font-medium text-slate-600 mb-1"
+                  className="block text-xs font-medium text-[#94A3B8] mb-1.5"
                 >
                   Location
                 </label>
@@ -282,7 +398,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   onChange={(e) =>
                     onCityChange(e.target.value as IndianCity | 'All')
                   }
-                  className="w-full px-3 py-2.5 bg-slate-50/70 border border-slate-200 rounded-lg text-sm text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-600"
+                  className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:bg-[#1D293B] focus:outline-none focus:border-[#8B5CF6] transition-colors"
                 >
                   <option value="All">All Indian Cities</option>
                   {ALL_CITIES.map((city) => (
@@ -293,10 +409,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </select>
               </div>
 
-              <div className="md:col-span-3">
+              <div className="md:col-span-2">
                 <label
                   htmlFor="hero-search-category"
-                  className="block text-xs font-medium text-slate-600 mb-1"
+                  className="block text-xs font-medium text-[#94A3B8] mb-1.5"
                 >
                   Category
                 </label>
@@ -306,7 +422,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   onChange={(e) =>
                     setHeroCategory(e.target.value as CategoryName | 'All')
                   }
-                  className="w-full px-3 py-2.5 bg-slate-50/70 border border-slate-200 rounded-lg text-sm text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-600"
+                  className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:bg-[#1D293B] focus:outline-none focus:border-[#8B5CF6] transition-colors"
                 >
                   <option value="All">All Categories</option>
                   {ALL_CATEGORIES.map((cat) => (
@@ -320,25 +436,28 @@ export const HomePage: React.FC<HomePageProps> = ({
               <div className="md:col-span-2 md:pt-5">
                 <button
                   type="submit"
-                  className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  className="w-full py-2.5 px-4 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-semibold rounded-xl transition-all bb-glow-button whitespace-nowrap shrink-0 cursor-pointer"
                 >
-                  Search
+                  Search Gear
                 </button>
               </div>
             </div>
-          </form>
+          </motion.form>
         </div>
       </section>
 
       {/* 2. Popular Categories Section */}
-      <section className="py-16 lg:py-20 border-b border-slate-200 bg-white">
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
+      <section className="py-16 lg:py-22 border-b border-white/[0.08] bg-[#111827]/75">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">
             <div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#8B5CF6] mb-1.5">
+                Curated Equipment Verticals
+              </p>
+              <h2 className="text-2xl sm:text-3xl font-bold text-[#F8FAFC] tracking-tight">
                 Popular Categories
               </h2>
-              <p className="text-sm text-slate-600 mt-1">
+              <p className="text-sm text-[#94A3B8] mt-1">
                 Explore rental categories in{' '}
                 {selectedCity === 'All' ? 'all Indian cities' : selectedCity}{' '}
                 with daily rates in ₹.
@@ -353,14 +472,14 @@ export const HomePage: React.FC<HomePageProps> = ({
                 });
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className="text-sm font-semibold text-indigo-600 hover:text-indigo-700 whitespace-nowrap shrink-0 self-start sm:self-auto cursor-pointer"
+              className="text-sm font-semibold text-[#8B5CF6] hover:text-[#A78BFA] whitespace-nowrap shrink-0 self-start sm:self-auto cursor-pointer"
             >
               Browse Full Catalog →
             </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {CATEGORY_DIRECTORY.map((cat) => {
+            {CATEGORY_DIRECTORY.map((cat, idx) => {
               const countObj = categoryCounts[cat.name] || {
                 community: 0,
                 sample: 0,
@@ -374,9 +493,14 @@ export const HomePage: React.FC<HomePageProps> = ({
                   : '0 listings in city';
 
               return (
-                <button
+                <motion.button
                   key={cat.name}
                   type="button"
+                  initial={{ opacity: 0, y: 12 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.28, delay: idx * 0.04 }}
+                  whileHover={{ y: -3 }}
                   onClick={() => {
                     onNavigate({
                       page: 'browse',
@@ -385,69 +509,69 @@ export const HomePage: React.FC<HomePageProps> = ({
                     });
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className="group text-left p-5 bg-white border border-slate-200 rounded-xl hover:border-indigo-600 transition-colors flex flex-col justify-between gap-4 cursor-pointer"
+                  className="group text-left p-5 bg-[#161E2E] border border-white/[0.08] hover:border-[#8B5CF6]/50 rounded-xl transition-all flex flex-col justify-between gap-4 cursor-pointer"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="text-base font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                      <h3 className="text-base font-semibold text-[#F8FAFC] group-hover:text-[#8B5CF6] transition-colors">
                         {cat.name}
                       </h3>
-                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                      <p className="text-xs text-[#94A3B8] mt-1 leading-relaxed">
                         {cat.summary}
                       </p>
                     </div>
-                    <div className="p-2.5 rounded-lg bg-slate-50 shrink-0">
+                    <div className="p-2.5 rounded-xl bg-[#1D293B] border border-white/[0.06] shrink-0 group-hover:border-[#8B5CF6]/40 transition-colors">
                       {CATEGORY_ICONS[cat.name]}
                     </div>
                   </div>
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <div className="pt-3 border-t border-white/[0.08] flex items-center justify-between text-xs text-[#94A3B8]">
                     <span className="tabular-nums">{countLabel}</span>
-                    <span className="font-mono-tabular font-medium text-slate-800">
+                    <span className="font-mono-tabular font-semibold text-[#F8FAFC]">
                       From {formatINR(cat.startingPriceINR)}/day
                     </span>
                   </div>
-                </button>
+                </motion.button>
               );
             })}
           </div>
         </div>
       </section>
 
-      {/* 3. Nearby Rental Listings Section (with Location Filter, Honest Source Separation, Loading/Empty/Error States) */}
-      <section className="py-16 lg:py-20 border-b border-slate-200 bg-slate-50/60">
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 space-y-6">
+      {/* 3. Featured & Nearby Rental Products Section */}
+      <section className="py-16 lg:py-22 border-b border-white/[0.08] bg-[#0B0F19]">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 space-y-6">
           <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
             <div>
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 mb-1.5">
+              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#06B6D4] mb-1.5">
                 <MapPin className="w-3.5 h-3.5" />
                 <span>
                   {selectedCity === 'All'
-                    ? 'All Supported Cities in India'
-                    : `Nearby in ${selectedCity}`}
+                    ? 'Featured Across Indian Cities'
+                    : `Featured Nearby in ${selectedCity}`}
                 </span>
               </div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
-                Nearby Rental Listings
+              <h2 className="text-2xl sm:text-3xl font-bold text-[#F8FAFC] tracking-tight">
+                Featured Rental Products
               </h2>
-              <p className="text-sm text-slate-600 mt-1">
+              <p className="text-sm text-[#94A3B8] mt-1">
                 Compare daily rental rates, refundable security deposits,
                 approximate locations, and availability windows.
               </p>
             </div>
 
-            {/* Source Filter Segmented Control: Separate Community Listings vs Sample Previews */}
+            {/* Source Filter Segmented Control */}
             <div
               role="group"
               aria-label="Filter listings by source"
-              className="inline-flex flex-wrap items-center gap-1 p-1 bg-white border border-slate-200 rounded-lg self-start"
+              className="inline-flex flex-wrap items-center gap-1 p-1 bg-[#161E2E] border border-white/[0.08] rounded-xl self-start"
             >
               <button
                 type="button"
                 onClick={() => setNearbySourceFilter('all')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
                   nearbySourceFilter === 'all'
-                    ? 'bg-slate-900 text-white'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-[#8B5CF6] text-white'
+                    : 'text-[#94A3B8] hover:text-[#F8FAFC]'
                 }`}
               >
                 All Views ({nearbyCounts.total})
@@ -455,10 +579,10 @@ export const HomePage: React.FC<HomePageProps> = ({
               <button
                 type="button"
                 onClick={() => setNearbySourceFilter('community')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
                   nearbySourceFilter === 'community'
-                    ? 'bg-indigo-600 text-white'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-[#8B5CF6] text-white'
+                    : 'text-[#94A3B8] hover:text-[#F8FAFC]'
                 }`}
               >
                 Community Listings ({nearbyCounts.community})
@@ -466,10 +590,10 @@ export const HomePage: React.FC<HomePageProps> = ({
               <button
                 type="button"
                 onClick={() => setNearbySourceFilter('sample')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
                   nearbySourceFilter === 'sample'
-                    ? 'bg-slate-900 text-white'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-[#8B5CF6] text-white'
+                    : 'text-[#94A3B8] hover:text-[#F8FAFC]'
                 }`}
               >
                 Sample Previews ({nearbyCounts.sample})
@@ -481,15 +605,15 @@ export const HomePage: React.FC<HomePageProps> = ({
           <div
             role="group"
             aria-label="Select nearby city"
-            className="flex items-center gap-1.5 flex-wrap"
+            className="flex items-center gap-2 flex-wrap"
           >
             <button
               type="button"
               onClick={() => onCityChange('All')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
+              className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
                 selectedCity === 'All'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                  ? 'bg-[#8B5CF6] text-white'
+                  : 'bg-[#161E2E] border border-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#1D293B]'
               }`}
             >
               All Cities
@@ -499,10 +623,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                 key={city}
                 type="button"
                 onClick={() => onCityChange(city)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
+                className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
                   selectedCity === city
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                    ? 'bg-[#8B5CF6] text-white'
+                    : 'bg-[#161E2E] border border-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#1D293B]'
                 }`}
               >
                 {city}
@@ -510,24 +634,24 @@ export const HomePage: React.FC<HomePageProps> = ({
             ))}
           </div>
 
-          {/* Honest Catalog Transparency Banner when Sample Previews are shown */}
+          {/* Honest Catalog Transparency Banner */}
           {nearbySourceFilter !== 'community' && nearbyCounts.sample > 0 && (
-            <div className="p-3.5 rounded-xl bg-white border border-slate-200 flex items-start gap-2.5 text-xs text-slate-600">
-              <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+            <div className="p-3.5 rounded-xl bg-[#161E2E] border border-white/[0.08] flex items-start gap-2.5 text-xs text-[#94A3B8]">
+              <Info className="w-4 h-4 text-[#06B6D4] shrink-0 mt-0.5" />
               <div>
-                <strong className="text-slate-900">
+                <strong className="text-[#F8FAFC]">
                   Catalog Transparency:
                 </strong>{' '}
                 Items labeled{' '}
-                <span className="font-medium text-slate-800">
-                  Sample Preview (Unverified Demo)
+                <span className="font-medium text-[#F8FAFC]">
+                  Sample Preview
                 </span>{' '}
-                are UI demonstration listings and not active neighborhood offers.
+                are demonstration listings and not active neighborhood offers.
                 Switch to{' '}
                 <button
                   type="button"
                   onClick={() => setNearbySourceFilter('community')}
-                  className="text-indigo-600 font-semibold underline hover:text-indigo-700 cursor-pointer"
+                  className="text-[#8B5CF6] font-semibold underline hover:text-[#A78BFA] cursor-pointer"
                 >
                   View Community Listings Only
                 </button>{' '}
@@ -536,35 +660,48 @@ export const HomePage: React.FC<HomePageProps> = ({
             </div>
           )}
 
-          {/* Loading, Error, Empty, or Listings Grid State */}
+          {/* Smooth Skeleton Loading, Error, Empty, or Staggered Listings Grid */}
           {isLoadingListings ? (
             <div
               role="status"
               aria-live="polite"
-              className="py-16 px-4 bg-white border border-slate-200 rounded-xl flex flex-col items-center justify-center gap-3 text-slate-600"
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
             >
-              <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
-              <p className="text-sm font-medium">
-                Loading nearby rental listings...
-              </p>
+              {[0, 1, 2].map((skeletonIdx) => (
+                <div
+                  key={skeletonIdx}
+                  className="bg-[#161E2E] border border-white/[0.08] rounded-xl overflow-hidden animate-pulse"
+                >
+                  <div className="aspect-[4/3] bg-[#1D293B]" />
+                  <div className="p-5 space-y-3">
+                    <div className="h-3 w-1/3 bg-[#1D293B] rounded" />
+                    <div className="h-5 w-3/4 bg-[#1D293B] rounded" />
+                    <div className="h-3 w-1/2 bg-[#1D293B] rounded" />
+                    <div className="pt-3 border-t border-white/[0.08] flex justify-between">
+                      <div className="h-6 w-24 bg-[#1D293B] rounded" />
+                      <div className="h-6 w-20 bg-[#1D293B] rounded" />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : listingsError ? (
             <div
               role="alert"
-              className="py-12 px-6 bg-red-50 border border-red-200 rounded-xl max-w-lg mx-auto text-center space-y-3"
+              className="py-12 px-6 bg-[#EF4444]/10 border border-[#EF4444]/30 rounded-xl max-w-lg mx-auto text-center space-y-3"
             >
-              <AlertCircle className="w-6 h-6 text-red-600 mx-auto" />
-              <h3 className="text-base font-semibold text-red-900">
+              <AlertCircle className="w-6 h-6 text-[#EF4444] mx-auto" />
+              <h3 className="text-base font-semibold text-[#F8FAFC]">
                 Unable to load rental listings
               </h3>
-              <p className="text-xs text-red-700 leading-relaxed">
+              <p className="text-xs text-[#94A3B8] leading-relaxed">
                 {listingsError}
               </p>
               {onRetryListings && (
                 <button
                   type="button"
                   onClick={onRetryListings}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#EF4444] hover:bg-[#DC2626] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   Retry
@@ -572,15 +709,15 @@ export const HomePage: React.FC<HomePageProps> = ({
               )}
             </div>
           ) : nearbyListings.length === 0 ? (
-            <div className="py-14 px-6 bg-white border border-slate-200 rounded-xl max-w-xl mx-auto text-center space-y-4">
-              <h3 className="text-lg font-semibold text-slate-900">
+            <div className="py-14 px-6 bg-[#161E2E] border border-white/[0.08] rounded-xl max-w-xl mx-auto text-center space-y-4">
+              <h3 className="text-lg font-semibold text-[#F8FAFC]">
                 {nearbySourceFilter === 'community'
                   ? `No user-created community listings in ${
                       selectedCity === 'All' ? 'India' : selectedCity
                     } yet`
                   : `No matching listings found in ${selectedCity}`}
               </h3>
-              <p className="text-sm text-slate-600 leading-relaxed">
+              <p className="text-sm text-[#94A3B8] leading-relaxed">
                 {nearbySourceFilter === 'community'
                   ? 'BorrowBox never disguises demo products as real community listings. Be the first neighbor to list an item for rent, or switch to Sample Previews to explore the interface.'
                   : 'Try selecting All Cities or switching the source filter to view available items.'}
@@ -592,7 +729,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     onNavigate({ page: 'list-item' });
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
                 >
                   <PlusCircle className="w-4 h-4" />
                   List Your Item
@@ -601,7 +738,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <button
                     type="button"
                     onClick={() => setNearbySourceFilter('all')}
-                    className="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    className="px-4 py-2.5 bg-[#1D293B] hover:bg-[#334155] text-[#F8FAFC] border border-white/[0.08] text-xs font-semibold rounded-lg transition-colors cursor-pointer"
                   >
                     Show Sample Previews
                   </button>
@@ -610,7 +747,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <button
                     type="button"
                     onClick={() => onCityChange('All')}
-                    className="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    className="px-4 py-2.5 bg-[#1D293B] hover:bg-[#334155] text-[#F8FAFC] border border-white/[0.08] text-xs font-semibold rounded-lg transition-colors cursor-pointer"
                   >
                     Reset to All Cities
                   </button>
@@ -619,47 +756,113 @@ export const HomePage: React.FC<HomePageProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {nearbyListings.slice(0, 6).map((item) => (
-                <ProductCard
+              {nearbyListings.slice(0, 6).map((item, idx) => (
+                <motion.div
                   key={item.id}
-                  listing={item}
-                  onSelect={(itemId) => {
-                    onNavigate({ page: 'details', itemId });
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                />
+                  initial={{ opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.3, delay: idx * 0.05 }}
+                >
+                  <ProductCard
+                    listing={item}
+                    onSelect={(itemId) => {
+                      onNavigate({ page: 'details', itemId });
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                  />
+                </motion.div>
               ))}
             </div>
           )}
         </div>
       </section>
 
-      {/* 3.5 Phase 4: Rent-vs-Buy Calculator & Personalized Recommendations */}
-      <section className="py-16 lg:py-20 border-b border-slate-200 bg-white">
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 space-y-12">
+      {/* 4. Why Choose BorrowBox & Rent-vs-Buy Calculator Section */}
+      <section className="py-16 lg:py-22 border-b border-white/[0.08] bg-[#111827]/80">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 space-y-14">
+          {/* Why Choose BorrowBox Pillars */}
+          <div className="space-y-8">
+            <div className="max-w-2xl">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#8B5CF6] mb-1.5">
+                Why Choose BorrowBox
+              </p>
+              <h2 className="text-2xl sm:text-3xl font-bold text-[#F8FAFC] tracking-tight">
+                Engineered for High-Trust Neighborhood Sharing
+              </h2>
+              <p className="text-sm text-[#94A3B8] mt-1.5">
+                Instead of spending ₹80,000+ on equipment used twice a year,
+                rent locally with auditable handover protection.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="p-6 rounded-xl bg-[#161E2E] border border-white/[0.08] space-y-3">
+                <div className="w-10 h-10 rounded-lg bg-[#8B5CF6]/15 border border-[#8B5CF6]/30 flex items-center justify-center text-[#8B5CF6]">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+                <h3 className="text-base font-semibold text-[#F8FAFC]">
+                  Save Up to 90% Over Buying New
+                </h3>
+                <p className="text-xs text-[#94A3B8] leading-relaxed">
+                  Pay only for the days you actually use a camera, console, or
+                  tool. Multi-day rentals of 7+ days automatically unlock a 10%
+                  weekly discount.
+                </p>
+              </div>
+
+              <div className="p-6 rounded-xl bg-[#161E2E] border border-white/[0.08] space-y-3">
+                <div className="w-10 h-10 rounded-lg bg-[#06B6D4]/15 border border-[#06B6D4]/30 flex items-center justify-center text-[#06B6D4]">
+                  <QrCode className="w-5 h-5" />
+                </div>
+                <h3 className="text-base font-semibold text-[#F8FAFC]">
+                  QR Code & Timestamped Handovers
+                </h3>
+                <p className="text-xs text-[#94A3B8] leading-relaxed">
+                  Every approved booking generates a unique handover QR code.
+                  Both parties log pickup and return condition notes and photos.
+                </p>
+              </div>
+
+              <div className="p-6 rounded-xl bg-[#161E2E] border border-white/[0.08] space-y-3">
+                <div className="w-10 h-10 rounded-lg bg-[#22C55E]/15 border border-[#22C55E]/30 flex items-center justify-center text-[#22C55E]">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <h3 className="text-base font-semibold text-[#F8FAFC]">
+                  Protected Security Deposits in ₹
+                </h3>
+                <p className="text-xs text-[#94A3B8] leading-relaxed">
+                  Clear refundable deposit terms protect item owners while
+                  giving borrowers complete visibility into their total upfront
+                  amount.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Interactive Rent-vs-Buy Calculator */}
           {selectedCalcListing && rentVsBuyResult && (
-            <div className="p-6 sm:p-8 border border-slate-200 rounded-xl bg-slate-50/60">
+            <div className="p-6 sm:p-8 border border-white/[0.08] rounded-2xl bg-[#161E2E] shadow-2xl">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
                 <div className="lg:col-span-6 space-y-4">
-                  <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600">
-                    <Calculator className="w-4 h-4" />
+                  <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#06B6D4]">
+                    <Calculator className="w-4 h-4 text-[#8B5CF6]" />
                     <span>Smart Financial Decision Tool</span>
                   </div>
-                  <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+                  <h2 className="text-2xl font-bold text-[#F8FAFC] tracking-tight">
                     Rent-vs-Buy Savings Calculator
                   </h2>
-                  <p className="text-sm text-slate-600 leading-relaxed">
+                  <p className="text-sm text-[#94A3B8] leading-relaxed">
                     Compare the annual cost of renting an item from a neighbor
                     against buying it brand new and absorbing annual maintenance
                     and storage depreciation.
                   </p>
 
-                  <div className="space-y-3 pt-1">
+                  <div className="space-y-4 pt-1">
                     <div>
                       <label
                         htmlFor="home-calc-item"
-                        className="block text-xs font-medium text-slate-700 mb-1"
+                        className="block text-xs font-medium text-[#94A3B8] mb-1.5"
                       >
                         Select Equipment to Compare
                       </label>
@@ -667,7 +870,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                         id="home-calc-item"
                         value={selectedCalcListing.id}
                         onChange={(e) => setCalcItemId(e.target.value)}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-indigo-600"
+                        className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
                       >
                         {listings.map((item) => (
                           <option key={item.id} value={item.id}>
@@ -684,14 +887,14 @@ export const HomePage: React.FC<HomePageProps> = ({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <div className="flex justify-between text-xs mb-1">
+                        <div className="flex justify-between text-xs mb-1.5">
                           <label
                             htmlFor="home-calc-days"
-                            className="text-slate-600"
+                            className="text-[#94A3B8]"
                           >
                             Days per rental
                           </label>
-                          <span className="font-mono-tabular font-semibold text-slate-900">
+                          <span className="font-mono-tabular font-semibold text-[#F8FAFC]">
                             {calcDaysPerTrip} days
                           </span>
                         </div>
@@ -704,19 +907,19 @@ export const HomePage: React.FC<HomePageProps> = ({
                           onChange={(e) =>
                             setCalcDaysPerTrip(Number(e.target.value))
                           }
-                          className="w-full accent-indigo-600"
+                          className="w-full accent-[#8B5CF6] cursor-pointer"
                         />
                       </div>
 
                       <div>
-                        <div className="flex justify-between text-xs mb-1">
+                        <div className="flex justify-between text-xs mb-1.5">
                           <label
                             htmlFor="home-calc-trips"
-                            className="text-slate-600"
+                            className="text-[#94A3B8]"
                           >
                             Uses per year
                           </label>
-                          <span className="font-mono-tabular font-semibold text-slate-900">
+                          <span className="font-mono-tabular font-semibold text-[#F8FAFC]">
                             {calcTripsPerYear} times/yr
                           </span>
                         </div>
@@ -729,45 +932,45 @@ export const HomePage: React.FC<HomePageProps> = ({
                           onChange={(e) =>
                             setCalcTripsPerYear(Number(e.target.value))
                           }
-                          className="w-full accent-indigo-600"
+                          className="w-full accent-[#8B5CF6] cursor-pointer"
                         />
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="lg:col-span-6 p-6 bg-white border border-slate-200 rounded-xl space-y-4">
+                <div className="lg:col-span-6 p-6 bg-[#111827] border border-white/[0.08] rounded-xl space-y-4">
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200">
-                      <p className="text-xs text-slate-500">
+                    <div className="p-4 rounded-xl bg-[#161E2E] border border-white/[0.08]">
+                      <p className="text-xs text-[#94A3B8]">
                         Annual Rental Cost ({rentVsBuyResult.plannedDaysPerYear}{' '}
                         days/yr)
                       </p>
-                      <p className="text-xl font-bold font-mono-tabular text-indigo-600 mt-1">
+                      <p className="text-xl sm:text-2xl font-bold font-mono-tabular text-[#8B5CF6] mt-1">
                         {formatINR(rentVsBuyResult.estimatedRentalCostINR)}
                       </p>
                     </div>
-                    <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200">
-                      <p className="text-xs text-slate-500">
+                    <div className="p-4 rounded-xl bg-[#161E2E] border border-white/[0.08]">
+                      <p className="text-xs text-[#94A3B8]">
                         Retail Purchase Price
                       </p>
-                      <p className="text-xl font-bold font-mono-tabular text-slate-900 mt-1">
+                      <p className="text-xl sm:text-2xl font-bold font-mono-tabular text-[#F8FAFC] mt-1">
                         {formatINR(rentVsBuyResult.retailPriceINR)}
                       </p>
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-lg bg-indigo-50/70 border border-indigo-100 flex items-center justify-between gap-4">
+                  <div className="p-4 rounded-xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                      <p className="text-xs font-semibold text-indigo-950">
+                      <p className="text-xs font-semibold text-[#F8FAFC]">
                         Recommendation:{' '}
-                        <span className="uppercase text-indigo-700">
+                        <span className="uppercase text-[#06B6D4]">
                           {rentVsBuyResult.recommendation === 'rent'
                             ? 'Rent on BorrowBox'
                             : 'Consider Buying'}
                         </span>
                       </p>
-                      <p className="text-xs text-indigo-900 mt-1 leading-relaxed">
+                      <p className="text-xs text-[#94A3B8] mt-1 leading-relaxed">
                         {rentVsBuyResult.summary}
                       </p>
                     </div>
@@ -780,7 +983,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                         });
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
-                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shrink-0 cursor-pointer"
+                      className="px-4 py-2 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold rounded-lg shrink-0 cursor-pointer"
                     >
                       Inspect Item
                     </button>
@@ -790,19 +993,19 @@ export const HomePage: React.FC<HomePageProps> = ({
             </div>
           )}
 
-          {/* Personalized Recommendations Based on Available Listings */}
+          {/* Personalized Recommendations */}
           {personalizedRecs.length > 0 && (
             <div className="space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold text-indigo-600 mb-1">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[#06B6D4] mb-1">
                     Tailored For Your City & Interests
                   </p>
-                  <h3 className="text-xl font-bold text-slate-900">
+                  <h3 className="text-xl font-bold text-[#F8FAFC]">
                     Recommended Available Listings
                   </h3>
                 </div>
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-[#94A3B8]">
                   Ranked by city match, availability status, and daily value
                 </span>
               </div>
@@ -823,21 +1026,24 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
       </section>
 
-      {/* 4. How It Works Section */}
+      {/* 5. How BorrowBox Works Section */}
       <section
         id="how-it-works"
-        className="py-16 lg:py-20 border-b border-slate-200 bg-white"
+        className="py-16 lg:py-22 border-b border-white/[0.08] bg-[#0B0F19]"
       >
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
             <div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#8B5CF6] mb-1.5">
+                Simple 3-Step Workflow
+              </p>
+              <h2 className="text-2xl sm:text-3xl font-bold text-[#F8FAFC] tracking-tight">
                 How BorrowBox Works
               </h2>
-              <p className="text-sm text-slate-600 mt-1 max-w-xl">
+              <p className="text-sm text-[#94A3B8] mt-1 max-w-xl">
                 Whether you need equipment for a weekend project or want to earn
-                from items sitting on your shelf, every rental follows a clear
-                3-step workflow.
+                from items sitting on your shelf, every rental follows an
+                auditable 3-step workflow.
               </p>
             </div>
 
@@ -845,17 +1051,17 @@ export const HomePage: React.FC<HomePageProps> = ({
             <div
               role="tablist"
               aria-label="How It Works Perspective"
-              className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg self-start"
+              className="inline-flex items-center gap-1 p-1 bg-[#161E2E] border border-white/[0.08] rounded-xl self-start"
             >
               <button
                 type="button"
                 role="tab"
                 aria-selected={howItWorksTab === 'borrower'}
                 onClick={() => setHowItWorksTab('borrower')}
-                className={`px-4 py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   howItWorksTab === 'borrower'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-[#8B5CF6] text-white'
+                    : 'text-[#94A3B8] hover:text-[#F8FAFC]'
                 }`}
               >
                 For Borrowers
@@ -865,10 +1071,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                 role="tab"
                 aria-selected={howItWorksTab === 'owner'}
                 onClick={() => setHowItWorksTab('owner')}
-                className={`px-4 py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   howItWorksTab === 'owner'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-[#8B5CF6] text-white'
+                    : 'text-[#94A3B8] hover:text-[#F8FAFC]'
                 }`}
               >
                 For Item Owners
@@ -877,83 +1083,83 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
 
           {howItWorksTab === 'borrower' ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="p-6 border border-slate-200 rounded-xl bg-white">
-                <p className="text-xs font-mono-tabular font-semibold text-indigo-600 mb-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="p-6 border border-white/[0.08] rounded-xl bg-[#161E2E] space-y-2.5">
+                <p className="text-xs font-mono-tabular font-semibold text-[#8B5CF6]">
                   01. Find Gear Nearby
                 </p>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                <h3 className="text-lg font-semibold text-[#F8FAFC]">
                   Search Your Neighborhood
                 </h3>
-                <p className="text-sm text-slate-600 leading-relaxed">
+                <p className="text-sm text-[#94A3B8] leading-relaxed">
                   Filter by city, locality, and category to compare daily rental
                   prices in ₹, condition notes, included accessories, and
                   refundable deposit terms.
                 </p>
               </div>
-              <div className="p-6 border border-slate-200 rounded-xl bg-white">
-                <p className="text-xs font-mono-tabular font-semibold text-indigo-600 mb-2">
+              <div className="p-6 border border-white/[0.08] rounded-xl bg-[#161E2E] space-y-2.5">
+                <p className="text-xs font-mono-tabular font-semibold text-[#06B6D4]">
                   02. Reserve Dates & Verify
                 </p>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                <h3 className="text-lg font-semibold text-[#F8FAFC]">
                   Request Dates & Confirm ID
                 </h3>
-                <p className="text-sm text-slate-600 leading-relaxed">
+                <p className="text-sm text-[#94A3B8] leading-relaxed">
                   Select your pickup and return dates. Review the instant ₹ cost
                   breakdown (including 10% weekly discounts on 7+ day rentals)
                   and submit a rental request.
                 </p>
               </div>
-              <div className="p-6 border border-slate-200 rounded-xl bg-white">
-                <p className="text-xs font-mono-tabular font-semibold text-indigo-600 mb-2">
+              <div className="p-6 border border-white/[0.08] rounded-xl bg-[#161E2E] space-y-2.5">
+                <p className="text-xs font-mono-tabular font-semibold text-[#22C55E]">
                   03. Pick Up, Use & Return
                 </p>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                <h3 className="text-lg font-semibold text-[#F8FAFC]">
                   Inspect & Get Deposit Back
                 </h3>
-                <p className="text-sm text-slate-600 leading-relaxed">
+                <p className="text-sm text-[#94A3B8] leading-relaxed">
                   Meet at the agreed neighborhood landmark, verify the item
-                  condition together, use the gear, and receive your refundable
+                  condition with your QR handover code, and receive your
                   security deposit back upon safe return.
                 </p>
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="p-6 border border-slate-200 rounded-xl bg-white">
-                <p className="text-xs font-mono-tabular font-semibold text-indigo-600 mb-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="p-6 border border-white/[0.08] rounded-xl bg-[#161E2E] space-y-2.5">
+                <p className="text-xs font-mono-tabular font-semibold text-[#8B5CF6]">
                   01. List for Free
                 </p>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                <h3 className="text-lg font-semibold text-[#F8FAFC]">
                   Set Your Daily Rate & Deposit
                 </h3>
-                <p className="text-sm text-slate-600 leading-relaxed">
+                <p className="text-sm text-[#94A3B8] leading-relaxed">
                   Add your camera, console, drill, or musical instrument. You
                   choose the daily rental price in ₹, refundable security
                   deposit, minimum rental days, and usage rules.
                 </p>
               </div>
-              <div className="p-6 border border-slate-200 rounded-xl bg-white">
-                <p className="text-xs font-mono-tabular font-semibold text-indigo-600 mb-2">
+              <div className="p-6 border border-white/[0.08] rounded-xl bg-[#161E2E] space-y-2.5">
+                <p className="text-xs font-mono-tabular font-semibold text-[#06B6D4]">
                   02. Review Rental Requests
                 </p>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                <h3 className="text-lg font-semibold text-[#F8FAFC]">
                   Full Control Over Every Booking
                 </h3>
-                <p className="text-sm text-slate-600 leading-relaxed">
+                <p className="text-sm text-[#94A3B8] leading-relaxed">
                   Review borrower details, requested dates, and intended use
                   before approving. Coordinate a convenient pickup time in your
-                  locality.
+                  locality via private booking chat.
                 </p>
               </div>
-              <div className="p-6 border border-slate-200 rounded-xl bg-white">
-                <p className="text-xs font-mono-tabular font-semibold text-indigo-600 mb-2">
+              <div className="p-6 border border-white/[0.08] rounded-xl bg-[#161E2E] space-y-2.5">
+                <p className="text-xs font-mono-tabular font-semibold text-[#22C55E]">
                   03. Earn From Unused Gear
                 </p>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                <h3 className="text-lg font-semibold text-[#F8FAFC]">
                   Turn Idle Belongings Into Income
                 </h3>
-                <p className="text-sm text-slate-600 leading-relaxed">
+                <p className="text-sm text-[#94A3B8] leading-relaxed">
                   Keep your equipment productive instead of collecting dust by
                   renting to neighbors with clear deposit terms and handover
                   checklists.
@@ -964,60 +1170,112 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
       </section>
 
-      {/* 5. Trust and Safety Section */}
-      <section className="py-16 lg:py-20 bg-white">
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
-          <div className="max-w-2xl mb-12">
-            <div className="flex items-center gap-2 text-indigo-600 text-xs font-semibold mb-2">
-              <ShieldCheck className="w-4 h-4" />
-              <span>Neighborhood Trust & Transparency</span>
+      {/* 6. Trust and Safety + Verified Review Architecture */}
+      <section className="py-16 lg:py-22 border-b border-white/[0.08] bg-[#111827]/75">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 space-y-12">
+          <div className="max-w-2xl">
+            <div className="flex items-center gap-2 text-[#06B6D4] text-xs font-semibold uppercase tracking-wider mb-2">
+              <ShieldCheck className="w-4 h-4 text-[#8B5CF6]" />
+              <span>Neighborhood Trust & Safety</span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+            <h2 className="text-2xl sm:text-3xl font-bold text-[#F8FAFC] tracking-tight">
               Clear Rules for Peer-to-Peer Handovers
             </h2>
-            <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+            <p className="text-sm text-[#94A3B8] mt-2 leading-relaxed">
               Sharing high-value equipment requires honest verification status,
               clear deposit terms, and structured handover checklists.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="p-5 border border-slate-200 rounded-xl">
-              <h3 className="text-sm font-semibold text-slate-900 mb-2">
+            <div className="p-5 border border-white/[0.08] bg-[#161E2E] rounded-xl space-y-2">
+              <CheckCircle2 className="w-5 h-5 text-[#8B5CF6]" />
+              <h3 className="text-sm font-semibold text-[#F8FAFC]">
                 In-Person ID Check at Handover
               </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
+              <p className="text-xs text-[#94A3B8] leading-relaxed">
                 Owners and borrowers inspect original Government photo ID in
-                person during pickup. Online KYC document verification is not
-                yet enabled.
+                person during pickup alongside the booking QR verification code.
               </p>
             </div>
-            <div className="p-5 border border-slate-200 rounded-xl">
-              <h3 className="text-sm font-semibold text-slate-900 mb-2">
+            <div className="p-5 border border-white/[0.08] bg-[#161E2E] rounded-xl space-y-2">
+              <CheckCircle2 className="w-5 h-5 text-[#06B6D4]" />
+              <h3 className="text-sm font-semibold text-[#F8FAFC]">
                 Refundable Security Deposits
               </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
+              <p className="text-xs text-[#94A3B8] leading-relaxed">
                 Each listing specifies an upfront refundable deposit in ₹ to
                 protect against accidental damage or missing accessories.
               </p>
             </div>
-            <div className="p-5 border border-slate-200 rounded-xl">
-              <h3 className="text-sm font-semibold text-slate-900 mb-2">
+            <div className="p-5 border border-white/[0.08] bg-[#161E2E] rounded-xl space-y-2">
+              <CheckCircle2 className="w-5 h-5 text-[#22C55E]" />
+              <h3 className="text-sm font-semibold text-[#F8FAFC]">
                 Accessory & Condition Checklist
               </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
+              <p className="text-xs text-[#94A3B8] leading-relaxed">
                 Every product page lists exact included items and condition
                 notes so both parties can test the device at pickup and return.
               </p>
             </div>
-            <div className="p-5 border border-slate-200 rounded-xl">
-              <h3 className="text-sm font-semibold text-slate-900 mb-2">
-                Transparent ₹ Pricing
+            <div className="p-5 border border-white/[0.08] bg-[#161E2E] rounded-xl space-y-2">
+              <CheckCircle2 className="w-5 h-5 text-[#8B5CF6]" />
+              <h3 className="text-sm font-semibold text-[#F8FAFC]">
+                100% Verified Rental Reviews
               </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                See daily rates, multi-day 10% discounts, and refundable deposit
-                amounts upfront before submitting a rental request.
+              <p className="text-xs text-[#94A3B8] leading-relaxed">
+                BorrowBox never displays fabricated testimonials. Reviews are
+                cryptographically restricted by Firestore rules to completed
+                bookings.
               </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 7. Final Call-to-Action Section */}
+      <section className="py-16 lg:py-24 bg-[#0B0F19]">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6">
+          <div className="relative overflow-hidden rounded-2xl bg-[#161E2E] border border-white/[0.08] p-8 sm:p-12 lg:p-16 text-center space-y-6">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[520px] h-[260px] bg-[#8B5CF6]/20 blur-[100px]"
+            />
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#06B6D4] relative z-10">
+              Start Sharing Across India Today
+            </p>
+            <h2
+              className="text-2xl sm:text-4xl font-extrabold text-[#F8FAFC] tracking-tight max-w-2xl mx-auto relative z-10"
+              style={{ textWrap: 'balance' }}
+            >
+              Ready to Borrow Gear for Your Next Project or Earn From Unused
+              Items?
+            </h2>
+            <p className="text-sm sm:text-base text-[#94A3B8] max-w-xl mx-auto relative z-10">
+              Join BorrowBox to explore neighborhood rentals with transparent ₹
+              daily pricing, or publish your first item in under two minutes.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-4 pt-2 relative z-10">
+              <button
+                type="button"
+                onClick={() => {
+                  onNavigate({ page: 'browse' });
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="px-6 py-3.5 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-semibold rounded-xl transition-all bb-glow-button cursor-pointer"
+              >
+                Explore Items
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onNavigate({ page: 'list-item' });
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="px-6 py-3.5 bg-[#1D293B] hover:bg-[#334155] text-[#F8FAFC] border border-white/[0.1] text-sm font-semibold rounded-xl transition-colors cursor-pointer"
+              >
+                List Your Item
+              </button>
             </div>
           </div>
         </div>

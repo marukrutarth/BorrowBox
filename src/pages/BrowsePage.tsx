@@ -8,6 +8,7 @@ import {
   Search,
   Sparkles,
 } from 'lucide-react';
+import { motion } from 'motion/react';
 import {
   CategoryName,
   IndianCity,
@@ -155,7 +156,10 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
         ) {
           onCityChange(data.city as IndianCity | 'All');
         }
-        if (typeof data.maxDailyPriceINR === 'number' && data.maxDailyPriceINR > 0) {
+        if (
+          typeof data.maxDailyPriceINR === 'number' &&
+          data.maxDailyPriceINR > 0
+        ) {
           setMaxDailyPriceINR(data.maxDailyPriceINR);
         } else {
           setMaxDailyPriceINR(0);
@@ -173,15 +177,18 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
   };
 
   return (
-    <div className="bg-white min-h-screen py-10 lg:py-12">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
+    <div className="bg-transparent min-h-screen py-10 lg:py-12 text-[#F8FAFC]">
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6">
         {/* Page Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-8 border-b border-slate-200">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-8 border-b border-white/[0.08]">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#8B5CF6] mb-1">
+              Marketplace Directory
+            </p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-[#F8FAFC] tracking-tight">
               Browse Rental Items
             </h1>
-            <p className="text-sm text-slate-600 mt-1">
+            <p className="text-sm text-[#94A3B8] mt-1">
               Compare rental prices, security deposits, approximate locations,
               and availability across Indian cities (₹).
             </p>
@@ -191,15 +198,15 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
           <div
             role="group"
             aria-label="Filter by listing source"
-            className="inline-flex flex-wrap items-center gap-1 p-1 bg-slate-100 rounded-lg self-start"
+            className="inline-flex flex-wrap items-center gap-1 p-1 bg-[#161E2E] border border-white/[0.08] rounded-xl self-start"
           >
             <button
               type="button"
               onClick={() => setSourceFilter('all')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
                 sourceFilter === 'all'
-                  ? 'bg-white text-slate-900 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-[#8B5CF6] text-white'
+                  : 'text-[#94A3B8] hover:text-[#F8FAFC]'
               }`}
             >
               All ({counts.total})
@@ -207,10 +214,10 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
             <button
               type="button"
               onClick={() => setSourceFilter('community')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
                 sourceFilter === 'community'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-[#8B5CF6] text-white'
+                  : 'text-[#94A3B8] hover:text-[#F8FAFC]'
               }`}
             >
               Community Listings ({counts.community})
@@ -218,10 +225,10 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
             <button
               type="button"
               onClick={() => setSourceFilter('sample')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
                 sourceFilter === 'sample'
-                  ? 'bg-white text-slate-900 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-[#8B5CF6] text-white'
+                  : 'text-[#94A3B8] hover:text-[#F8FAFC]'
               }`}
             >
               Sample Previews ({counts.sample})
@@ -232,24 +239,24 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
         {/* Phase 4 Natural-Language Search Bar */}
         <form
           onSubmit={(e) => void handleNaturalLanguageSearch(e)}
-          className="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2"
+          className="mt-6 p-4 rounded-xl bg-[#161E2E] border border-white/[0.08] space-y-2"
         >
           <div className="flex flex-col sm:flex-row gap-2.5">
             <div className="relative flex-1">
-              <Sparkles className="w-4 h-4 text-indigo-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Sparkles className="w-4 h-4 text-[#8B5CF6] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 aria-label="Natural language rental search"
                 value={nlPrompt}
                 onChange={(e) => setNlPrompt(e.target.value)}
                 placeholder='Ask in plain English: e.g., "Camera in Bengaluru under ₹2000" or "Tools in Mumbai"'
-                className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                className="w-full pl-10 pr-4 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-xs sm:text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
               />
             </div>
             <button
               type="submit"
               disabled={isParsingNl}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors shrink-0 cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold rounded-xl transition-all bb-glow-button shrink-0 cursor-pointer"
             >
               {isParsingNl ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -260,14 +267,14 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
             </button>
           </div>
           {nlExplanation && (
-            <p className="text-xs text-indigo-700 font-medium pl-1">
+            <p className="text-xs text-[#06B6D4] font-medium pl-1">
               {nlExplanation}
             </p>
           )}
         </form>
 
         {/* Search, City, Condition, Price Sort & Advanced Date/Price Filters */}
-        <div className="py-6 space-y-4 border-b border-slate-200">
+        <div className="py-6 space-y-4 border-b border-white/[0.08]">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
             {/* Search Input */}
             <div className="sm:col-span-2 lg:col-span-4">
@@ -275,14 +282,14 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
                 Search items by name, brand, or locality
               </label>
               <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Search className="w-4 h-4 text-[#94A3B8] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   id="browse-search-input"
                   type="text"
                   value={searchQuery}
                   onChange={(e) => onSearchQueryChange(e.target.value)}
                   placeholder="Keyword, brand, or model..."
-                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                  className="w-full pl-10 pr-4 py-2.5 bg-[#161E2E] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
                 />
               </div>
             </div>
@@ -299,7 +306,7 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
                 onChange={(e) =>
                   onCityChange(e.target.value as IndianCity | 'All')
                 }
-                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-indigo-600"
+                className="w-full px-3 py-2.5 bg-[#161E2E] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
               >
                 <option value="All">All Cities</option>
                 {ALL_CITIES.map((city) => (
@@ -321,7 +328,7 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
                 value={neighborhoodFilter}
                 onChange={(e) => setNeighborhoodFilter(e.target.value)}
                 placeholder="Locality (e.g., Indiranagar)"
-                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                className="w-full px-3 py-2.5 bg-[#161E2E] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
               />
             </div>
 
@@ -337,7 +344,7 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
                 onChange={(e) =>
                   onConditionChange(e.target.value as ItemCondition | 'All')
                 }
-                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-indigo-600"
+                className="w-full px-3 py-2.5 bg-[#161E2E] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
               >
                 <option value="All">All Conditions</option>
                 <option value="Like New">Like New</option>
@@ -356,7 +363,7 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
                 aria-label="Sort by Price"
                 value={sortBy}
                 onChange={(e) => onSortByChange(e.target.value as SortOption)}
-                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-indigo-600"
+                className="w-full px-3 py-2.5 bg-[#161E2E] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
               >
                 <option value="featured">Sort: Featured</option>
                 <option value="price-asc">Price: Low to High (₹)</option>
@@ -368,10 +375,10 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
 
           {/* Secondary Row: Max Daily Price & Date Availability Range */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 bg-[#161E2E] border border-white/[0.08] rounded-xl px-3.5 py-2">
               <label
                 htmlFor="browse-max-price"
-                className="text-xs font-medium text-slate-600 shrink-0"
+                className="text-xs font-medium text-[#94A3B8] shrink-0"
               >
                 Max Daily Rate:
               </label>
@@ -379,20 +386,30 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
                 id="browse-max-price"
                 value={maxDailyPriceINR}
                 onChange={(e) => setMaxDailyPriceINR(Number(e.target.value))}
-                className="w-full bg-transparent text-xs font-mono-tabular font-semibold text-slate-900 focus:outline-none"
+                className="w-full bg-transparent text-xs font-mono-tabular font-semibold text-[#F8FAFC] focus:outline-none"
               >
-                <option value={0}>Any Daily Rate (₹)</option>
-                <option value={500}>Up to {formatINR(500)}/day</option>
-                <option value={1000}>Up to {formatINR(1000)}/day</option>
-                <option value={1500}>Up to {formatINR(1500)}/day</option>
-                <option value={2500}>Up to {formatINR(2500)}/day</option>
+                <option value={0} className="bg-[#111827]">
+                  Any Daily Rate (₹)
+                </option>
+                <option value={500} className="bg-[#111827]">
+                  Up to {formatINR(500)}/day
+                </option>
+                <option value={1000} className="bg-[#111827]">
+                  Up to {formatINR(1000)}/day
+                </option>
+                <option value={1500} className="bg-[#111827]">
+                  Up to {formatINR(1500)}/day
+                </option>
+                <option value={2500} className="bg-[#111827]">
+                  Up to {formatINR(2500)}/day
+                </option>
               </select>
             </div>
 
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 bg-[#161E2E] border border-white/[0.08] rounded-xl px-3.5 py-2">
               <label
                 htmlFor="browse-avail-start"
-                className="text-xs font-medium text-slate-600 shrink-0"
+                className="text-xs font-medium text-[#94A3B8] shrink-0"
               >
                 Pickup From:
               </label>
@@ -401,14 +418,14 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
                 type="date"
                 value={availableStart}
                 onChange={(e) => setAvailableStart(e.target.value)}
-                className="w-full bg-transparent text-xs font-mono-tabular text-slate-900 focus:outline-none"
+                className="w-full bg-transparent text-xs font-mono-tabular text-[#F8FAFC] focus:outline-none"
               />
             </div>
 
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 bg-[#161E2E] border border-white/[0.08] rounded-xl px-3.5 py-2">
               <label
                 htmlFor="browse-avail-end"
-                className="text-xs font-medium text-slate-600 shrink-0"
+                className="text-xs font-medium text-[#94A3B8] shrink-0"
               >
                 Return By:
               </label>
@@ -418,7 +435,7 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
                 value={availableEnd}
                 min={availableStart}
                 onChange={(e) => setAvailableEnd(e.target.value)}
-                className="w-full bg-transparent text-xs font-mono-tabular text-slate-900 focus:outline-none"
+                className="w-full bg-transparent text-xs font-mono-tabular text-[#F8FAFC] focus:outline-none"
               />
             </div>
           </div>
@@ -435,8 +452,8 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
                 onClick={() => onCategoryChange('All')}
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   selectedCategory === 'All'
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    ? 'bg-[#8B5CF6] text-white'
+                    : 'bg-[#161E2E] border border-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#1D293B]'
                 }`}
               >
                 All Categories
@@ -448,8 +465,8 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
                   onClick={() => onCategoryChange(category)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                     selectedCategory === category
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      ? 'bg-[#8B5CF6] text-white'
+                      : 'bg-[#161E2E] border border-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#1D293B]'
                   }`}
                 >
                   {category}
@@ -458,9 +475,9 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
             </div>
 
             <div className="flex items-center gap-4">
-              <span className="text-xs text-slate-500 tabular-nums">
+              <span className="text-xs text-[#94A3B8] tabular-nums">
                 Showing{' '}
-                <strong className="text-slate-900">
+                <strong className="text-[#F8FAFC]">
                   {filteredListings.length}
                 </strong>{' '}
                 of {counts.total} items
@@ -469,7 +486,7 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
                 <button
                   type="button"
                   onClick={handleFullReset}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 whitespace-nowrap shrink-0 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#8B5CF6] hover:text-[#A78BFA] whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   Reset Filters
@@ -481,21 +498,21 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
 
         {/* Sample Catalog Notice */}
         {sourceFilter !== 'community' && counts.sample > 0 && (
-          <div className="mt-6 p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2.5 text-xs text-slate-600">
-            <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+          <div className="mt-6 p-3.5 rounded-xl bg-[#161E2E] border border-white/[0.08] flex items-start gap-2.5 text-xs text-[#94A3B8]">
+            <Info className="w-4 h-4 text-[#06B6D4] shrink-0 mt-0.5" />
             <div>
-              <strong className="text-slate-900">
+              <strong className="text-[#F8FAFC]">
                 Sample Catalog Separation:
               </strong>{' '}
               Items marked{' '}
-              <span className="font-medium text-slate-800">
-                Sample Preview (Unverified Demo)
+              <span className="font-medium text-[#F8FAFC]">
+                Sample Preview
               </span>{' '}
               are demonstration listings. Select{' '}
               <button
                 type="button"
                 onClick={() => setSourceFilter('community')}
-                className="text-indigo-600 font-semibold underline cursor-pointer"
+                className="text-[#8B5CF6] font-semibold underline cursor-pointer"
               >
                 Filter to Community Listings Only
               </button>{' '}
@@ -510,30 +527,41 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
             <div
               role="status"
               aria-live="polite"
-              className="py-16 px-4 border border-slate-200 rounded-xl bg-slate-50/50 flex flex-col items-center justify-center gap-3 text-slate-600"
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
             >
-              <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
-              <p className="text-sm font-medium">Loading marketplace items...</p>
+              {[0, 1, 2, 3, 4, 5].map((idx) => (
+                <div
+                  key={idx}
+                  className="bg-[#161E2E] border border-white/[0.08] rounded-xl overflow-hidden animate-pulse"
+                >
+                  <div className="aspect-[4/3] bg-[#1D293B]" />
+                  <div className="p-5 space-y-3">
+                    <div className="h-3 w-1/3 bg-[#1D293B] rounded" />
+                    <div className="h-5 w-3/4 bg-[#1D293B] rounded" />
+                    <div className="h-3 w-1/2 bg-[#1D293B] rounded" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : error ? (
             <div
               role="alert"
-              className="py-14 px-6 border border-red-200 rounded-xl bg-red-50 max-w-lg mx-auto text-center space-y-3"
+              className="py-14 px-6 border border-[#EF4444]/30 rounded-xl bg-[#EF4444]/10 max-w-lg mx-auto text-center space-y-3"
             >
-              <AlertCircle className="w-6 h-6 text-red-600 mx-auto" />
-              <h2 className="text-base font-semibold text-red-900">
+              <AlertCircle className="w-6 h-6 text-[#EF4444] mx-auto" />
+              <h2 className="text-base font-semibold text-[#F8FAFC]">
                 Error loading rental items
               </h2>
-              <p className="text-xs text-red-700">{error}</p>
+              <p className="text-xs text-[#94A3B8]">{error}</p>
             </div>
           ) : filteredListings.length === 0 ? (
-            <div className="text-center py-16 px-6 border border-slate-200 rounded-xl bg-slate-50/50 max-w-lg mx-auto space-y-4">
-              <h2 className="text-lg font-semibold text-slate-900">
+            <div className="text-center py-16 px-6 border border-white/[0.08] rounded-xl bg-[#161E2E] max-w-lg mx-auto space-y-4">
+              <h2 className="text-lg font-semibold text-[#F8FAFC]">
                 {sourceFilter === 'community'
                   ? 'No community listings match your current filters'
                   : 'No matching rental items found'}
               </h2>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-[#94A3B8]">
                 {sourceFilter === 'community'
                   ? 'Genuine community listings appear here as users publish items. You can list your own item now or switch to Sample Previews to test the catalog.'
                   : 'Try clearing your search term or switching to “All Cities” or “All Categories”.'}
@@ -542,7 +570,7 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
                 <button
                   type="button"
                   onClick={() => onNavigate({ page: 'list-item' })}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
                 >
                   <PlusCircle className="w-4 h-4" />
                   List an Item
@@ -550,7 +578,7 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
                 <button
                   type="button"
                   onClick={handleFullReset}
-                  className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                  className="px-4 py-2 bg-[#1D293B] hover:bg-[#334155] text-[#F8FAFC] border border-white/[0.08] text-xs font-semibold rounded-lg transition-colors cursor-pointer"
                 >
                   Reset All Filters
                 </button>
@@ -558,15 +586,21 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredListings.map((listing) => (
-                <ProductCard
+              {filteredListings.map((listing, idx) => (
+                <motion.div
                   key={listing.id}
-                  listing={listing}
-                  onSelect={(itemId) => {
-                    onNavigate({ page: 'details', itemId });
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                />
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.25, delay: Math.min(idx * 0.04, 0.24) }}
+                >
+                  <ProductCard
+                    listing={listing}
+                    onSelect={(itemId) => {
+                      onNavigate({ page: 'details', itemId });
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                  />
+                </motion.div>
               ))}
             </div>
           )}

@@ -58,7 +58,8 @@ function formatFirebaseAuthError(error: unknown): {
   }
   if (raw.includes('auth/popup-closed-by-user')) {
     return {
-      message: 'Google Sign-In popup was closed before completing authentication.',
+      message:
+        'Google Sign-In popup was closed before completing authentication.',
       needsEmailProviderEnable: false,
     };
   }
@@ -98,7 +99,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [authError, setAuthError] = useState<string | null>(null);
   const [showEmailProviderGuide, setShowEmailProviderGuide] = useState(false);
 
-  // Sync external mode prop changes when user clicks Login / Sign Up in Navbar
   React.useEffect(() => {
     setViewMode(mode);
     setErrors({});
@@ -196,12 +196,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   };
 
   return (
-    <div className="bg-white min-h-screen py-12 lg:py-16">
+    <div className="bg-transparent min-h-screen py-12 lg:py-16 text-[#F8FAFC]">
       <div className="max-w-[480px] mx-auto px-4 sm:px-6">
         <button
           type="button"
           onClick={() => onNavigate({ page: 'home' })}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-600 mb-6 cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#94A3B8] hover:text-[#8B5CF6] mb-6 cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           Back to BorrowBox Home
@@ -210,23 +210,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         {redirectReason && (
           <div
             role="status"
-            className="mb-4 p-3.5 rounded-xl bg-indigo-50 border border-indigo-200 text-xs text-indigo-900 font-medium"
+            className="mb-4 p-3.5 rounded-xl bg-[#8B5CF6]/15 border border-[#8B5CF6]/30 text-xs text-[#F8FAFC] font-medium"
           >
             {redirectReason}
           </div>
         )}
 
-        <div className="border border-slate-200 rounded-xl p-6 sm:p-8 bg-white space-y-6">
+        <div className="border border-white/[0.08] rounded-2xl p-6 sm:p-8 bg-[#161E2E] space-y-6 shadow-2xl">
           {/* Header */}
-          <div className="border-b border-slate-200 pb-4">
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          <div className="border-b border-white/[0.08] pb-4">
+            <h1 className="text-2xl font-bold text-[#F8FAFC] tracking-tight">
               {viewMode === 'login'
                 ? 'Log In to BorrowBox'
                 : viewMode === 'signup'
                 ? 'Create Your BorrowBox Account'
                 : 'Reset Your Password'}
             </h1>
-            <p className="text-xs text-slate-600 mt-1">
+            <p className="text-xs text-[#94A3B8] mt-1">
               {viewMode === 'login'
                 ? 'Sign in with Firebase Authentication to access your Renter and Owner profile.'
                 : viewMode === 'signup'
@@ -235,18 +235,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             </p>
           </div>
 
-          {/* Google Sign-In Button (Pre-provisioned in AI Studio Firebase) */}
+          {/* Google Sign-In Button */}
           {viewMode !== 'reset' && (
             <div className="space-y-3">
               <button
                 type="button"
                 disabled={isGoogleLoading || isLoading}
                 onClick={handleGoogleSignIn}
-                className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-900 border border-slate-300 text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="w-full py-2.5 px-4 bg-[#1D293B] hover:bg-[#334155] text-[#F8FAFC] border border-white/[0.12] text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {isGoogleLoading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                    <Loader2 className="w-4 h-4 animate-spin text-[#8B5CF6]" />
                     <span>Connecting to Google...</span>
                   </>
                 ) : (
@@ -255,11 +255,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               </button>
 
               <div className="relative flex py-1 items-center">
-                <div className="grow border-t border-slate-200" />
-                <span className="shrink mx-3 text-xs text-slate-400">
+                <div className="grow border-t border-white/[0.08]" />
+                <span className="shrink mx-3 text-xs text-[#94A3B8]">
                   or use email & password
                 </span>
-                <div className="grow border-t border-slate-200" />
+                <div className="grow border-t border-white/[0.08]" />
               </div>
             </div>
           )}
@@ -268,9 +268,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           {statusMessage && (
             <div
               role="status"
-              className="p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-start gap-2"
+              className="p-3.5 rounded-lg bg-[#22C55E]/15 border border-[#22C55E]/30 text-xs text-[#22C55E] flex items-start gap-2"
             >
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <CheckCircle2 className="w-4 h-4 text-[#22C55E] shrink-0 mt-0.5" />
               <span>{statusMessage}</span>
             </div>
           )}
@@ -279,16 +279,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           {authError && (
             <div
               role="alert"
-              className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 space-y-2"
+              className="p-3.5 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/30 text-xs text-[#EF4444] space-y-2"
             >
               <div className="flex items-start gap-2 font-medium">
-                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <AlertCircle className="w-4 h-4 text-[#EF4444] shrink-0 mt-0.5" />
                 <span>{authError}</span>
               </div>
 
               {showEmailProviderGuide && (
-                <div className="pt-2 border-t border-red-200 text-slate-700 bg-white p-3 rounded border space-y-1.5">
-                  <p className="font-semibold text-slate-900">
+                <div className="pt-2 border-t border-[#EF4444]/20 text-[#94A3B8] bg-[#111827] p-3 rounded border border-white/[0.08] space-y-1.5">
+                  <p className="font-semibold text-[#F8FAFC]">
                     How to enable Email/Password in Firebase Console (1 minute):
                   </p>
                   <ol className="list-decimal list-inside space-y-1 text-xs">
@@ -298,21 +298,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         href={`https://console.firebase.google.com/project/${FIREBASE_PROJECT_ID}/authentication/providers`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-indigo-600 underline font-medium"
+                        className="text-[#8B5CF6] underline font-medium"
                       >
                         Firebase Console → Authentication → Sign-in method
                       </a>
                     </li>
                     <li>
-                      Click <strong>Email/Password</strong> in the provider list.
+                      Click <strong className="text-[#F8FAFC]">Email/Password</strong> in the provider list.
                     </li>
                     <li>
-                      Toggle <strong>Enable</strong> on and click{' '}
-                      <strong>Save</strong>.
+                      Toggle <strong className="text-[#F8FAFC]">Enable</strong> on and click{' '}
+                      <strong className="text-[#F8FAFC]">Save</strong>.
                     </li>
                   </ol>
-                  <p className="text-xs text-slate-500 pt-1">
-                    Note: <strong>Continue with Google</strong> above is already
+                  <p className="text-xs text-[#94A3B8] pt-1">
+                    Note: <strong className="text-[#F8FAFC]">Continue with Google</strong> above is already
                     enabled automatically.
                   </p>
                 </div>
@@ -326,7 +326,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               <div>
                 <label
                   htmlFor="auth-fullname"
-                  className="block text-xs font-semibold text-slate-800 mb-1"
+                  className="block text-xs font-semibold text-[#F8FAFC] mb-1"
                 >
                   Full Name *
                 </label>
@@ -336,10 +336,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="e.g., Priya Sharma"
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                  className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
                 />
                 {errors.fullName && (
-                  <p className="text-xs text-red-600 mt-1">{errors.fullName}</p>
+                  <p className="text-xs text-[#EF4444] mt-1">{errors.fullName}</p>
                 )}
               </div>
             )}
@@ -347,7 +347,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             <div>
               <label
                 htmlFor="auth-email"
-                className="block text-xs font-semibold text-slate-800 mb-1"
+                className="block text-xs font-semibold text-[#F8FAFC] mb-1"
               >
                 Email Address *
               </label>
@@ -357,10 +357,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.in"
-                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
               />
               {errors.email && (
-                <p className="text-xs text-red-600 mt-1">{errors.email}</p>
+                <p className="text-xs text-[#EF4444] mt-1">{errors.email}</p>
               )}
             </div>
 
@@ -370,7 +370,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <div>
                     <label
                       htmlFor="auth-phone"
-                      className="block text-xs font-semibold text-slate-800 mb-1"
+                      className="block text-xs font-semibold text-[#F8FAFC] mb-1"
                     >
                       Mobile Number (+91) *
                     </label>
@@ -380,10 +380,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="9876543210"
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm font-mono-tabular text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                      className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm font-mono-tabular text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
                     />
                     {errors.phone && (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-xs text-[#EF4444] mt-1">
                         {errors.phone}
                       </p>
                     )}
@@ -392,7 +392,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <div>
                     <label
                       htmlFor="auth-city"
-                      className="block text-xs font-semibold text-slate-800 mb-1"
+                      className="block text-xs font-semibold text-[#F8FAFC] mb-1"
                     >
                       Primary City *
                     </label>
@@ -400,7 +400,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       id="auth-city"
                       value={city}
                       onChange={(e) => setCity(e.target.value as IndianCity)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-indigo-600"
+                      className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
                     >
                       {ALL_CITIES.map((c) => (
                         <option key={c} value={c}>
@@ -409,7 +409,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       ))}
                     </select>
                     {errors.city && (
-                      <p className="text-xs text-red-600 mt-1">{errors.city}</p>
+                      <p className="text-xs text-[#EF4444] mt-1">{errors.city}</p>
                     )}
                   </div>
                 </div>
@@ -418,7 +418,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <div>
                     <label
                       htmlFor="auth-neighborhood"
-                      className="block text-xs font-semibold text-slate-800 mb-1"
+                      className="block text-xs font-semibold text-[#F8FAFC] mb-1"
                     >
                       Neighborhood / Locality *
                     </label>
@@ -428,10 +428,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       value={neighborhood}
                       onChange={(e) => setNeighborhood(e.target.value)}
                       placeholder="e.g., Indiranagar"
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                      className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
                     />
                     {errors.neighborhood && (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-xs text-[#EF4444] mt-1">
                         {errors.neighborhood}
                       </p>
                     )}
@@ -440,7 +440,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <div>
                     <label
                       htmlFor="auth-photo"
-                      className="block text-xs font-semibold text-slate-800 mb-1"
+                      className="block text-xs font-semibold text-[#F8FAFC] mb-1"
                     >
                       Profile Image URL (Optional)
                     </label>
@@ -450,10 +450,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       value={photoURL}
                       onChange={(e) => setPhotoURL(e.target.value)}
                       placeholder="https://..."
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                      className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
                     />
                     {errors.photoURL && (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-xs text-[#EF4444] mt-1">
                         {errors.photoURL}
                       </p>
                     )}
@@ -467,7 +467,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 <div className="flex items-center justify-between mb-1">
                   <label
                     htmlFor="auth-password"
-                    className="block text-xs font-semibold text-slate-800"
+                    className="block text-xs font-semibold text-[#F8FAFC]"
                   >
                     Password *
                   </label>
@@ -480,7 +480,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         setStatusMessage(null);
                         setViewMode('reset');
                       }}
-                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer"
+                      className="text-xs font-semibold text-[#8B5CF6] hover:text-[#A78BFA] cursor-pointer"
                     >
                       Forgot password?
                     </button>
@@ -492,10 +492,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="At least 6 characters"
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                  className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
                 />
                 {errors.password && (
-                  <p className="text-xs text-red-600 mt-1">{errors.password}</p>
+                  <p className="text-xs text-[#EF4444] mt-1">{errors.password}</p>
                 )}
               </div>
             )}
@@ -503,7 +503,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             <button
               type="submit"
               disabled={isLoading || isGoogleLoading}
-              className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              className="w-full py-2.5 px-4 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-semibold rounded-xl transition-all bb-glow-button flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {isLoading ? (
                 <>
@@ -530,7 +530,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           </form>
 
           {/* Footer Mode Switch */}
-          <div className="pt-4 border-t border-slate-200 text-center text-xs text-slate-600 space-y-2">
+          <div className="pt-4 border-t border-white/[0.08] text-center text-xs text-[#94A3B8] space-y-2">
             {viewMode === 'login' ? (
               <p>
                 New to BorrowBox?{' '}
@@ -542,7 +542,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     setStatusMessage(null);
                     onSwitchMode('signup');
                   }}
-                  className="font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer"
+                  className="font-semibold text-[#8B5CF6] hover:text-[#A78BFA] cursor-pointer"
                 >
                   Create an account
                 </button>
@@ -558,15 +558,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     setStatusMessage(null);
                     onSwitchMode('login');
                   }}
-                  className="font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer"
+                  className="font-semibold text-[#8B5CF6] hover:text-[#A78BFA] cursor-pointer"
                 >
                   Back to Login
                 </button>
               </p>
             )}
 
-            <p className="text-[11px] text-slate-400 flex items-center justify-center gap-1 pt-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+            <p className="text-[11px] text-[#94A3B8] flex items-center justify-center gap-1 pt-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#06B6D4]" />
               <span>
                 Secured by Firebase Authentication & Cloud Firestore Rules
               </span>

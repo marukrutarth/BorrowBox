@@ -165,7 +165,6 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result !== 'string') return;
-      // Compress via canvas if browser supports it so Firestore doc stays well under 350KB
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
@@ -202,7 +201,8 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
     if (!title.trim() || title.trim().length < 3) {
       setErrors((prev) => ({
         ...prev,
-        title: 'Enter a product title first so the AI assistant can draft a description.',
+        title:
+          'Enter a product title first so the AI assistant can draft a description.',
       }));
       return;
     }
@@ -373,8 +373,8 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
     (category ? DEFAULT_CATEGORY_IMAGE[category] : 'sony_camera');
 
   return (
-    <div className="bg-white min-h-screen py-10 lg:py-12">
-      <div className="max-w-[1040px] mx-auto px-4 sm:px-6">
+    <div className="bg-transparent min-h-screen py-10 lg:py-12 text-[#F8FAFC]">
+      <div className="max-w-[1120px] mx-auto px-4 sm:px-6">
         <button
           type="button"
           onClick={() => {
@@ -384,7 +384,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
               onNavigate({ page: 'browse' });
             }
           }}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-600 mb-6 cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#94A3B8] hover:text-[#8B5CF6] mb-6 cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           {editingListing ? 'Back to Dashboard' : 'Back to Marketplace'}
@@ -392,12 +392,12 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
           <div className="lg:col-span-8">
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight mb-2">
+            <h1 className="text-2xl sm:text-3xl font-bold text-[#F8FAFC] tracking-tight mb-2">
               {editingListing
                 ? `Edit Listing: ${editingListing.title}`
                 : 'List an Unused Item & Earn in ₹'}
             </h1>
-            <p className="text-sm text-slate-600 mb-8">
+            <p className="text-sm text-[#94A3B8] mb-8">
               Publish a real community rental listing stored in Firestore. Use
               the optional AI tools to draft descriptions or estimate daily ₹
               pricing.
@@ -406,13 +406,13 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
             <form
               onSubmit={(e) => void handleSubmit(e)}
               noValidate
-              className="space-y-6 border border-slate-200 rounded-xl p-6 bg-white"
+              className="space-y-6 border border-white/[0.08] rounded-2xl p-6 sm:p-8 bg-[#161E2E] shadow-2xl"
             >
               {/* Product Title */}
               <div>
                 <label
                   htmlFor="list-title"
-                  className="block text-xs font-semibold text-slate-800 mb-1.5"
+                  className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
                 >
                   Product Name & Model *
                 </label>
@@ -422,10 +422,10 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g., DJI RS 3 Mini Gimbal Stabilizer or Bosch High-Pressure Washer"
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                  className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
                 />
                 {errors.title && (
-                  <p className="text-xs text-red-600 mt-1">{errors.title}</p>
+                  <p className="text-xs text-[#EF4444] mt-1">{errors.title}</p>
                 )}
               </div>
 
@@ -434,7 +434,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                 <div>
                   <label
                     htmlFor="list-category"
-                    className="block text-xs font-semibold text-slate-800 mb-1.5"
+                    className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
                   >
                     Category *
                   </label>
@@ -444,7 +444,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                     onChange={(e) =>
                       setCategory(e.target.value as CategoryName | '')
                     }
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-indigo-600"
+                    className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
                   >
                     <option value="">Select Category</option>
                     {ALL_CATEGORIES.map((cat) => (
@@ -454,7 +454,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                     ))}
                   </select>
                   {errors.category && (
-                    <p className="text-xs text-red-600 mt-1">
+                    <p className="text-xs text-[#EF4444] mt-1">
                       {errors.category}
                     </p>
                   )}
@@ -463,7 +463,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                 <div>
                   <label
                     htmlFor="list-condition"
-                    className="block text-xs font-semibold text-slate-800 mb-1.5"
+                    className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
                   >
                     Item Condition *
                   </label>
@@ -473,7 +473,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                     onChange={(e) =>
                       setCondition(e.target.value as ItemCondition)
                     }
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-indigo-600"
+                    className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
                   >
                     <option value="Like New">Like New</option>
                     <option value="Excellent">Excellent</option>
@@ -484,7 +484,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                 <div>
                   <label
                     htmlFor="list-retail-value"
-                    className="block text-xs font-semibold text-slate-800 mb-1.5"
+                    className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
                   >
                     Approx. Retail Price (₹)
                   </label>
@@ -495,22 +495,22 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                     step={500}
                     value={replacementValueINR}
                     onChange={(e) => setReplacementValueINR(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm font-mono-tabular text-slate-900 focus:outline-none focus:border-indigo-600"
+                    className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm font-mono-tabular text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
                   />
                 </div>
               </div>
 
               {/* Daily Price & Refundable Deposit in INR + AI Price Estimator Button */}
-              <div className="space-y-3 p-4 rounded-xl bg-slate-50/70 border border-slate-200">
+              <div className="space-y-3 p-4 rounded-xl bg-[#111827] border border-white/[0.08]">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-slate-900">
+                  <span className="text-xs font-semibold text-[#F8FAFC]">
                     Rental Pricing & Security Deposit (₹)
                   </span>
                   <button
                     type="button"
                     onClick={() => void handleAiPriceEstimate()}
                     disabled={isEstimatingPrice}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#8B5CF6]/15 hover:bg-[#8B5CF6]/25 text-[#A78BFA] border border-[#8B5CF6]/30 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                   >
                     {isEstimatingPrice ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -522,11 +522,11 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                 </div>
 
                 {priceEstimate && (
-                  <div className="p-3.5 rounded-lg bg-white border border-indigo-200 space-y-2 text-xs">
+                  <div className="p-3.5 rounded-lg bg-[#161E2E] border border-[#8B5CF6]/30 space-y-2 text-xs">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-semibold text-indigo-700">
+                      <span className="font-semibold text-[#06B6D4]">
                         Suggested Estimate:{' '}
-                        <span className="font-mono-tabular">
+                        <span className="font-mono-tabular text-[#F8FAFC]">
                           {formatINR(priceEstimate.recommendedDailyINR)}/day
                         </span>{' '}
                         (Range: {formatINR(priceEstimate.minDailyINR)} –{' '}
@@ -543,15 +543,15 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                             String(priceEstimate.suggestedDepositINR)
                           );
                         }}
-                        className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded cursor-pointer"
+                        className="px-2.5 py-1 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold rounded cursor-pointer"
                       >
                         Apply Estimate
                       </button>
                     </div>
-                    <p className="text-slate-600 leading-relaxed">
+                    <p className="text-[#94A3B8] leading-relaxed">
                       {priceEstimate.rationale}
                     </p>
-                    <p className="text-[11px] text-slate-500 italic">
+                    <p className="text-[11px] text-[#94A3B8] italic">
                       {priceEstimate.disclaimer}
                     </p>
                   </div>
@@ -561,7 +561,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                   <div>
                     <label
                       htmlFor="list-daily-price"
-                      className="block text-xs font-semibold text-slate-800 mb-1.5"
+                      className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
                     >
                       Daily Rental Price (₹ / day) *
                     </label>
@@ -572,10 +572,10 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                       step={50}
                       value={dailyPriceINR}
                       onChange={(e) => setDailyPriceINR(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm font-mono-tabular text-slate-900 focus:outline-none focus:border-indigo-600"
+                      className="w-full px-3.5 py-2.5 bg-[#161E2E] border border-white/[0.08] rounded-xl text-sm font-mono-tabular text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
                     />
                     {errors.dailyPriceINR && (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-xs text-[#EF4444] mt-1">
                         {errors.dailyPriceINR}
                       </p>
                     )}
@@ -584,7 +584,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                   <div>
                     <label
                       htmlFor="list-deposit"
-                      className="block text-xs font-semibold text-slate-800 mb-1.5"
+                      className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
                     >
                       Refundable Security Deposit (₹) *
                     </label>
@@ -595,10 +595,10 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                       step={500}
                       value={refundableDepositINR}
                       onChange={(e) => setRefundableDepositINR(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm font-mono-tabular text-slate-900 focus:outline-none focus:border-indigo-600"
+                      className="w-full px-3.5 py-2.5 bg-[#161E2E] border border-white/[0.08] rounded-xl text-sm font-mono-tabular text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
                     />
                     {errors.refundableDepositINR && (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-xs text-[#EF4444] mt-1">
                         {errors.refundableDepositINR}
                       </p>
                     )}
@@ -611,7 +611,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                 <div>
                   <label
                     htmlFor="list-avail-from"
-                    className="block text-xs font-semibold text-slate-800 mb-1.5"
+                    className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
                   >
                     Available From *
                   </label>
@@ -620,13 +620,13 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                     type="date"
                     value={availableFrom}
                     onChange={(e) => setAvailableFrom(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono-tabular text-slate-900"
+                    className="w-full px-3 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-xs font-mono-tabular text-[#F8FAFC]"
                   />
                 </div>
                 <div>
                   <label
                     htmlFor="list-avail-to"
-                    className="block text-xs font-semibold text-slate-800 mb-1.5"
+                    className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
                   >
                     Available Until *
                   </label>
@@ -636,10 +636,10 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                     value={availableTo}
                     min={availableFrom}
                     onChange={(e) => setAvailableTo(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono-tabular text-slate-900"
+                    className="w-full px-3 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-xs font-mono-tabular text-[#F8FAFC]"
                   />
                   {errors.availableTo && (
-                    <p className="text-xs text-red-600 mt-1">
+                    <p className="text-xs text-[#EF4444] mt-1">
                       {errors.availableTo}
                     </p>
                   )}
@@ -647,7 +647,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                 <div>
                   <label
                     htmlFor="list-min-days"
-                    className="block text-xs font-semibold text-slate-800 mb-1.5"
+                    className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
                   >
                     Min Rental Days
                   </label>
@@ -658,7 +658,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                     max={30}
                     value={minRentalDays}
                     onChange={(e) => setMinRentalDays(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm font-mono-tabular text-slate-900"
+                    className="w-full px-3 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm font-mono-tabular text-[#F8FAFC]"
                   />
                 </div>
               </div>
@@ -668,7 +668,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                 <div>
                   <label
                     htmlFor="list-city"
-                    className="block text-xs font-semibold text-slate-800 mb-1.5"
+                    className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
                   >
                     City *
                   </label>
@@ -676,7 +676,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                     id="list-city"
                     value={city}
                     onChange={(e) => setCity(e.target.value as IndianCity | '')}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-indigo-600"
+                    className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
                   >
                     <option value="">Select City</option>
                     {ALL_CITIES.map((c) => (
@@ -686,14 +686,14 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                     ))}
                   </select>
                   {errors.city && (
-                    <p className="text-xs text-red-600 mt-1">{errors.city}</p>
+                    <p className="text-xs text-[#EF4444] mt-1">{errors.city}</p>
                   )}
                 </div>
 
                 <div>
                   <label
                     htmlFor="list-neighborhood"
-                    className="block text-xs font-semibold text-slate-800 mb-1.5"
+                    className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
                   >
                     Neighborhood / Locality *
                   </label>
@@ -703,10 +703,10 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                     value={neighborhood}
                     onChange={(e) => setNeighborhood(e.target.value)}
                     placeholder="e.g., Koramangala, Bandra West, Saket"
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                    className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
                   />
                   {errors.neighborhood && (
-                    <p className="text-xs text-red-600 mt-1">
+                    <p className="text-xs text-[#EF4444] mt-1">
                       {errors.neighborhood}
                     </p>
                   )}
@@ -717,7 +717,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                 <div>
                   <label
                     htmlFor="list-pickup"
-                    className="block text-xs font-semibold text-slate-800 mb-1.5"
+                    className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
                   >
                     Approximate Pickup Area / Landmark *
                   </label>
@@ -727,10 +727,10 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                     value={pickupLocation}
                     onChange={(e) => setPickupLocation(e.target.value)}
                     placeholder="e.g., Approx. 80 Feet Road, Koramangala"
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                    className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
                   />
                   {errors.pickupLocation && (
-                    <p className="text-xs text-red-600 mt-1">
+                    <p className="text-xs text-[#EF4444] mt-1">
                       {errors.pickupLocation}
                     </p>
                   )}
@@ -739,7 +739,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                 <div>
                   <label
                     htmlFor="list-cancellation"
-                    className="block text-xs font-semibold text-slate-800 mb-1.5"
+                    className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
                   >
                     Cancellation Policy
                   </label>
@@ -751,7 +751,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                         e.target.value as CancellationPolicyType
                       )
                     }
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-indigo-600"
+                    className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
                   >
                     <option value="Flexible (Full refund 24h prior)">
                       Flexible (Full refund 24h prior)
@@ -767,19 +767,19 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
               </div>
 
               {/* Image Upload */}
-              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
+              <div className="p-4 rounded-xl border border-white/[0.08] bg-[#111827] space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="text-xs font-semibold text-slate-800">
+                    <p className="text-xs font-semibold text-[#F8FAFC]">
                       Product Photo Upload
                     </p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-[#94A3B8]">
                       Upload a photo of your item (auto-compressed) or use the
                       category studio photo.
                     </p>
                   </div>
-                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold cursor-pointer">
-                    <Upload className="w-3.5 h-3.5 text-indigo-600" />
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1D293B] hover:bg-[#334155] text-[#F8FAFC] border border-white/[0.1] rounded-lg text-xs font-semibold cursor-pointer">
+                    <Upload className="w-3.5 h-3.5 text-[#8B5CF6]" />
                     <span>Upload Photo</span>
                     <input
                       type="file"
@@ -791,7 +791,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                 </div>
                 {uploadedImageDataUrl && (
                   <div className="flex items-center gap-3">
-                    <div className="w-20 h-14 rounded overflow-hidden border border-slate-200 bg-white shrink-0">
+                    <div className="w-20 h-14 rounded overflow-hidden border border-white/[0.08] bg-[#161E2E] shrink-0">
                       <ProductImage
                         srcKeyOrUrl={previewImageKey}
                         alt="Listing preview"
@@ -801,7 +801,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                     <button
                       type="button"
                       onClick={() => setUploadedImageDataUrl('')}
-                      className="text-xs text-slate-600 underline hover:text-slate-900 cursor-pointer"
+                      className="text-xs text-[#8B5CF6] underline hover:text-[#A78BFA] cursor-pointer"
                     >
                       Reset to Category Studio Photo
                     </button>
@@ -814,7 +814,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
                   <label
                     htmlFor="list-description"
-                    className="block text-xs font-semibold text-slate-800"
+                    className="block text-xs font-semibold text-[#F8FAFC]"
                   >
                     Product Description & Condition Details *
                   </label>
@@ -822,7 +822,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                     type="button"
                     onClick={() => void handleAiDescriptionAssist()}
                     disabled={isGeneratingDesc}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#8B5CF6]/15 hover:bg-[#8B5CF6]/25 text-[#A78BFA] border border-[#8B5CF6]/30 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                   >
                     {isGeneratingDesc ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -838,13 +838,13 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Describe how well the item works, what projects it is suited for, and any care instructions..."
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                  className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
                 />
                 {aiDescNotice && (
-                  <p className="text-xs text-indigo-700 mt-1">{aiDescNotice}</p>
+                  <p className="text-xs text-[#06B6D4] mt-1">{aiDescNotice}</p>
                 )}
                 {errors.description && (
-                  <p className="text-xs text-red-600 mt-1">
+                  <p className="text-xs text-[#EF4444] mt-1">
                     {errors.description}
                   </p>
                 )}
@@ -855,7 +855,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                 <div>
                   <label
                     htmlFor="list-included"
-                    className="block text-xs font-semibold text-slate-800 mb-1.5"
+                    className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
                   >
                     Included Accessories (Comma-separated)
                   </label>
@@ -864,14 +864,14 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                     type="text"
                     value={includedItemsText}
                     onChange={(e) => setIncludedItemsText(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-indigo-600"
+                    className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
                   />
                 </div>
 
                 <div>
                   <label
                     htmlFor="list-owner-name"
-                    className="block text-xs font-semibold text-slate-800 mb-1.5"
+                    className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
                   >
                     Your Name (Displayed as Owner) *
                   </label>
@@ -881,10 +881,10 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                     value={ownerName}
                     onChange={(e) => setOwnerName(e.target.value)}
                     placeholder="e.g., Siddharth Verma"
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                    className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
                   />
                   {errors.ownerName && (
-                    <p className="text-xs text-red-600 mt-1">
+                    <p className="text-xs text-[#EF4444] mt-1">
                       {errors.ownerName}
                     </p>
                   )}
@@ -901,14 +901,14 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                       onNavigate({ page: 'browse' });
                     }
                   }}
-                  className="px-4 py-2.5 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 cursor-pointer"
+                  className="px-4 py-2.5 text-sm font-semibold text-[#F8FAFC] bg-[#1D293B] border border-white/[0.08] rounded-xl hover:bg-[#334155] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-6 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors cursor-pointer"
+                  className="px-6 py-2.5 text-sm font-semibold text-white bg-[#8B5CF6] hover:bg-[#7C3AED] rounded-xl transition-all bb-glow-button cursor-pointer"
                 >
                   {isSaving
                     ? 'Saving Listing...'
@@ -922,31 +922,31 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
 
           {/* Right Column: Owner Earnings Calculator */}
           <div className="lg:col-span-4 space-y-6">
-            <div className="p-6 rounded-xl border border-slate-200 bg-slate-50 space-y-4">
-              <p className="text-xs font-semibold text-indigo-600">
-                Owner Earnings Estimator (Estimate Only)
+            <div className="p-6 rounded-2xl border border-white/[0.08] bg-[#161E2E] space-y-4 shadow-xl">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#06B6D4]">
+                Owner Earnings Estimator
               </p>
               <div>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[#94A3B8]">
                   If rented 10 days per month at {formatINR(parsedDaily)}/day:
                 </p>
-                <p className="text-3xl font-bold text-slate-900 font-mono-tabular mt-1">
+                <p className="text-3xl font-bold text-[#F8FAFC] font-mono-tabular mt-1">
                   {formatINR(estimatedMonthlyEarnings)}{' '}
-                  <span className="text-sm font-normal text-slate-500">
+                  <span className="text-sm font-normal text-[#94A3B8]">
                     / month
                   </span>
                 </p>
               </div>
-              <ul className="space-y-2 text-xs text-slate-600 pt-2 border-t border-slate-200">
+              <ul className="space-y-2.5 text-xs text-[#94A3B8] pt-3 border-t border-white/[0.08]">
                 <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                  <CheckCircle2 className="w-4 h-4 text-[#22C55E] shrink-0 mt-0.5" />
                   <span>
                     Saved to Cloud Firestore under your authenticated owner
                     account.
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                  <CheckCircle2 className="w-4 h-4 text-[#8B5CF6] shrink-0 mt-0.5" />
                   <span>
                     Protected by your{' '}
                     {formatINR(Number(refundableDepositINR) || 0)} refundable
@@ -954,7 +954,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                  <CheckCircle2 className="w-4 h-4 text-[#06B6D4] shrink-0 mt-0.5" />
                   <span>
                     You can edit or archive this listing anytime from your
                     Lender Dashboard.

@@ -5,6 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import { DEMO_PRODUCT_LISTINGS } from './data/demoCatalog';
 import {
   AppNotificationItem,
@@ -574,9 +575,9 @@ export default function App() {
   const renderMainContent = () => {
     if (isAuthLoading && isProtectedPage) {
       return (
-        <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 text-slate-600">
-          <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
-          <p className="text-sm font-medium">
+        <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 text-[#94A3B8]">
+          <Loader2 className="w-6 h-6 animate-spin text-[#8B5CF6]" />
+          <p className="text-sm font-medium text-[#F8FAFC]">
             Verifying authentication status...
           </p>
         </div>
@@ -744,8 +745,23 @@ export default function App() {
     );
   };
 
+  const routeTransitionKey =
+    currentRoute.page === 'details'
+      ? `details-${currentRoute.itemId}`
+      : currentRoute.page;
+
   return (
-    <div className="min-h-screen flex flex-col bg-white text-slate-900">
+    <div className="min-h-screen flex flex-col bg-[#0B0F19] text-[#F8FAFC] bb-ambient-canvas relative overflow-x-hidden">
+      {/* Subtle Ambient Background Lighting & Geometric Accents */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+      >
+        <div className="absolute -top-36 left-[12%] w-[520px] h-[520px] rounded-full bg-[#8B5CF6]/10 blur-[130px] bb-animate-float" />
+        <div className="absolute top-[18%] right-[8%] w-[420px] h-[420px] rounded-full bg-[#06B6D4]/8 blur-[120px]" />
+        <div className="absolute bottom-[10%] left-[35%] w-[480px] h-[480px] rounded-full bg-[#8B5CF6]/6 blur-[140px]" />
+      </div>
+
       <Navbar
         currentRoute={currentRoute}
         onNavigate={handleNavigate}
@@ -763,7 +779,19 @@ export default function App() {
         }
       />
 
-      <main className="flex-1">{renderMainContent()}</main>
+      <main className="flex-1 relative z-10">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={routeTransitionKey}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.22, ease: 'easeOut' }}
+          >
+            {renderMainContent()}
+          </motion.div>
+        </AnimatePresence>
+      </main>
 
       <Footer
         onNavigate={handleNavigate}

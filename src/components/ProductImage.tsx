@@ -28,12 +28,12 @@ export const ProductImage: React.FC<ProductImageProps> = ({
   if (hasError || !resolvedSrc) {
     return (
       <div
-        className={`flex flex-col items-center justify-center bg-slate-100 text-slate-500 p-6 text-center ${className}`}
+        className={`flex flex-col items-center justify-center bg-[#1D293B] text-[#94A3B8] p-6 text-center ${className}`}
         role="img"
         aria-label={alt}
       >
-        <Package className="w-8 h-8 text-slate-400 mb-2 stroke-[1.5]" />
-        <span className="text-xs font-medium text-slate-600 line-clamp-2 max-w-[20ch]">
+        <Package className="w-8 h-8 text-[#8B5CF6] mb-2 stroke-[1.5]" />
+        <span className="text-xs font-medium text-[#F8FAFC] line-clamp-2 max-w-[20ch]">
           {alt}
         </span>
       </div>
@@ -41,14 +41,15 @@ export const ProductImage: React.FC<ProductImageProps> = ({
   }
 
   return (
-    <div className={`overflow-hidden bg-slate-100 relative ${className}`}>
+    <div className={`overflow-hidden bg-[#1D293B] relative ${className}`}>
       <img
         src={resolvedSrc}
         alt={alt}
         referrerPolicy="no-referrer"
         onError={() => setHasError(true)}
-        className={`w-full h-full object-cover transition-transform duration-200 ${scaleTransform}`}
+        className={`w-full h-full object-cover transition-transform duration-500 ease-out ${scaleTransform}`}
       />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0B0F19]/40 via-transparent to-transparent" />
     </div>
   );
 };
