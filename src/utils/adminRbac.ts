@@ -158,6 +158,7 @@ export const ROLE_DEFINITIONS: Record<AdminRole, AdminRoleDefinition> = {
 export const ADMIN_SIDEBAR_SECTIONS: {
   id: AdminSectionId;
   label: string;
+  categoryGroup?: string;
   requiredPermission: AdminPermission | null;
   description: string;
 }[] = [
@@ -166,13 +167,21 @@ export const ADMIN_SIDEBAR_SECTIONS: {
   { id: 'products', label: 'Product Listings', requiredPermission: 'products.view', description: 'Listing approvals, rejections & safety flags' },
   { id: 'bookings', label: 'Bookings', requiredPermission: 'bookings.view', description: 'Rental lifecycle & escrow deposit ledger' },
   { id: 'reports', label: 'Reports & Complaints', requiredPermission: 'reports.manage', description: 'Community trust & safety investigations' },
-  { id: 'support', label: 'Support Tickets', requiredPermission: 'support.manage', description: 'Customer assistance & dispute resolution' },
+  { id: 'support', label: 'Tickets', categoryGroup: 'Support', requiredPermission: 'support.manage', description: 'Customer support ticket claiming, workspace & resolution' },
   { id: 'administrators', label: 'Administrators', requiredPermission: 'admins.view', description: 'Authorised Gmail registry & RBAC matrix' },
   { id: 'analytics', label: 'Analytics', requiredPermission: 'analytics.view', description: 'Growth velocity & category performance' },
   { id: 'finance', label: 'Financial Reports', requiredPermission: 'finance.view', description: 'GMV, platform fees & deposit accounting' },
   { id: 'audit_logs', label: 'Audit Logs', requiredPermission: 'audit_logs.view', description: 'Immutable record of administrative actions' },
   { id: 'settings', label: 'Settings', requiredPermission: 'settings.manage', description: 'Marketplace policies & operational parameters' },
 ];
+
+export function canAdminOverrideTicket(
+  admin: Pick<AdminIdentityRecord, 'role' | 'status' | 'customPermissions' | 'revokedPermissions'> | null | undefined
+): boolean {
+  if (!admin || admin.status !== 'active') return false;
+  if (!hasAdminPermission(admin, 'support.manage')) return false;
+  return admin.role === 'super_admin' || admin.role === 'admin';
+}
 
 export function normalizeAdminEmail(email: string): string {
   return email.trim().toLowerCase();

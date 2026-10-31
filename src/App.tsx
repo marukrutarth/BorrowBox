@@ -53,6 +53,7 @@ import { AuthPage } from './pages/AuthPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
+import { MySupportPage } from './pages/MySupportPage';
 import { About } from './pages/About';
 import {
   InfoModal,
@@ -99,6 +100,10 @@ function parseUrlToRoute(pathname: string, search: string): PageRoute {
   if (pathname === '/admin' || pathname.startsWith('/admin/')) {
     return { page: 'admin' };
   }
+  if (pathname === '/support' || pathname.startsWith('/support/')) {
+    const ticketId = params.get('ticket') || undefined;
+    return { page: 'support', ticketId };
+  }
   if (pathname === '/about' || pathname === '/about/') {
     return { page: 'about' };
   }
@@ -135,6 +140,10 @@ function routeToUrl(route: PageRoute): string {
       return '/signup';
     case 'admin':
       return '/admin';
+    case 'support':
+      return route.ticketId
+        ? `/support?ticket=${encodeURIComponent(route.ticketId)}`
+        : '/support';
     case 'about':
       return '/about';
     case 'home':
@@ -666,7 +675,8 @@ export default function App() {
   const isProtectedPage =
     currentRoute.page === 'list-item' ||
     currentRoute.page === 'profile' ||
-    currentRoute.page === 'dashboard';
+    currentRoute.page === 'dashboard' ||
+    currentRoute.page === 'support';
 
   const renderMainContent = () => {
     if (isAuthLoading && isProtectedPage) {
@@ -680,13 +690,15 @@ export default function App() {
       );
     }
 
-    // Protect authenticated pages (/list-item, /profile, /dashboard)
+    // Protect authenticated pages (/list-item, /profile, /dashboard, /support)
     if (isProtectedPage && !userProfile) {
       const reason =
         currentRoute.page === 'list-item'
           ? 'Protected Page: Please log in or create a BorrowBox account to list an item for rent.'
           : currentRoute.page === 'dashboard'
           ? 'Protected Page: Please log in or create an account to access your Borrower & Lender Dashboard.'
+          : currentRoute.page === 'support'
+          ? 'Protected Page: Please log in or create an account to access My Support and manage your support tickets.'
           : 'Protected Page: Please log in or create an account to view and edit your BorrowBox profile.';
 
       return (
@@ -811,6 +823,36 @@ export default function App() {
           )}
           userRequests={rentalRequests}
         />
+      );
+    }
+
+    if (currentRoute.page === 'support' && userProfile) {
+      return (
+        <div className="dark">
+          <MySupportPage
+            userProfile={userProfile}
+            userBookings={bookings.filter(
+              (b) =>
+                b.borrowerId === userProfile.uid ||
+                b.ownerId === userProfile.uid
+            )}
+            userListings={listings.filter(
+              (l) => !l.isDemoData && l.owner.id === userProfile.uid
+            )}
+            initialTicketId={currentRoute.ticketId}
+            isAuthorizedAdmin={Boolean(verifiedAdminRecord)}
+            onNavigate={handleNavigate}
+            onNotificationsLoaded={(supportNotifs) => {
+              setNotifications((prev) => {
+                const existingIds = new Set(prev.map((p) => p.id));
+                const fresh = supportNotifs.filter(
+                  (s) => !existingIds.has(s.id)
+                );
+                return fresh.length > 0 ? [...fresh, ...prev] : prev;
+              });
+            }}
+          />
+        </div>
       );
     }
 

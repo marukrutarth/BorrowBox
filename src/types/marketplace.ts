@@ -181,6 +181,10 @@ export interface AppNotificationItem {
   body: string;
   bookingId?: string;
   listingId?: string;
+  ticketId?: string;
+  ticketNumber?: string;
+  recipientUid?: string;
+  recipientRole?: 'customer' | 'staff';
   timestampISO: string;
   read: boolean;
 }
@@ -385,25 +389,125 @@ export interface PlatformReportRecord {
   updatedAtISO: string;
 }
 
-export type SupportTicketPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type SupportTicketPriority = 'normal' | 'urgent';
+
 export type SupportTicketStatus =
   | 'open'
   | 'in_progress'
+  | 'waiting_for_user'
   | 'resolved'
   | 'closed';
 
+export type SupportTicketCategory =
+  | 'Booking Issue'
+  | 'Booking & Handover'
+  | 'Payment & Deposit'
+  | 'Damage or Dispute'
+  | 'Item Condition & Damage'
+  | 'Account & Verification'
+  | 'Product Listing'
+  | 'Safety Concern'
+  | 'Safety & Trust'
+  | 'General Enquiry';
+
+export interface SupportAttachmentItem {
+  id: string;
+  name: string;
+  url: string;
+  contentType?: string;
+  mimeType?: string;
+  sizeBytes: number;
+  uploadedAtISO: string;
+}
+
+export interface SupportTicketMessageRecord {
+  id: string;
+  ticketId: string;
+  senderId: string;
+  senderName: string;
+  senderEmail?: string;
+  senderRole: 'customer' | 'staff' | 'admin';
+  message: string;
+  attachments: SupportAttachmentItem[];
+  isInternal: boolean;
+  createdAtISO: string;
+  readAtISO?: string | null;
+}
+
+export type SupportTicketHistoryAction =
+  | 'created'
+  | 'claimed'
+  | 'replied'
+  | 'reassigned'
+  | 'claim_released'
+  | 'released'
+  | 'priority_changed'
+  | 'status_changed'
+  | 'internal_note_added'
+  | 'staff_replied'
+  | 'customer_replied'
+  | 'resolved'
+  | 'closed'
+  | 'reopened'
+  | 'email_sent'
+  | 'email_failed';
+
+export interface SupportTicketHistoryEntry {
+  id: string;
+  ticketId: string;
+  actorId: string;
+  actorName: string;
+  actorEmail: string;
+  actorRole: string;
+  action: SupportTicketHistoryAction;
+  summary: string;
+  previousValue?: string;
+  newValue?: string;
+  createdAtISO: string;
+}
+
+export type SupportEmailDeliveryStatus =
+  | 'pending'
+  | 'not_sent'
+  | 'sent'
+  | 'failed'
+  | 'pending_provider_config';
+
 export interface SupportTicketRecord {
   id: string;
+  ticketNumber?: string;
   userId: string;
   userName: string;
   userEmail: string;
-  bookingId: string;
   subject: string;
   description: string;
+  category?: SupportTicketCategory;
   priority: SupportTicketPriority;
   status: SupportTicketStatus;
-  internalNotes: string;
+  assignedTo?: string | null;
+  assignedStaffName?: string;
+  assignedStaffEmail?: string;
   assignedToEmail: string;
+  claimedAtISO?: string | null;
+  firstResponseAtISO?: string | null;
+  resolvedAtISO?: string | null;
+  closedAtISO?: string | null;
+  reopenedAtISO?: string | null;
+  reassignmentCount?: number;
+  bookingId: string;
+  productId?: string;
+  relatedBookingId?: string;
+  relatedProductId?: string;
+  attachments?: SupportAttachmentItem[];
+  resolutionSummary?: string;
+  internalNotes: string;
+  emailOpenedStatus?: SupportEmailDeliveryStatus;
+  emailOpenedSentAtISO?: string | null;
+  emailOpenedError?: string;
+  emailClosedStatus?: SupportEmailDeliveryStatus;
+  emailClosedSentAtISO?: string | null;
+  emailClosedError?: string;
+  emailLastError?: string;
   createdAtISO: string;
   updatedAtISO: string;
 }

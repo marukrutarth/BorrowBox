@@ -3,6 +3,7 @@ import {
   ChevronDown,
   Heart,
   LayoutDashboard,
+  LifeBuoy,
   LogOut,
   MapPin,
   Plus,
@@ -477,6 +478,19 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
                             {unreadNotificationsCount}
                           </span>
                         )}
+                      </button>
+
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          onNavigate({ page: 'support' });
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-lg text-xs font-medium text-[#F8FAFC] hover:bg-[#1D293B] flex items-center gap-2.5 transition-colors cursor-pointer"
+                      >
+                        <LifeBuoy className="w-3.5 h-3.5 text-[#06B6D4]" />
+                        <span>My Support</span>
                       </button>
 
                       {rentalRequests.length > 0 && (

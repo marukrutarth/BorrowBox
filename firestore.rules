@@ -1132,5 +1132,67 @@ service cloud.firestore {
         && incoming().updatedAt == request.time;
       allow delete: if false;
     }
+
+    // 17. Collection Rules: Complete Support Ticket Management System (/supportTickets/{ticketId})
+    match /supportTickets/{ticketId} {
+      allow get, list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn()
+        && isValidId(ticketId)
+        && (request.resource.data.userId == request.auth.uid || isAdmin())
+        && request.resource.data.status == 'open'
+        && (request.resource.data.priority == 'normal' || request.resource.data.priority == 'urgent')
+        && (!('assignedTo' in request.resource.data) || request.resource.data.assignedTo == null || request.resource.data.assignedTo == '');
+      allow update: if isAdmin()
+        || (
+          isSignedIn()
+          && resource.data.userId == request.auth.uid
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.ticketNumber == resource.data.ticketNumber
+          && request.resource.data.assignedTo == resource.data.assignedTo
+        );
+      allow delete: if isSuperAdmin();
+
+      // Ticket Conversation & Internal Notes (/supportTickets/{ticketId}/messages/{messageId})
+      match /messages/{messageId} {
+        // Customers can read non-internal messages on their own tickets; staff can read all messages
+        allow get, list: if isAdmin()
+          || (
+            isSignedIn()
+            && resource.data.isInternal != true
+            && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid
+          );
+        allow create: if isAdmin()
+          || (
+            isSignedIn()
+            && request.resource.data.senderId == request.auth.uid
+            && request.resource.data.senderRole == 'customer'
+            && request.resource.data.isInternal == false
+            && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid
+          );
+        allow update, delete: if false;
+      }
+
+      // Immutable Ticket Activity & Claim/Override History (/supportTickets/{ticketId}/history/{eventId})
+      match /history/{eventId} {
+        allow get, list: if isAdmin()
+          || (
+            isSignedIn()
+            && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid
+          );
+        allow create: if isSignedIn() && request.resource.data.actorId == request.auth.uid;
+        allow update, delete: if false;
+      }
+    }
+
+    // 18. Collection Rules: Support In-App Notifications (/supportNotifications/{notifId})
+    match /supportNotifications/{notifId} {
+      allow get, list: if isAdmin()
+        || (isSignedIn() && resource.data.recipientUid == request.auth.uid);
+      allow create: if isSignedIn();
+      allow update: if isAdmin()
+        || (isSignedIn() && resource.data.recipientUid == request.auth.uid);
+      allow delete: if isSuperAdmin();
+    }
   }
 }
+

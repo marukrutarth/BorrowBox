@@ -90,6 +90,7 @@ import {
 import { ProductImage } from '../components/ProductImage';
 import { BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH } from '../utils/introAnimation';
 import { PageRoute } from '../components/Navbar';
+import { AdminTicketsModule } from '../components/support/AdminTicketsModule';
 
 interface AdminDashboardPageProps {
   firebaseUser: User | null;
@@ -114,7 +115,7 @@ const SECTION_ICONS: Record<AdminSectionId, React.ReactNode> = {
   products: <Package className="w-4 h-4" />,
   bookings: <BookOpen className="w-4 h-4" />,
   reports: <Flag className="w-4 h-4" />,
-  support: <LifeBuoy className="w-4 h-4" />,
+  support: <Ticket className="w-4 h-4" />,
   administrators: <Shield className="w-4 h-4" />,
   analytics: <BarChart3 className="w-4 h-4" />,
   finance: <DollarSign className="w-4 h-4" />,
@@ -243,7 +244,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     bookingId: '',
     subject: '',
     description: '',
-    priority: 'medium',
+    priority: 'normal',
   });
 
   // Administrator Management Modal State
@@ -1011,7 +1012,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         bookingId: '',
         subject: '',
         description: '',
-        priority: 'medium',
+        priority: 'normal',
       });
       showToast('success', `Support ticket ${ticket.id} created.`);
     } catch (err) {
@@ -1451,32 +1452,38 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               }
 
               return (
-                <button
-                  key={section.id}
-                  type="button"
-                  onClick={() => setActiveSection(section.id)}
-                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-all shrink-0 lg:shrink cursor-pointer ${
-                    isActive
-                      ? 'bg-[#8B5CF6] text-white shadow-md shadow-[#8B5CF6]/20'
-                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#161E2E]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5 whitespace-nowrap">
-                    {SECTION_ICONS[section.id]}
-                    <span>{section.label}</span>
-                  </span>
-                  {badgeCount !== null && (
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
-                        isActive
-                          ? 'bg-white/20 text-white'
-                          : 'bg-[#1D293B] text-[#06B6D4]'
-                      }`}
-                    >
-                      {badgeCount}
-                    </span>
+                <React.Fragment key={section.id}>
+                  {section.categoryGroup && (
+                    <div className="hidden lg:block pt-2.5 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider text-[#94A3B8]">
+                      {section.categoryGroup}
+                    </div>
                   )}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSection(section.id)}
+                    className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-all shrink-0 lg:shrink cursor-pointer ${
+                      isActive
+                        ? 'bg-[#8B5CF6] text-white shadow-md shadow-[#8B5CF6]/20'
+                        : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#161E2E]'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5 whitespace-nowrap">
+                      {SECTION_ICONS[section.id]}
+                      <span>{section.label}</span>
+                    </span>
+                    {badgeCount !== null && (
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                          isActive
+                            ? 'bg-white/20 text-white'
+                            : 'bg-[#1D293B] text-[#06B6D4]'
+                        }`}
+                      >
+                        {badgeCount}
+                      </span>
+                    )}
+                  </button>
+                </React.Fragment>
               );
             })}
           </nav>
@@ -2445,121 +2452,33 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             )}
 
           {/* ================================================================
-              MODULE 6: SUPPORT TICKETS
+              MODULE 6: SUPPORT TICKETS (Support -> Tickets)
              ================================================================ */}
           {activeSection === 'support' &&
             hasAdminPermission(effectiveAdmin, 'support.manage') && (
-              <div className="space-y-5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-[#161E2E] border border-white/[0.08]">
-                  <div className="flex items-center gap-2">
-                    {(
-                      ['all', 'open', 'in_progress', 'resolved', 'closed'] as const
-                    ).map((st) => (
-                      <button
-                        key={st}
-                        type="button"
-                        onClick={() => setTicketFilter(st)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize cursor-pointer ${
-                          ticketFilter === st
-                            ? 'bg-[#8B5CF6] text-white'
-                            : 'bg-[#111827] text-[#94A3B8] hover:text-[#F8FAFC] border border-white/[0.07]'
-                        }`}
-                      >
-                        {st.replace('_', ' ')}
-                      </button>
-                    ))}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsNewTicketModalOpen(true)}
-                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Create Support Ticket</span>
-                  </button>
-                </div>
-
-                {filteredTickets.length === 0 ? (
-                  <div className="p-8 rounded-2xl bg-[#161E2E] border border-white/[0.08] text-center space-y-2">
-                    <LifeBuoy className="w-6 h-6 text-[#94A3B8] mx-auto" />
-                    <div className="text-sm font-semibold text-[#F8FAFC]">
-                      No Support Tickets Found
-                    </div>
-                    <p className="text-xs text-[#94A3B8]">
-                      Click "Create Support Ticket" to log a customer inquiry or
-                      handover assistance ticket.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {filteredTickets.map((tkt) => (
-                      <div
-                        key={tkt.id}
-                        className="p-5 rounded-2xl bg-[#161E2E] border border-white/[0.08] space-y-3"
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#8B5CF6]/20 text-purple-300 border border-[#8B5CF6]/30">
-                              {tkt.priority}
-                            </span>
-                            <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-[#111827] text-[#06B6D4] border border-white/[0.07]">
-                              {tkt.status}
-                            </span>
-                            <h3 className="text-sm font-bold text-[#F8FAFC]">
-                              {tkt.subject}
-                            </h3>
-                          </div>
-                          <span className="text-xs font-mono text-[#94A3B8]">
-                            {tkt.userName} ({tkt.userEmail})
-                          </span>
-                        </div>
-
-                        <p className="text-xs text-[#94A3B8]">
-                          {tkt.description}
-                        </p>
-
-                        <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                          <input
-                            type="text"
-                            defaultValue={tkt.internalNotes}
-                            placeholder="Add internal support note..."
-                            onBlur={(e) => {
-                              if (e.target.value !== tkt.internalNotes) {
-                                void handleUpdateSupportTicket(
-                                  tkt,
-                                  tkt.status,
-                                  e.target.value
-                                );
-                              }
-                            }}
-                            className="flex-1 px-3 py-1.5 rounded-lg bg-[#111827] border border-white/[0.08] text-xs text-[#F8FAFC] placeholder:text-[#94A3B8]"
-                          />
-                          <div className="flex items-center gap-1.5">
-                            {(
-                              ['in_progress', 'resolved', 'closed'] as SupportTicketStatus[]
-                            ).map((st) => (
-                              <button
-                                key={st}
-                                type="button"
-                                onClick={() =>
-                                  void handleUpdateSupportTicket(
-                                    tkt,
-                                    st,
-                                    tkt.internalNotes || `Moved to ${st}`
-                                  )
-                                }
-                                className="px-2.5 py-1.5 rounded-lg bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-medium text-[#F8FAFC] capitalize cursor-pointer"
-                              >
-                                {st.replace('_', ' ')}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="dark">
+                <AdminTicketsModule
+                  currentAdmin={effectiveAdmin}
+                  tickets={supportTickets}
+                  admins={admins}
+                  onTicketUpdated={(updatedTicket, auditLog) => {
+                    setSupportTickets((prev) => {
+                      const exists = prev.some((t) => t.id === updatedTicket.id);
+                      if (exists) {
+                        return prev.map((t) =>
+                          t.id === updatedTicket.id ? updatedTicket : t
+                        );
+                      }
+                      return [updatedTicket, ...prev];
+                    });
+                    if (auditLog) {
+                      setAuditLogs((prev) => [auditLog, ...prev]);
+                    }
+                  }}
+                  onNotify={(message, tone = 'success') => {
+                    showToast(tone, message);
+                  }}
+                />
               </div>
             )}
 

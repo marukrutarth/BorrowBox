@@ -781,6 +781,151 @@
         "updatedByEmail",
         "updatedAt"
       ]
+    },
+    "SupportTicketV2": {
+      "title": "SupportTicketV2",
+      "description": "Complete BorrowBox support ticket with staff claiming, priority, and resolution tracking.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "ticketNumber": { "type": "string", "minLength": 5, "maxLength": 40 },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "userEmail": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "subject": { "type": "string", "minLength": 3, "maxLength": 160 },
+        "description": { "type": "string", "minLength": 5, "maxLength": 2500 },
+        "category": {
+          "type": "string",
+          "enum": [
+            "Payment & Deposit",
+            "Booking & Handover",
+            "Item Condition & Damage",
+            "Account & Verification",
+            "Safety & Trust",
+            "General Enquiry"
+          ]
+        },
+        "priority": { "type": "string", "enum": ["normal", "urgent"] },
+        "status": {
+          "type": "string",
+          "enum": ["open", "in_progress", "waiting_for_user", "resolved", "closed"]
+        },
+        "assignedTo": { "type": "string", "minLength": 0, "maxLength": 128 },
+        "assignedStaffName": { "type": "string", "minLength": 0, "maxLength": 80 },
+        "assignedStaffEmail": { "type": "string", "minLength": 0, "maxLength": 120 },
+        "claimedAt": { "type": "string", "minLength": 0, "maxLength": 64 },
+        "firstResponseAt": { "type": "string", "minLength": 0, "maxLength": 64 },
+        "relatedBookingId": { "type": "string", "minLength": 0, "maxLength": 128 },
+        "relatedProductId": { "type": "string", "minLength": 0, "maxLength": 128 },
+        "attachments": { "type": "string", "minLength": 0, "maxLength": 450000 },
+        "resolutionSummary": { "type": "string", "minLength": 0, "maxLength": 2000 },
+        "internalNotes": { "type": "string", "minLength": 0, "maxLength": 3000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "resolvedAt": { "type": "string", "minLength": 0, "maxLength": 64 },
+        "closedAt": { "type": "string", "minLength": 0, "maxLength": 64 },
+        "emailOpenedSentAt": { "type": "string", "minLength": 0, "maxLength": 64 },
+        "emailClosedSentAt": { "type": "string", "minLength": 0, "maxLength": 64 }
+      },
+      "required": [
+        "id",
+        "ticketNumber",
+        "userId",
+        "userName",
+        "userEmail",
+        "subject",
+        "description",
+        "category",
+        "priority",
+        "status",
+        "assignedStaffName",
+        "assignedStaffEmail",
+        "relatedBookingId",
+        "relatedProductId",
+        "resolutionSummary",
+        "internalNotes",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SupportTicketMessage": {
+      "title": "SupportTicketMessage",
+      "description": "Message or private staff internal note inside a support ticket conversation.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "ticketId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "senderId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "senderName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "senderRole": { "type": "string", "enum": ["customer", "staff", "admin"] },
+        "message": { "type": "string", "minLength": 1, "maxLength": 2500 },
+        "isInternal": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "ticketId",
+        "senderId",
+        "senderName",
+        "senderRole",
+        "message",
+        "isInternal",
+        "createdAt"
+      ]
+    },
+    "SupportTicketHistory": {
+      "title": "SupportTicketHistory",
+      "description": "Audit trail entry for a support ticket action.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "ticketId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "actorId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "actorName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "actorEmail": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "actorRole": { "type": "string", "enum": ["customer", "staff", "admin"] },
+        "action": { "type": "string", "minLength": 2, "maxLength": 64 },
+        "summary": { "type": "string", "minLength": 2, "maxLength": 600 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "ticketId",
+        "actorId",
+        "actorName",
+        "actorEmail",
+        "actorRole",
+        "action",
+        "summary",
+        "createdAt"
+      ]
+    },
+    "SupportNotification": {
+      "title": "SupportNotification",
+      "description": "In-app notification for support ticket events.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "recipientUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "recipientRole": { "type": "string", "enum": ["customer", "staff"] },
+        "ticketId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "ticketNumber": { "type": "string", "minLength": 3, "maxLength": 40 },
+        "title": { "type": "string", "minLength": 2, "maxLength": 140 },
+        "body": { "type": "string", "minLength": 2, "maxLength": 500 },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "recipientUid",
+        "recipientRole",
+        "ticketId",
+        "ticketNumber",
+        "title",
+        "body",
+        "read",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
@@ -826,7 +971,23 @@
     },
     "/support_tickets/{ticketId}": {
       "schema": { "$ref": "#/entities/SupportTicket" },
-      "description": "Customer support tickets and internal support notes."
+      "description": "Legacy customer support tickets collection."
+    },
+    "/supportTickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/SupportTicketV2" },
+      "description": "Primary BorrowBox support tickets collection with claiming, priority, and resolution tracking."
+    },
+    "/supportTickets/{ticketId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/SupportTicketMessage" },
+      "description": "Conversation messages and internal notes for a support ticket."
+    },
+    "/supportTickets/{ticketId}/history/{eventId}": {
+      "schema": { "$ref": "#/entities/SupportTicketHistory" },
+      "description": "Audit history of events on a support ticket."
+    },
+    "/supportNotifications/{notifId}": {
+      "schema": { "$ref": "#/entities/SupportNotification" },
+      "description": "In-app notifications for customers and support staff."
     },
     "/audit_logs/{logId}": {
       "schema": { "$ref": "#/entities/AdminAuditLog" },

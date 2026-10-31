@@ -72,7 +72,7 @@ import {
 } from '../utils/adminRbac';
 import { ALL_CITIES, BLUEPRINT_LIMITS } from '../utils/rentalLogic';
 
-const app = initializeApp(firebaseConfig);
+export const app = initializeApp(firebaseConfig);
 // Silence internal @firebase/firestore connection/token-refresh console.error noise when operating in offline fallback mode
 try {
   setLogLevel('silent');
@@ -1723,8 +1723,10 @@ export async function fetchAdminDashboardData(): Promise<AdminDashboardSnapshot>
     adminsSnap,
     reportsSnap,
     ticketsSnap,
+    v2TicketsSnap,
     auditSnap,
     settingsSnap,
+    serverSupportRes,
   ] = await Promise.all([
     getDocs(collection(db, 'users')).catch(() => null),
     getDocs(collection(db, 'user_moderation')).catch(() => null),
@@ -1735,8 +1737,12 @@ export async function fetchAdminDashboardData(): Promise<AdminDashboardSnapshot>
     getDocs(collection(db, 'admins')).catch(() => null),
     getDocs(collection(db, 'reports')).catch(() => null),
     getDocs(collection(db, 'support_tickets')).catch(() => null),
+    getDocs(collection(db, 'supportTickets')).catch(() => null),
     getDocs(collection(db, 'audit_logs')).catch(() => null),
     getDoc(doc(db, 'platform_settings', 'global')).catch(() => null),
+    fetch('/api/support/state?role=admin')
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null),
   ]);
 
   const userModMap = new Map<
@@ -1904,28 +1910,145 @@ export async function fetchAdminDashboardData(): Promise<AdminDashboardSnapshot>
         .sort((a, b) => b.createdAtISO.localeCompare(a.createdAtISO))
     : [];
 
-  const supportTickets: SupportTicketRecord[] = ticketsSnap
-    ? ticketsSnap.docs
-        .map((d) => {
-          const data = d.data();
-          return {
-            id: String(data.id || d.id),
-            userId: String(data.userId || ''),
-            userName: String(data.userName || 'BorrowBox Member'),
-            userEmail: String(data.userEmail || ''),
-            bookingId: String(data.bookingId || ''),
-            subject: String(data.subject || 'Support Inquiry'),
-            description: String(data.description || ''),
-            priority: (data.priority as SupportTicketPriority) || 'medium',
-            status: (data.status as SupportTicketStatus) || 'open',
-            internalNotes: String(data.internalNotes || ''),
-            assignedToEmail: String(data.assignedToEmail || ''),
-            createdAtISO: formatTimestampToISO(data.createdAt),
-            updatedAtISO: formatTimestampToISO(data.updatedAt),
-          };
-        })
-        .sort((a, b) => b.createdAtISO.localeCompare(a.createdAtISO))
-    : [];
+  const ticketsMap = new Map<string, SupportTicketRecord>();
+  const serverTicketsMap: Record<string, Record<string, unknown>> =
+    serverSupportRes && typeof serverSupportRes.tickets === 'object'
+      ? (serverSupportRes.tickets as Record<string, Record<string, unknown>>)
+      : {};
+
+  const mapRawToSupportTicket = (
+    docId: string,
+    data: Record<string, unknown>
+  ): SupportTicketRecord => {
+    const id = String(data.id || docId);
+    const srv = serverTicketsMap[id] || {};
+    const rawPriority = String(srv.priority || data.priority || 'normal').toLowerCase();
+    const normalizedPriority: SupportTicketPriority =
+      rawPriority === 'urgent' || rawPriority === 'high' ? 'urgent' : 'normal';
+    const rawStatus = String(srv.status || data.status || 'open').toLowerCase();
+    const normalizedStatus: SupportTicketStatus =
+      rawStatus === 'in_progress' ||
+      rawStatus === 'waiting_for_user' ||
+      rawStatus === 'resolved' ||
+      rawStatus === 'closed'
+        ? (rawStatus as SupportTicketStatus)
+        : 'open';
+
+    const assignedToEmail = String(
+      srv.assignedToEmail ?? data.assignedToEmail ?? ''
+    );
+    const rawAssignedTo =
+      srv.assignedTo !== undefined
+        ? srv.assignedTo
+        : data.assignedTo !== undefined
+        ? data.assignedTo
+        : assignedToEmail
+        ? assignedToEmail
+        : null;
+
+    return {
+      id,
+      ticketNumber: String(srv.ticketNumber || data.ticketNumber || id),
+      userId: String(srv.userId || data.userId || ''),
+      userName: String(srv.userName || data.userName || 'BorrowBox Member'),
+      userEmail: String(srv.userEmail || data.userEmail || ''),
+      category: (srv.category ||
+        data.category ||
+        'General Enquiry') as SupportTicketRecord['category'],
+      bookingId: String(srv.bookingId ?? data.bookingId ?? ''),
+      productId: String(srv.productId ?? data.productId ?? ''),
+      subject: String(srv.subject || data.subject || 'Support Inquiry'),
+      description: String(srv.description || data.description || ''),
+      priority: normalizedPriority,
+      status: normalizedStatus,
+      assignedTo: rawAssignedTo ? String(rawAssignedTo) : null,
+      assignedStaffName: String(
+        srv.assignedStaffName || data.assignedStaffName || assignedToEmail || ''
+      ),
+      assignedToEmail,
+      claimedAtISO: srv.claimedAtISO
+        ? String(srv.claimedAtISO)
+        : data.claimedAt
+        ? formatTimestampToISO(data.claimedAt)
+        : data.claimedAtISO
+        ? String(data.claimedAtISO)
+        : null,
+      firstResponseAtISO: srv.firstResponseAtISO
+        ? String(srv.firstResponseAtISO)
+        : data.firstResponseAtISO
+        ? String(data.firstResponseAtISO)
+        : null,
+      resolvedAtISO: srv.resolvedAtISO
+        ? String(srv.resolvedAtISO)
+        : data.resolvedAtISO
+        ? String(data.resolvedAtISO)
+        : null,
+      closedAtISO: srv.closedAtISO
+        ? String(srv.closedAtISO)
+        : data.closedAtISO
+        ? String(data.closedAtISO)
+        : null,
+      reopenedAtISO: srv.reopenedAtISO
+        ? String(srv.reopenedAtISO)
+        : data.reopenedAtISO
+        ? String(data.reopenedAtISO)
+        : null,
+      reassignmentCount: Number(
+        srv.reassignmentCount ?? data.reassignmentCount ?? 0
+      ),
+      resolutionSummary: String(
+        srv.resolutionSummary ?? data.resolutionSummary ?? ''
+      ),
+      internalNotes: String(srv.internalNotes ?? data.internalNotes ?? ''),
+      attachments: Array.isArray(srv.attachments)
+        ? (srv.attachments as SupportTicketRecord['attachments'])
+        : Array.isArray(data.attachments)
+        ? (data.attachments as SupportTicketRecord['attachments'])
+        : [],
+      emailOpenedStatus: (srv.emailOpenedStatus ||
+        data.emailOpenedStatus) as SupportTicketRecord['emailOpenedStatus'],
+      emailOpenedSentAtISO: String(
+        srv.emailOpenedSentAtISO || data.emailOpenedSentAtISO || ''
+      ),
+      emailOpenedError: String(
+        srv.emailOpenedError || data.emailOpenedError || ''
+      ),
+      emailClosedStatus: (srv.emailClosedStatus ||
+        data.emailClosedStatus) as SupportTicketRecord['emailClosedStatus'],
+      emailClosedSentAtISO: String(
+        srv.emailClosedSentAtISO || data.emailClosedSentAtISO || ''
+      ),
+      emailClosedError: String(
+        srv.emailClosedError || data.emailClosedError || ''
+      ),
+      createdAtISO: data.createdAt
+        ? formatTimestampToISO(data.createdAt)
+        : String(srv.createdAtISO || data.createdAtISO || new Date().toISOString()),
+      updatedAtISO: data.updatedAt
+        ? formatTimestampToISO(data.updatedAt)
+        : String(srv.updatedAtISO || data.updatedAtISO || new Date().toISOString()),
+    };
+  };
+
+  if (ticketsSnap) {
+    for (const d of ticketsSnap.docs) {
+      ticketsMap.set(d.id, mapRawToSupportTicket(d.id, d.data()));
+    }
+  }
+  if (v2TicketsSnap) {
+    for (const d of v2TicketsSnap.docs) {
+      ticketsMap.set(d.id, mapRawToSupportTicket(d.id, d.data()));
+    }
+  }
+  for (const [id, srvData] of Object.entries(serverTicketsMap)) {
+    if (!ticketsMap.has(id)) {
+      ticketsMap.set(id, mapRawToSupportTicket(id, srvData));
+    }
+  }
+
+  const supportTickets: SupportTicketRecord[] = Array.from(
+    ticketsMap.values()
+  ).sort((a, b) => b.createdAtISO.localeCompare(a.createdAtISO));
 
   const auditLogs: AdminAuditLogRecord[] = auditSnap
     ? auditSnap.docs

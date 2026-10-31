@@ -25,6 +25,7 @@ export type PageRoute =
   | { page: 'login' }
   | { page: 'signup' }
   | { page: 'admin' }
+  | { page: 'support'; ticketId?: string }
   | { page: 'about' };
 
 export interface NavbarProps {
