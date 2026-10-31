@@ -1,0 +1,6 @@
+{
+  "name": "BorrowBox",
+  "description": "Peer-to-peer rental marketplace in India. Rent what you need from nearby owners, or list unused items and earn in Indian Rupees (₹).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,606 @@
+{
+  "entities": {
+    "UserPublicProfile": {
+      "title": "UserPublicProfile",
+      "description": "Publicly visible marketplace profile for a BorrowBox user who can act as both renter and owner.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Unique Firebase Auth user ID matching the document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the user.",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Profile avatar URL or generated initials URL.",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "city": {
+          "type": "string",
+          "description": "Primary Indian city for rentals and listings.",
+          "enum": ["Bengaluru", "Mumbai", "Delhi NCR", "Hyderabad", "Pune", "Chennai"],
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "neighborhood": {
+          "type": "string",
+          "description": "Locality or neighborhood within the city.",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "canRent": {
+          "type": "boolean",
+          "description": "Indicates the user can borrow/rent items on BorrowBox."
+        },
+        "canList": {
+          "type": "boolean",
+          "description": "Indicates the user can list/own items for rent on BorrowBox."
+        },
+        "activeMode": {
+          "type": "string",
+          "description": "Current workspace perspective selected by the user.",
+          "enum": ["renter", "owner"],
+          "minLength": 5,
+          "maxLength": 10
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Immutable account creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last profile update timestamp."
+        }
+      },
+      "required": [
+        "uid",
+        "name",
+        "photoURL",
+        "city",
+        "neighborhood",
+        "canRent",
+        "canList",
+        "activeMode",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserPrivateProfile": {
+      "title": "UserPrivateProfile",
+      "description": "Strictly isolated PII document containing email, phone number, and private identity verification metadata.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Unique Firebase Auth user ID matching parent userId.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Private email address of the user.",
+          "minLength": 5,
+          "maxLength": 120
+        },
+        "phone": {
+          "type": "string",
+          "description": "Private Indian mobile phone number.",
+          "minLength": 0,
+          "maxLength": 20
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Immutable record creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last private record update timestamp."
+        }
+      },
+      "required": ["uid", "email", "phone", "createdAt", "updatedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Separate administrator role assignment document.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Admin user UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified administrator email.",
+          "minLength": 5,
+          "maxLength": 120
+        },
+        "grantedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when admin privilege was granted."
+        }
+      },
+      "required": ["uid", "email", "grantedAt"]
+    },
+    "MarketplaceListing": {
+      "title": "MarketplaceListing",
+      "description": "User-created peer-to-peer rental listing with pricing in INR, deposit, availability window, and status.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "title": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 140
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "Electronics",
+            "Photography",
+            "Gaming",
+            "Tools",
+            "Events",
+            "Outdoor",
+            "Education",
+            "Musical Instruments"
+          ],
+          "minLength": 4,
+          "maxLength": 30
+        },
+        "condition": {
+          "type": "string",
+          "enum": ["Like New", "Excellent", "Good"],
+          "minLength": 4,
+          "maxLength": 15
+        },
+        "dailyPriceINR": {
+          "type": "integer",
+          "description": "Daily rental rate in Indian Rupees."
+        },
+        "refundableDepositINR": {
+          "type": "integer",
+          "description": "Refundable security deposit in Indian Rupees."
+        },
+        "replacementValueINR": {
+          "type": "integer",
+          "description": "Approximate retail replacement price in Indian Rupees."
+        },
+        "city": {
+          "type": "string",
+          "enum": ["Bengaluru", "Mumbai", "Delhi NCR", "Hyderabad", "Pune", "Chennai"],
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "neighborhood": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "pickupLocation": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 2000
+        },
+        "imageUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 350000
+        },
+        "availableFrom": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10
+        },
+        "availableTo": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10
+        },
+        "minRentalDays": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "archived"],
+          "minLength": 6,
+          "maxLength": 10
+        },
+        "cancellationPolicy": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 80
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "ownerName",
+        "title",
+        "category",
+        "condition",
+        "dailyPriceINR",
+        "refundableDepositINR",
+        "replacementValueINR",
+        "city",
+        "neighborhood",
+        "pickupLocation",
+        "description",
+        "imageUrl",
+        "availableFrom",
+        "availableTo",
+        "minRentalDays",
+        "status",
+        "cancellationPolicy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "RentalBooking": {
+      "title": "RentalBooking",
+      "description": "Auditable rental reservation linking borrower, item owner, dates, deposit status, QR handover code, and condition logs.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "listingId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "listingTitle": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 140
+        },
+        "listingCity": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "borrowerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "borrowerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "startDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10
+        },
+        "endDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10
+        },
+        "days": {
+          "type": "integer"
+        },
+        "dailyRateINR": {
+          "type": "integer"
+        },
+        "netRentalCostINR": {
+          "type": "integer"
+        },
+        "refundableDepositINR": {
+          "type": "integer"
+        },
+        "totalUpfrontINR": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "accepted",
+            "rejected",
+            "cancelled",
+            "picked_up",
+            "returned",
+            "completed",
+            "disputed"
+          ],
+          "minLength": 6,
+          "maxLength": 15
+        },
+        "depositStatus": {
+          "type": "string",
+          "enum": ["pending_pickup", "held_at_pickup", "refunded", "disputed"],
+          "minLength": 8,
+          "maxLength": 20
+        },
+        "handoverCode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32
+        },
+        "pickupConditionNote": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "pickupPhotoUrl": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 350000
+        },
+        "returnConditionNote": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "returnPhotoUrl": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 350000
+        },
+        "disputeReason": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "listingId",
+        "listingTitle",
+        "listingCity",
+        "ownerId",
+        "ownerName",
+        "borrowerId",
+        "borrowerName",
+        "startDate",
+        "endDate",
+        "days",
+        "dailyRateINR",
+        "netRentalCostINR",
+        "refundableDepositINR",
+        "totalUpfrontINR",
+        "status",
+        "depositStatus",
+        "handoverCode",
+        "pickupConditionNote",
+        "pickupPhotoUrl",
+        "returnConditionNote",
+        "returnPhotoUrl",
+        "disputeReason",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "BookingMessage": {
+      "title": "BookingMessage",
+      "description": "Private message inside a rental booking conversation between the borrower and owner.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "bookingId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "borrowerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "bookingId",
+        "senderId",
+        "senderName",
+        "borrowerId",
+        "ownerId",
+        "text",
+        "createdAt"
+      ]
+    },
+    "RentalReview": {
+      "title": "RentalReview",
+      "description": "Verified review linked strictly to a completed or returned rental booking.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "bookingId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "listingId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "reviewerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "reviewerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "revieweeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "rating": {
+          "type": "integer"
+        },
+        "comment": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 600
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "bookingId",
+        "listingId",
+        "reviewerId",
+        "reviewerName",
+        "revieweeId",
+        "rating",
+        "comment",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserPublicProfile" },
+      "description": "Public user profiles containing non-PII display attributes and dual renter/owner flags."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateProfile" },
+      "description": "Isolated private user profile data (email, phone) accessible only to the profile owner or administrators."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Dedicated administrator registry kept strictly separate from standard user profiles."
+    },
+    "/listings/{listingId}": {
+      "schema": { "$ref": "#/entities/MarketplaceListing" },
+      "description": "User-published peer-to-peer rental listings."
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/RentalBooking" },
+      "description": "Auditable rental bookings between borrowers and owners."
+    },
+    "/bookings/{bookingId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/BookingMessage" },
+      "description": "Private handover coordination messages between the booking borrower and owner."
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/RentalReview" },
+      "description": "Verified reviews linked strictly to completed rental bookings."
+    }
+  }
+}

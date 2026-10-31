@@ -1,0 +1,774 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Global Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Separate Administrator Verification (Never trusts unverified email or user-editable profile fields)
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email == 'marukrutarth@gmail.com' && request.auth.token.email_verified == true)
+      );
+    }
+
+    // 3. Entity Validation Blueprints
+    function isValidUserPublicProfile(data, userId) {
+      return data.keys().hasAll([
+          'uid',
+          'name',
+          'photoURL',
+          'city',
+          'neighborhood',
+          'canRent',
+          'canList',
+          'activeMode',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'name',
+          'photoURL',
+          'city',
+          'neighborhood',
+          'canRent',
+          'canList',
+          'activeMode',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.uid is string
+        && data.uid.size() >= 1
+        && data.uid.size() <= 128
+        && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.uid == userId
+        && data.uid == request.auth.uid
+        && data.name is string
+        && data.name.size() >= 2
+        && data.name.size() <= 80
+        && data.photoURL is string
+        && data.photoURL.size() <= 500
+        && data.city is string
+        && data.city.size() >= 2
+        && data.city.size() <= 40
+        && data.city in ['Bengaluru', 'Mumbai', 'Delhi NCR', 'Hyderabad', 'Pune', 'Chennai']
+        && data.neighborhood is string
+        && data.neighborhood.size() >= 2
+        && data.neighborhood.size() <= 80
+        && data.canRent is bool
+        && data.canList is bool
+        && data.activeMode is string
+        && data.activeMode.size() >= 5
+        && data.activeMode.size() <= 10
+        && data.activeMode in ['renter', 'owner']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'phone', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'phone', 'createdAt', 'updatedAt'])
+        && data.uid is string
+        && data.uid.size() >= 1
+        && data.uid.size() <= 128
+        && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.uid == userId
+        && data.uid == request.auth.uid
+        && data.email is string
+        && data.email.size() >= 5
+        && data.email.size() <= 120
+        && data.phone is string
+        && data.phone.size() <= 20
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRecord(data, adminId) {
+      return data.keys().hasAll(['uid', 'email', 'grantedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'grantedAt'])
+        && data.uid is string
+        && data.uid.size() >= 1
+        && data.uid.size() <= 128
+        && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.uid == adminId
+        && data.email is string
+        && data.email.size() >= 5
+        && data.email.size() <= 120
+        && data.grantedAt is timestamp;
+    }
+
+    function isValidMarketplaceListing(data, listingId) {
+      return data.keys().hasAll([
+          'id',
+          'ownerId',
+          'ownerName',
+          'title',
+          'category',
+          'condition',
+          'dailyPriceINR',
+          'refundableDepositINR',
+          'replacementValueINR',
+          'city',
+          'neighborhood',
+          'pickupLocation',
+          'description',
+          'imageUrl',
+          'availableFrom',
+          'availableTo',
+          'minRentalDays',
+          'status',
+          'cancellationPolicy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'ownerId',
+          'ownerName',
+          'title',
+          'category',
+          'condition',
+          'dailyPriceINR',
+          'refundableDepositINR',
+          'replacementValueINR',
+          'city',
+          'neighborhood',
+          'pickupLocation',
+          'description',
+          'imageUrl',
+          'availableFrom',
+          'availableTo',
+          'minRentalDays',
+          'status',
+          'cancellationPolicy',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.id is string
+        && data.id.size() >= 1
+        && data.id.size() <= 128
+        && data.id.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.id == listingId
+        && data.ownerId is string
+        && data.ownerId.size() >= 1
+        && data.ownerId.size() <= 128
+        && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.ownerName is string
+        && data.ownerName.size() >= 2
+        && data.ownerName.size() <= 80
+        && data.title is string
+        && data.title.size() >= 5
+        && data.title.size() <= 140
+        && data.category is string
+        && data.category.size() >= 4
+        && data.category.size() <= 30
+        && data.category in [
+          'Electronics',
+          'Photography',
+          'Gaming',
+          'Tools',
+          'Events',
+          'Outdoor',
+          'Education',
+          'Musical Instruments'
+        ]
+        && data.condition is string
+        && data.condition.size() >= 4
+        && data.condition.size() <= 15
+        && data.condition in ['Like New', 'Excellent', 'Good']
+        && data.dailyPriceINR is int
+        && data.dailyPriceINR >= 50
+        && data.dailyPriceINR <= 500000
+        && data.refundableDepositINR is int
+        && data.refundableDepositINR >= 0
+        && data.refundableDepositINR <= 1000000
+        && data.replacementValueINR is int
+        && data.replacementValueINR >= 100
+        && data.replacementValueINR <= 2000000
+        && data.city is string
+        && data.city.size() >= 2
+        && data.city.size() <= 40
+        && data.city in ['Bengaluru', 'Mumbai', 'Delhi NCR', 'Hyderabad', 'Pune', 'Chennai']
+        && data.neighborhood is string
+        && data.neighborhood.size() >= 2
+        && data.neighborhood.size() <= 80
+        && data.pickupLocation is string
+        && data.pickupLocation.size() >= 5
+        && data.pickupLocation.size() <= 200
+        && data.description is string
+        && data.description.size() >= 20
+        && data.description.size() <= 2000
+        && data.imageUrl is string
+        && data.imageUrl.size() >= 1
+        && data.imageUrl.size() <= 350000
+        && data.availableFrom is string
+        && data.availableFrom.size() == 10
+        && data.availableTo is string
+        && data.availableTo.size() == 10
+        && data.minRentalDays is int
+        && data.minRentalDays >= 1
+        && data.minRentalDays <= 60
+        && data.status is string
+        && data.status.size() >= 6
+        && data.status.size() <= 10
+        && data.status in ['active', 'archived']
+        && data.cancellationPolicy is string
+        && data.cancellationPolicy.size() >= 5
+        && data.cancellationPolicy.size() <= 80
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRentalBooking(data, bookingId) {
+      return data.keys().hasAll([
+          'id',
+          'listingId',
+          'listingTitle',
+          'listingCity',
+          'ownerId',
+          'ownerName',
+          'borrowerId',
+          'borrowerName',
+          'startDate',
+          'endDate',
+          'days',
+          'dailyRateINR',
+          'netRentalCostINR',
+          'refundableDepositINR',
+          'totalUpfrontINR',
+          'status',
+          'depositStatus',
+          'handoverCode',
+          'pickupConditionNote',
+          'pickupPhotoUrl',
+          'returnConditionNote',
+          'returnPhotoUrl',
+          'disputeReason',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'listingId',
+          'listingTitle',
+          'listingCity',
+          'ownerId',
+          'ownerName',
+          'borrowerId',
+          'borrowerName',
+          'startDate',
+          'endDate',
+          'days',
+          'dailyRateINR',
+          'netRentalCostINR',
+          'refundableDepositINR',
+          'totalUpfrontINR',
+          'status',
+          'depositStatus',
+          'handoverCode',
+          'pickupConditionNote',
+          'pickupPhotoUrl',
+          'returnConditionNote',
+          'returnPhotoUrl',
+          'disputeReason',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.id is string
+        && data.id.size() >= 1
+        && data.id.size() <= 128
+        && data.id.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.id == bookingId
+        && data.listingId is string
+        && data.listingId.size() >= 1
+        && data.listingId.size() <= 128
+        && data.listingId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.listingTitle is string
+        && data.listingTitle.size() >= 2
+        && data.listingTitle.size() <= 140
+        && data.listingCity is string
+        && data.listingCity.size() >= 2
+        && data.listingCity.size() <= 40
+        && data.ownerId is string
+        && data.ownerId.size() >= 1
+        && data.ownerId.size() <= 128
+        && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.ownerName is string
+        && data.ownerName.size() >= 2
+        && data.ownerName.size() <= 80
+        && data.borrowerId is string
+        && data.borrowerId.size() >= 1
+        && data.borrowerId.size() <= 128
+        && data.borrowerId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.borrowerName is string
+        && data.borrowerName.size() >= 2
+        && data.borrowerName.size() <= 80
+        && data.startDate is string
+        && data.startDate.size() == 10
+        && data.endDate is string
+        && data.endDate.size() == 10
+        && data.days is int
+        && data.days >= 1
+        && data.days <= 60
+        && data.dailyRateINR is int
+        && data.dailyRateINR >= 50
+        && data.dailyRateINR <= 500000
+        && data.netRentalCostINR is int
+        && data.netRentalCostINR >= 50
+        && data.netRentalCostINR <= 10000000
+        && data.refundableDepositINR is int
+        && data.refundableDepositINR >= 0
+        && data.refundableDepositINR <= 1000000
+        && data.totalUpfrontINR is int
+        && data.totalUpfrontINR >= 50
+        && data.totalUpfrontINR <= 11000000
+        && data.status is string
+        && data.status.size() >= 6
+        && data.status.size() <= 15
+        && data.status in [
+          'pending',
+          'accepted',
+          'rejected',
+          'cancelled',
+          'picked_up',
+          'returned',
+          'completed',
+          'disputed'
+        ]
+        && data.depositStatus is string
+        && data.depositStatus.size() >= 8
+        && data.depositStatus.size() <= 20
+        && data.depositStatus in ['pending_pickup', 'held_at_pickup', 'refunded', 'disputed']
+        && data.handoverCode is string
+        && data.handoverCode.size() >= 4
+        && data.handoverCode.size() <= 32
+        && data.pickupConditionNote is string
+        && data.pickupConditionNote.size() <= 500
+        && data.pickupPhotoUrl is string
+        && data.pickupPhotoUrl.size() <= 350000
+        && data.returnConditionNote is string
+        && data.returnConditionNote.size() <= 500
+        && data.returnPhotoUrl is string
+        && data.returnPhotoUrl.size() <= 350000
+        && data.disputeReason is string
+        && data.disputeReason.size() <= 500
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidBookingMessage(data, bookingId, messageId) {
+      return data.keys().hasAll([
+          'id',
+          'bookingId',
+          'senderId',
+          'senderName',
+          'borrowerId',
+          'ownerId',
+          'text',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'bookingId',
+          'senderId',
+          'senderName',
+          'borrowerId',
+          'ownerId',
+          'text',
+          'createdAt'
+        ])
+        && data.id is string
+        && data.id.size() >= 1
+        && data.id.size() <= 128
+        && data.id.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.id == messageId
+        && data.bookingId is string
+        && data.bookingId.size() >= 1
+        && data.bookingId.size() <= 128
+        && data.bookingId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.bookingId == bookingId
+        && data.senderId is string
+        && data.senderId.size() >= 1
+        && data.senderId.size() <= 128
+        && data.senderId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.senderId == request.auth.uid
+        && data.senderName is string
+        && data.senderName.size() >= 2
+        && data.senderName.size() <= 80
+        && data.borrowerId is string
+        && data.borrowerId.size() >= 1
+        && data.borrowerId.size() <= 128
+        && data.borrowerId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.ownerId is string
+        && data.ownerId.size() >= 1
+        && data.ownerId.size() <= 128
+        && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.text is string
+        && data.text.size() >= 1
+        && data.text.size() <= 600
+        && data.createdAt is timestamp;
+    }
+
+    function isValidRentalReview(data, reviewId) {
+      return data.keys().hasAll([
+          'id',
+          'bookingId',
+          'listingId',
+          'reviewerId',
+          'reviewerName',
+          'revieweeId',
+          'rating',
+          'comment',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'bookingId',
+          'listingId',
+          'reviewerId',
+          'reviewerName',
+          'revieweeId',
+          'rating',
+          'comment',
+          'createdAt'
+        ])
+        && data.id is string
+        && data.id.size() >= 1
+        && data.id.size() <= 128
+        && data.id.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.id == reviewId
+        && data.bookingId is string
+        && data.bookingId.size() >= 1
+        && data.bookingId.size() <= 128
+        && data.bookingId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.listingId is string
+        && data.listingId.size() >= 1
+        && data.listingId.size() <= 128
+        && data.listingId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.reviewerId is string
+        && data.reviewerId.size() >= 1
+        && data.reviewerId.size() <= 128
+        && data.reviewerId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.reviewerId == request.auth.uid
+        && data.reviewerName is string
+        && data.reviewerName.size() >= 2
+        && data.reviewerName.size() <= 80
+        && data.revieweeId is string
+        && data.revieweeId.size() >= 1
+        && data.revieweeId.size() <= 128
+        && data.revieweeId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.rating is int
+        && data.rating >= 1
+        && data.rating <= 5
+        && data.comment is string
+        && data.comment.size() >= 5
+        && data.comment.size() <= 600
+        && data.createdAt is timestamp;
+    }
+
+    // 4. Collection Rules: Public User Profiles (/users/{userId})
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+
+      allow create: if isSignedIn()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserPublicProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn()
+        && isValidId(userId)
+        && isValidUserPublicProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'name',
+              'photoURL',
+              'city',
+              'neighborhood',
+              'canRent',
+              'canList',
+              'activeMode',
+              'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isSignedIn() && isValidId(userId) && isAdmin();
+
+      // 5. Subcollection Rules: Isolated Private PII (/users/{userId}/private/{docId})
+      match /private/{docId} {
+        allow get: if isSignedIn()
+          && isValidId(userId)
+          && isValidId(docId)
+          && docId == 'info'
+          && (isOwner(userId) || isAdmin())
+          && exists(/databases/$(database)/documents/users/$(userId));
+
+        allow create: if isSignedIn()
+          && isValidId(userId)
+          && isValidId(docId)
+          && docId == 'info'
+          && isOwner(userId)
+          && isValidUserPrivateProfile(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && (
+            exists(/databases/$(database)/documents/users/$(userId)) ||
+            existsAfter(/databases/$(database)/documents/users/$(userId))
+          );
+
+        allow update: if isSignedIn()
+          && isValidId(userId)
+          && isValidId(docId)
+          && docId == 'info'
+          && isValidUserPrivateProfile(incoming(), userId)
+          && incoming().uid == existing().uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && (
+            isAdmin() ||
+            (
+              isOwner(userId) &&
+              incoming().diff(existing()).affectedKeys().hasOnly(['email', 'phone', 'updatedAt'])
+            )
+          );
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(docId) && isAdmin();
+      }
+    }
+
+    // 6. Collection Rules: Separate Administrator Registry (/admins/{adminId})
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && (request.auth.uid == adminId || isAdmin());
+
+      allow create: if isSignedIn()
+        && isValidId(adminId)
+        && isValidAdminRecord(incoming(), adminId)
+        && incoming().grantedAt == request.time
+        && isAdmin();
+
+      allow update: if isSignedIn()
+        && isValidId(adminId)
+        && isValidAdminRecord(incoming(), adminId)
+        && incoming().uid == existing().uid
+        && incoming().grantedAt == existing().grantedAt
+        && isAdmin()
+        && incoming().diff(existing()).affectedKeys().hasOnly(['email']);
+
+      allow delete: if isSignedIn() && isValidId(adminId) && isAdmin();
+    }
+
+    // 7. Collection Rules: Marketplace Listings (/listings/{listingId})
+    match /listings/{listingId} {
+      allow get: if isValidId(listingId) && (
+        existing().status == 'active' ||
+        (isSignedIn() && existing().ownerId == request.auth.uid) ||
+        isAdmin()
+      );
+
+      allow list: if existing().status == 'active' ||
+        (isSignedIn() && existing().ownerId == request.auth.uid);
+
+      allow create: if isSignedIn()
+        && isValidId(listingId)
+        && isValidMarketplaceListing(incoming(), listingId)
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+
+      allow update: if isSignedIn()
+        && isValidId(listingId)
+        && isValidMarketplaceListing(incoming(), listingId)
+        && incoming().id == existing().id
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            existing().ownerId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'title',
+              'category',
+              'condition',
+              'dailyPriceINR',
+              'refundableDepositINR',
+              'replacementValueINR',
+              'city',
+              'neighborhood',
+              'pickupLocation',
+              'description',
+              'imageUrl',
+              'availableFrom',
+              'availableTo',
+              'minRentalDays',
+              'status',
+              'cancellationPolicy',
+              'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isSignedIn() && isValidId(listingId) && isAdmin();
+    }
+
+    // 8. Collection Rules: Rental Bookings (/bookings/{bookingId})
+    match /bookings/{bookingId} {
+      allow get: if isSignedIn()
+        && isValidId(bookingId)
+        && (
+          existing().borrowerId == request.auth.uid ||
+          existing().ownerId == request.auth.uid ||
+          isAdmin()
+        );
+
+      allow list: if isSignedIn() && (
+        existing().borrowerId == request.auth.uid ||
+        existing().ownerId == request.auth.uid ||
+        existing().status in ['accepted', 'picked_up']
+      );
+
+      allow create: if isSignedIn()
+        && isValidId(bookingId)
+        && isValidRentalBooking(incoming(), bookingId)
+        && incoming().borrowerId == request.auth.uid
+        && incoming().borrowerId != incoming().ownerId
+        && incoming().status == 'pending'
+        && incoming().depositStatus == 'pending_pickup'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+
+      allow update: if isSignedIn()
+        && isValidId(bookingId)
+        && isValidRentalBooking(incoming(), bookingId)
+        && incoming().id == existing().id
+        && incoming().listingId == existing().listingId
+        && incoming().ownerId == existing().ownerId
+        && incoming().borrowerId == existing().borrowerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            !(existing().status in ['rejected', 'cancelled', 'completed']) &&
+            (
+              // Owner actions: accept/reject, confirm pickup, confirm return/completion, or dispute
+              (
+                existing().ownerId == request.auth.uid &&
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'status',
+                  'depositStatus',
+                  'pickupConditionNote',
+                  'pickupPhotoUrl',
+                  'returnConditionNote',
+                  'returnPhotoUrl',
+                  'disputeReason',
+                  'updatedAt'
+                ])
+              ) ||
+              // Borrower actions: cancel pending, log pickup/return condition, or raise dispute
+              (
+                existing().borrowerId == request.auth.uid &&
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'status',
+                  'depositStatus',
+                  'pickupConditionNote',
+                  'pickupPhotoUrl',
+                  'returnConditionNote',
+                  'returnPhotoUrl',
+                  'disputeReason',
+                  'updatedAt'
+                ])
+              )
+            )
+          )
+        );
+
+      allow delete: if isSignedIn() && isValidId(bookingId) && isAdmin();
+
+      // 9. Subcollection Rules: Booking Private Messages (/bookings/{bookingId}/messages/{messageId})
+      match /messages/{messageId} {
+        allow get: if isSignedIn()
+          && isValidId(bookingId)
+          && isValidId(messageId)
+          && (
+            existing().borrowerId == request.auth.uid ||
+            existing().ownerId == request.auth.uid ||
+            isAdmin()
+          );
+
+        allow list: if isSignedIn()
+          && (
+            existing().borrowerId == request.auth.uid ||
+            existing().ownerId == request.auth.uid
+          );
+
+        allow create: if isSignedIn()
+          && isValidId(bookingId)
+          && isValidId(messageId)
+          && isValidBookingMessage(incoming(), bookingId, messageId)
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/bookings/$(bookingId))
+          && get(/databases/$(database)/documents/bookings/$(bookingId)).data.borrowerId == incoming().borrowerId
+          && get(/databases/$(database)/documents/bookings/$(bookingId)).data.ownerId == incoming().ownerId
+          && (
+            incoming().borrowerId == request.auth.uid ||
+            incoming().ownerId == request.auth.uid
+          );
+
+        allow update, delete: if false;
+      }
+    }
+
+    // 10. Collection Rules: Verified Rental Reviews (/reviews/{reviewId})
+    match /reviews/{reviewId} {
+      allow get: if isValidId(reviewId) && existing().rating >= 1;
+
+      allow list: if existing().rating >= 1;
+
+      allow create: if isSignedIn()
+        && isValidId(reviewId)
+        && isValidRentalReview(incoming(), reviewId)
+        && incoming().createdAt == request.time
+        && exists(/databases/$(database)/documents/bookings/$(incoming().bookingId))
+        && get(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.borrowerId == request.auth.uid
+        && get(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.status in ['returned', 'completed'];
+
+      allow update, delete: if false;
+    }
+  }
+}
