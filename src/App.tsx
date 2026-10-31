@@ -53,7 +53,11 @@ import { AuthPage } from './pages/AuthPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
-import { InfoModal, RequestsModal } from './components/InfoAndRequestsModal';
+import {
+  InfoModal,
+  RequestsModal,
+  WishlistModal,
+} from './components/InfoAndRequestsModal';
 import { BorrowBoxIntro } from './components/BorrowBoxIntro';
 import {
   detectPrefersReducedMotion,
@@ -194,6 +198,7 @@ export default function App() {
   const [activeInfoModal, setActiveInfoModal] =
     useState<FooterInfoPageKey | null>(null);
   const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
+  const [isWishlistModalOpen, setIsWishlistModalOpen] = useState(false);
 
   const addNotification = (
     title: string,
@@ -374,18 +379,7 @@ export default function App() {
   };
 
   const handleScrollToHowItWorks = () => {
-    if (currentRoute.page !== 'home') {
-      handleNavigate({ page: 'home' });
-      setTimeout(() => {
-        document
-          .getElementById('how-it-works')
-          ?.scrollIntoView({ behavior: 'smooth' });
-      }, 60);
-    } else {
-      document
-        .getElementById('how-it-works')
-        ?.scrollIntoView({ behavior: 'smooth' });
-    }
+    setActiveInfoModal('how-it-works');
   };
 
   const handleResetFilters = () => {
@@ -887,7 +881,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#090D16] text-[#F8FAFC] bb-ambient-canvas relative overflow-x-hidden">
+    <div className="min-h-screen flex flex-col bg-[#0B0F19] text-[#F8FAFC] bb-ambient-canvas relative overflow-x-hidden">
       <BorrowBoxIntro
         isActive={isIntroActive}
         onComplete={() => {
@@ -899,6 +893,7 @@ export default function App() {
         currentRoute={currentRoute}
         onNavigate={handleNavigate}
         onScrollToHowItWorks={handleScrollToHowItWorks}
+        onOpenWishlist={() => setIsWishlistModalOpen(true)}
         userProfile={userProfile}
         verifiedAdminRecord={verifiedAdminRecord}
         onLogout={handleLogout}
@@ -944,6 +939,16 @@ export default function App() {
         isOpen={isRequestsModalOpen}
         requests={rentalRequests}
         onClose={() => setIsRequestsModalOpen(false)}
+        onSelectListing={(itemId) => {
+          handleNavigate({ page: 'details', itemId });
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
+
+      <WishlistModal
+        isOpen={isWishlistModalOpen}
+        listings={listings}
+        onClose={() => setIsWishlistModalOpen(false)}
         onSelectListing={(itemId) => {
           handleNavigate({ page: 'details', itemId });
           window.scrollTo({ top: 0, behavior: 'smooth' });
