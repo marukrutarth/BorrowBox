@@ -54,9 +54,8 @@ import { ProfilePage } from './pages/ProfilePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { InfoModal, RequestsModal } from './components/InfoAndRequestsModal';
-import { LogoIntroAnimation } from './components/LogoIntroAnimation';
+import { BorrowBoxIntro } from './components/BorrowBoxIntro';
 import {
-  DEFAULT_INTRO_TIMING,
   detectPrefersReducedMotion,
   shouldPlayIntroAnimation,
 } from './utils/introAnimation';
@@ -153,9 +152,6 @@ export default function App() {
     shouldPlayIntroAnimation({
       prefersReducedMotion: detectPrefersReducedMotion(),
     })
-  );
-  const [isInitialRevealTiming, setIsInitialRevealTiming] = useState<boolean>(
-    () => isIntroActive
   );
 
   // Browse filter states
@@ -856,11 +852,10 @@ export default function App() {
   if (currentRoute.page === 'admin') {
     return (
       <>
-        <LogoIntroAnimation
+        <BorrowBoxIntro
           isActive={isIntroActive}
           onComplete={() => {
             setIsIntroActive(false);
-            setIsInitialRevealTiming(false);
           }}
         />
         <AdminDashboardPage
@@ -893,11 +888,10 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#090D16] text-[#F8FAFC] bb-ambient-canvas relative overflow-x-hidden">
-      <LogoIntroAnimation
+      <BorrowBoxIntro
         isActive={isIntroActive}
         onComplete={() => {
           setIsIntroActive(false);
-          setIsInitialRevealTiming(false);
         }}
       />
 
@@ -923,16 +917,11 @@ export default function App() {
         <AnimatePresence mode="wait">
           <motion.div
             key={routeTransitionKey}
-            initial={{ opacity: 0, y: isInitialRevealTiming ? 12 : 10 }}
+            initial={false}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{
-              duration: isInitialRevealTiming
-                ? DEFAULT_INTRO_TIMING.contentRevealDurationSec
-                : 0.36,
-              delay: isInitialRevealTiming
-                ? DEFAULT_INTRO_TIMING.contentRevealDelaySec
-                : 0,
+              duration: 0.34,
               ease: [0.22, 1, 0.36, 1],
             }}
           >

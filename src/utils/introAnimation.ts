@@ -1,48 +1,47 @@
 /**
- * Pure configuration and lifecycle helpers for the BorrowBox Logo Intro Animation.
+ * Pure configuration and lifecycle helpers for "The BorrowBox Identity Reveal" (`BorrowBoxIntro.tsx`).
  */
 
-export const BORROWBOX_LOGO_ASSET_PATH = '/logo.png';
+/** Standalone transparent BorrowBox brand symbol asset (no square background) */
+export const BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH =
+  '/assets/borrowbox-symbol-transparent.svg';
+
+/** Original uploaded logo asset kept untouched */
+export const ORIGINAL_UPLOADED_LOGO_PATH = '/logo.png';
 
 export const INTRO_SESSION_STORAGE_KEY = 'borrowbox_intro_played_session_v1';
 
+export type IdentityRevealScene =
+  | 'scene-1-darkness'
+  | 'scene-2-symbol-formation'
+  | 'scene-3-brand-identity'
+  | 'scene-4-website-transition';
+
 export interface IntroTimingConfig {
-  /** Total duration of the intro sequence in milliseconds (1.80s target) */
+  /** Total duration of The BorrowBox Identity Reveal in milliseconds (2.0s - 2.5s target) */
   totalDurationMs: number;
-  /** 0.00s - 0.45s: Duration of the logo fade-in and scale-up (0.94 -> 1.0) in seconds */
-  logoFadeInSec: number;
-  /** 0.45s - 0.95s: Time in seconds when the logo hold finishes and fade-out begins */
-  logoFadeOutDelaySec: number;
-  /** 0.95s - 1.30s: Duration of the logo fade-out and slight scale-down (1.0 -> 0.96) in seconds */
-  logoFadeOutSec: number;
-  /** 1.30s - 1.80s: Time in seconds when the dark intro overlay begins fading away */
-  overlayFadeOutDelaySec: number;
-  /** 1.30s - 1.80s: Duration of the intro overlay fade-out in seconds */
+  /** Scene 1 (Darkness): 0.00s - 0.30s ambient light development */
+  scene2StartMs: number;
+  /** Scene 2 (Symbol Formation): 0.30s - 1.10s mask reveal & element assembly */
+  scene3StartMs: number;
+  /** Scene 3 (Brand Identity): 1.10s - 1.85s settled symbol + BORROWBOX wordmark hold */
+  scene4StartMs: number;
+  /** Duration of the Scene 4 website transition in seconds (1.85s - 2.30s) */
   overlayFadeOutSec: number;
-  /** 1.30s: Delay before the website content begins its subtle fade-in and upward reveal in seconds */
+  /** Delay before the website homepage content begins its smooth reveal in seconds */
   contentRevealDelaySec: number;
-  /** 0.50s: Duration of the website content reveal in seconds */
+  /** Duration of the website homepage content reveal in seconds */
   contentRevealDurationSec: number;
-  /** Initial scale of the logo at 0.00s (94%) */
-  initialScale: number;
-  /** Hold scale of the logo from 0.45s - 0.95s (100%) */
-  holdScale: number;
-  /** Slight scale-down of the logo during disappearance 0.95s - 1.30s (96%) */
-  exitScale: number;
 }
 
 export const DEFAULT_INTRO_TIMING: IntroTimingConfig = {
-  totalDurationMs: 1800,
-  logoFadeInSec: 0.45,
-  logoFadeOutDelaySec: 0.95,
-  logoFadeOutSec: 0.35,
-  overlayFadeOutDelaySec: 1.3,
-  overlayFadeOutSec: 0.5,
-  contentRevealDelaySec: 1.3,
+  totalDurationMs: 2300,
+  scene2StartMs: 280,
+  scene3StartMs: 1100,
+  scene4StartMs: 1820,
+  overlayFadeOutSec: 0.48,
+  contentRevealDelaySec: 1.82,
   contentRevealDurationSec: 0.5,
-  initialScale: 0.94,
-  holdScale: 1.0,
-  exitScale: 0.96,
 };
 
 let hasPlayedInCurrentPageLoad = false;
@@ -90,7 +89,6 @@ export function markIntroAnimationPlayed(options?: {
       if (options?.persistAcrossRefreshes) {
         window.sessionStorage.setItem(INTRO_SESSION_STORAGE_KEY, '1');
       } else {
-        // Ensure no stale sessionStorage flag blocks the intro on page refresh
         window.sessionStorage.removeItem(INTRO_SESSION_STORAGE_KEY);
       }
     }
