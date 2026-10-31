@@ -72,59 +72,6 @@ import {
 } from '../utils/adminRbac';
 import { ALL_CITIES, BLUEPRINT_LIMITS } from '../utils/rentalLogic';
 
-// Guard against GCP projects where securetoken.googleapis.com (Token Service API) is disabled (HTTP 403 SERVICE_DISABLED),
-// preventing Firebase Auth token refresh from throwing auth/token-service-api-has-not-been-used and blocking Firestore.
-if (
-  typeof window !== 'undefined' &&
-  typeof window.fetch === 'function' &&
-  !(window as unknown as { __bbSecureTokenGuard?: boolean }).__bbSecureTokenGuard
-) {
-  (window as unknown as { __bbSecureTokenGuard?: boolean }).__bbSecureTokenGuard =
-    true;
-  const nativeFetch = window.fetch.bind(window);
-  window.fetch = async (
-    input: RequestInfo | URL,
-    init?: RequestInit
-  ): Promise<Response> => {
-    const urlStr =
-      typeof input === 'string'
-        ? input
-        : input instanceof URL
-        ? input.toString()
-        : input.url || '';
-    if (urlStr.includes('securetoken.googleapis.com/v1/token')) {
-      const cachedToken =
-        (
-          auth?.currentUser as unknown as {
-            stsTokenManager?: { accessToken?: string; refreshToken?: string };
-          }
-        )?.stsTokenManager?.accessToken ||
-        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJib3Jyb3dib3gtdXNlciIsImlhdCI6MTcwMDAwMDAwMCwiZXhwIjoxOTAwMDAwMDAwfQ.signature';
-      const cachedRefresh =
-        (
-          auth?.currentUser as unknown as {
-            stsTokenManager?: { refreshToken?: string };
-          }
-        )?.stsTokenManager?.refreshToken || 'borrowbox-refresh-token';
-      return new Response(
-        JSON.stringify({
-          access_token: cachedToken,
-          id_token: cachedToken,
-          refresh_token: cachedRefresh,
-          expires_in: '3600',
-          token_type: 'Bearer',
-          user_id: auth?.currentUser?.uid || 'borrowbox-user',
-        }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
-    }
-    return nativeFetch(input, init);
-  };
-}
-
 const app = initializeApp(firebaseConfig);
 // Silence internal @firebase/firestore connection/token-refresh console.error noise when operating in offline fallback mode
 try {
@@ -189,52 +136,56 @@ export function isOfflineOrTokenError(error: unknown): boolean {
 
 export function guardUserTokenRefresh(user: User | null): void {
   if (!user) return;
-  const u = user as unknown as {
-    getIdToken?: (forceRefresh?: boolean) => Promise<string>;
-    stsTokenManager?: {
-      accessToken?: string;
-      getAccessToken?: (...args: unknown[]) => Promise<string | null>;
+  try {
+    const u = user as unknown as {
+      getIdToken?: (forceRefresh?: boolean) => Promise<string>;
+      stsTokenManager?: {
+        accessToken?: string;
+        getAccessToken?: (...args: unknown[]) => Promise<string | null>;
+      };
+      _bbTokenGuardApplied?: boolean;
     };
-    _bbTokenGuardApplied?: boolean;
-  };
-  if (u._bbTokenGuardApplied) return;
-  u._bbTokenGuardApplied = true;
+    if (u._bbTokenGuardApplied) return;
+    u._bbTokenGuardApplied = true;
 
-  const cachedAccessToken = u.stsTokenManager?.accessToken || '';
+    const cachedAccessToken = u.stsTokenManager?.accessToken || '';
 
-  if (typeof u.getIdToken === 'function') {
-    const origGetIdToken = u.getIdToken.bind(user);
-    u.getIdToken = async (forceRefresh?: boolean): Promise<string> => {
-      try {
-        return await origGetIdToken(forceRefresh);
-      } catch (err) {
-        if (isOfflineOrTokenError(err)) {
-          return u.stsTokenManager?.accessToken || cachedAccessToken;
+    if (typeof u.getIdToken === 'function') {
+      const origGetIdToken = u.getIdToken.bind(user);
+      u.getIdToken = async (forceRefresh?: boolean): Promise<string> => {
+        try {
+          return await origGetIdToken(forceRefresh);
+        } catch (err) {
+          if (isOfflineOrTokenError(err)) {
+            return u.stsTokenManager?.accessToken || cachedAccessToken;
+          }
+          throw err;
         }
-        throw err;
-      }
-    };
-  }
+      };
+    }
 
-  if (
-    u.stsTokenManager &&
-    typeof u.stsTokenManager.getAccessToken === 'function'
-  ) {
-    const origGetAccessToken = u.stsTokenManager.getAccessToken.bind(
-      u.stsTokenManager
-    );
-    u.stsTokenManager.getAccessToken = async (
-      ...args: unknown[]
-    ): Promise<string | null> => {
-      try {
-        return await origGetAccessToken(...args);
-      } catch (err) {
-        if (isOfflineOrTokenError(err)) {
-          return u.stsTokenManager?.accessToken || cachedAccessToken || null;
+    if (
+      u.stsTokenManager &&
+      typeof u.stsTokenManager.getAccessToken === 'function'
+    ) {
+      const origGetAccessToken = u.stsTokenManager.getAccessToken.bind(
+        u.stsTokenManager
+      );
+      u.stsTokenManager.getAccessToken = async (
+        ...args: unknown[]
+      ): Promise<string | null> => {
+        try {
+          return await origGetAccessToken(...args);
+        } catch (err) {
+          if (isOfflineOrTokenError(err)) {
+            return u.stsTokenManager?.accessToken || cachedAccessToken || null;
+          }
+          throw err;
         }
-        throw err;
-      }
-    };
+      };
+    }
+  } catch {
+    // Ignore if user or token manager properties are read-only
   }
 }
 
