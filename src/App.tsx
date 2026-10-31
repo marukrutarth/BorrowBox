@@ -54,6 +54,13 @@ import { ProfilePage } from './pages/ProfilePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { InfoModal, RequestsModal } from './components/InfoAndRequestsModal';
+import { LogoIntroAnimation } from './components/LogoIntroAnimation';
+import {
+  DEFAULT_INTRO_TIMING,
+  detectPrefersReducedMotion,
+  readSessionIntroPlayed,
+  shouldPlayIntroAnimation,
+} from './utils/introAnimation';
 
 function parseUrlToRoute(pathname: string, search: string): PageRoute {
   const params = new URLSearchParams(search);
@@ -140,6 +147,17 @@ export default function App() {
 
   const [currentRoute, setCurrentRoute] = useState<PageRoute>(() =>
     parseUrlToRoute(window.location.pathname, window.location.search)
+  );
+
+  // Initial brand signature intro state (runs once per session, respects prefers-reduced-motion)
+  const [isIntroActive, setIsIntroActive] = useState<boolean>(() =>
+    shouldPlayIntroAnimation({
+      prefersReducedMotion: detectPrefersReducedMotion(),
+      sessionAlreadyPlayed: readSessionIntroPlayed(),
+    })
+  );
+  const [isInitialRevealTiming, setIsInitialRevealTiming] = useState<boolean>(
+    () => isIntroActive
   );
 
   // Browse filter states
@@ -839,35 +857,52 @@ export default function App() {
   // Dedicated standalone Admin Console route (/admin)
   if (currentRoute.page === 'admin') {
     return (
-      <AdminDashboardPage
-        firebaseUser={firebaseUser}
-        userProfile={userProfile}
-        verifiedAdminRecord={verifiedAdminRecord}
-        isVerifyingAdminSession={isVerifyingAdminSession || isAuthLoading}
-        adminAccessDeniedReason={adminAccessDeniedReason}
-        allListings={listings}
-        allBookings={bookings}
-        allReviews={reviews}
-        onNavigate={handleNavigate}
-        onLogout={handleLogout}
-        onListingModerationChanged={(listingId, modStatus) => {
-          setListings((prev) =>
-            prev.map((item) =>
-              item.id === listingId
-                ? {
-                    ...item,
-                    status: modStatus === 'rejected' ? 'archived' : 'active',
-                  }
-                : item
-            )
-          );
-        }}
-      />
+      <>
+        <LogoIntroAnimation
+          isActive={isIntroActive}
+          onComplete={() => {
+            setIsIntroActive(false);
+            setIsInitialRevealTiming(false);
+          }}
+        />
+        <AdminDashboardPage
+          firebaseUser={firebaseUser}
+          userProfile={userProfile}
+          verifiedAdminRecord={verifiedAdminRecord}
+          isVerifyingAdminSession={isVerifyingAdminSession || isAuthLoading}
+          adminAccessDeniedReason={adminAccessDeniedReason}
+          allListings={listings}
+          allBookings={bookings}
+          allReviews={reviews}
+          onNavigate={handleNavigate}
+          onLogout={handleLogout}
+          onListingModerationChanged={(listingId, modStatus) => {
+            setListings((prev) =>
+              prev.map((item) =>
+                item.id === listingId
+                  ? {
+                      ...item,
+                      status: modStatus === 'rejected' ? 'archived' : 'active',
+                    }
+                  : item
+              )
+            );
+          }}
+        />
+      </>
     );
   }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#090D16] text-[#F8FAFC] bb-ambient-canvas relative overflow-x-hidden">
+      <LogoIntroAnimation
+        isActive={isIntroActive}
+        onComplete={() => {
+          setIsIntroActive(false);
+          setIsInitialRevealTiming(false);
+        }}
+      />
+
       <Navbar
         currentRoute={currentRoute}
         onNavigate={handleNavigate}
@@ -890,10 +925,18 @@ export default function App() {
         <AnimatePresence mode="wait">
           <motion.div
             key={routeTransitionKey}
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: isInitialRevealTiming ? 14 : 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
+            transition={{
+              duration: isInitialRevealTiming
+                ? DEFAULT_INTRO_TIMING.contentRevealDurationSec
+                : 0.36,
+              delay: isInitialRevealTiming
+                ? DEFAULT_INTRO_TIMING.contentRevealDelaySec
+                : 0,
+              ease: [0.22, 1, 0.36, 1],
+            }}
           >
             {renderMainContent()}
           </motion.div>
