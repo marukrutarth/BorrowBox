@@ -282,3 +282,164 @@ export interface ProfileUpdateInput {
   phone: string;
   activeMode: UserActiveMode;
 }
+
+export type AdminRole = 'super_admin' | 'admin' | 'moderator' | 'support_admin';
+
+export type AdminPermission =
+  | 'users.view'
+  | 'users.suspend'
+  | 'users.delete'
+  | 'products.view'
+  | 'products.approve'
+  | 'products.reject'
+  | 'bookings.view'
+  | 'reports.manage'
+  | 'support.manage'
+  | 'admins.view'
+  | 'admins.create'
+  | 'admins.update_role'
+  | 'analytics.view'
+  | 'finance.view'
+  | 'settings.manage'
+  | 'audit_logs.view';
+
+export interface AdminRegistryRecord {
+  id: string;
+  uid: string;
+  email: string;
+  name: string;
+  role: AdminRole;
+  status: 'active' | 'deactivated';
+  customPermissions: AdminPermission[];
+  revokedPermissions: AdminPermission[];
+  grantedBy: string;
+  grantedAtISO: string;
+  lastLoginAtISO: string;
+  updatedAtISO: string;
+}
+
+export type ListingModerationStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'flagged';
+
+export interface ListingModerationRecord {
+  listingId: string;
+  moderationStatus: ListingModerationStatus;
+  reason: string;
+  reviewedByEmail: string;
+  reviewedAtISO: string;
+}
+
+export interface UserModerationRecord {
+  userId: string;
+  status: 'active' | 'suspended' | 'deleted';
+  reason: string;
+  updatedByEmail: string;
+  updatedAtISO: string;
+}
+
+export interface AdminManagedUserRecord {
+  uid: string;
+  name: string;
+  email: string;
+  phone: string;
+  photoURL: string;
+  city: IndianCity;
+  neighborhood: string;
+  canRent: boolean;
+  canList: boolean;
+  activeMode: UserActiveMode;
+  accountStatus: 'active' | 'suspended' | 'deleted';
+  suspensionReason: string;
+  createdAtISO: string;
+  updatedAtISO: string;
+}
+
+export type ReportTargetType = 'listing' | 'user' | 'booking';
+export type ReportCategory =
+  | 'fraud_scam'
+  | 'damaged_item'
+  | 'prohibited_item'
+  | 'no_show'
+  | 'abusive_behavior'
+  | 'other';
+export type ReportSeverity = 'low' | 'medium' | 'high' | 'critical';
+export type ReportStatus = 'open' | 'investigating' | 'resolved' | 'dismissed';
+
+export interface PlatformReportRecord {
+  id: string;
+  targetType: ReportTargetType;
+  targetId: string;
+  targetTitle: string;
+  reporterId: string;
+  reporterName: string;
+  reason: string;
+  category: ReportCategory;
+  severity: ReportSeverity;
+  status: ReportStatus;
+  resolutionNote: string;
+  assignedAdminEmail: string;
+  createdAtISO: string;
+  updatedAtISO: string;
+}
+
+export type SupportTicketPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type SupportTicketStatus =
+  | 'open'
+  | 'in_progress'
+  | 'resolved'
+  | 'closed';
+
+export interface SupportTicketRecord {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  bookingId: string;
+  subject: string;
+  description: string;
+  priority: SupportTicketPriority;
+  status: SupportTicketStatus;
+  internalNotes: string;
+  assignedToEmail: string;
+  createdAtISO: string;
+  updatedAtISO: string;
+}
+
+export type AuditTargetType =
+  | 'user'
+  | 'product'
+  | 'booking'
+  | 'report'
+  | 'support_ticket'
+  | 'admin'
+  | 'settings';
+
+export interface AdminAuditLogRecord {
+  id: string;
+  adminId: string;
+  adminEmail: string;
+  adminRole: AdminRole;
+  action: string;
+  targetType: AuditTargetType;
+  targetId: string;
+  targetLabel: string;
+  previousValue: string;
+  newValue: string;
+  createdAtISO: string;
+}
+
+export interface PlatformSettingsRecord {
+  id: 'global';
+  platformFeePercent: number;
+  minDepositINR: number;
+  requireListingApproval: boolean;
+  maintenanceMode: boolean;
+  autoFlagHighValueThresholdINR: number;
+  supportEscalationEmail: string;
+  updatedByEmail: string;
+  updatedAtISO: string;
+}
+

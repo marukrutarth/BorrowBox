@@ -116,30 +116,84 @@
     },
     "AdminRecord": {
       "title": "AdminRecord",
-      "description": "Separate administrator role assignment document.",
+      "description": "Role-based administrator registry document keyed by lowercase Gmail or UID.",
       "type": "object",
       "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
         "uid": {
           "type": "string",
-          "description": "Admin user UID.",
+          "description": "Admin user UID or pending invite identifier.",
           "minLength": 1,
-          "maxLength": 128,
-          "pattern": "^[a-zA-Z0-9_\\-]+$"
+          "maxLength": 128
         },
         "email": {
           "type": "string",
           "format": "email",
-          "description": "Verified administrator email.",
+          "description": "Verified administrator Gmail address.",
           "minLength": 5,
+          "maxLength": 120
+        },
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "role": {
+          "type": "string",
+          "enum": ["super_admin", "admin", "moderator", "support_admin"],
+          "minLength": 5,
+          "maxLength": 20
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "deactivated"],
+          "minLength": 6,
+          "maxLength": 15
+        },
+        "customPermissions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "revokedPermissions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "grantedBy": {
+          "type": "string",
+          "minLength": 2,
           "maxLength": 120
         },
         "grantedAt": {
           "type": "string",
-          "format": "date-time",
-          "description": "Timestamp when admin privilege was granted."
+          "format": "date-time"
+        },
+        "lastLoginAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
         }
       },
-      "required": ["uid", "email", "grantedAt"]
+      "required": [
+        "id",
+        "uid",
+        "email",
+        "name",
+        "role",
+        "status",
+        "customPermissions",
+        "revokedPermissions",
+        "grantedBy",
+        "grantedAt",
+        "lastLoginAt",
+        "updatedAt"
+      ]
     },
     "MarketplaceListing": {
       "title": "MarketplaceListing",
@@ -571,6 +625,162 @@
         "comment",
         "createdAt"
       ]
+    },
+    "UserModeration": {
+      "title": "UserModeration",
+      "description": "Administrative user status and suspension record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "status": { "type": "string", "enum": ["active", "suspended", "deleted"] },
+        "reason": { "type": "string", "minLength": 0, "maxLength": 500 },
+        "updatedByEmail": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "status", "reason", "updatedByEmail", "updatedAt"]
+    },
+    "ListingModeration": {
+      "title": "ListingModeration",
+      "description": "Administrative product listing approval, rejection, or flag status.",
+      "type": "object",
+      "properties": {
+        "listingId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "moderationStatus": { "type": "string", "enum": ["pending", "approved", "rejected", "flagged"] },
+        "reason": { "type": "string", "minLength": 0, "maxLength": 500 },
+        "reviewedByEmail": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "reviewedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["listingId", "moderationStatus", "reason", "reviewedByEmail", "reviewedAt"]
+    },
+    "PlatformReport": {
+      "title": "PlatformReport",
+      "description": "Reported listing, user, or booking complaint.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "targetType": { "type": "string", "enum": ["listing", "user", "booking"] },
+        "targetId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "targetTitle": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "reporterId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "reporterName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "reason": { "type": "string", "minLength": 5, "maxLength": 800 },
+        "category": { "type": "string", "enum": ["fraud_scam", "damaged_item", "prohibited_item", "no_show", "abusive_behavior", "other"] },
+        "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+        "status": { "type": "string", "enum": ["open", "investigating", "resolved", "dismissed"] },
+        "resolutionNote": { "type": "string", "minLength": 0, "maxLength": 800 },
+        "assignedAdminEmail": { "type": "string", "minLength": 0, "maxLength": 120 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "targetType",
+        "targetId",
+        "targetTitle",
+        "reporterId",
+        "reporterName",
+        "reason",
+        "category",
+        "severity",
+        "status",
+        "resolutionNote",
+        "assignedAdminEmail",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "Customer support ticket and internal support admin resolution notes.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "userEmail": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "bookingId": { "type": "string", "minLength": 0, "maxLength": 128 },
+        "subject": { "type": "string", "minLength": 3, "maxLength": 160 },
+        "description": { "type": "string", "minLength": 5, "maxLength": 1200 },
+        "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent"] },
+        "status": { "type": "string", "enum": ["open", "in_progress", "resolved", "closed"] },
+        "internalNotes": { "type": "string", "minLength": 0, "maxLength": 2000 },
+        "assignedToEmail": { "type": "string", "minLength": 0, "maxLength": 120 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "userId",
+        "userName",
+        "userEmail",
+        "bookingId",
+        "subject",
+        "description",
+        "priority",
+        "status",
+        "internalNotes",
+        "assignedToEmail",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminAuditLog": {
+      "title": "AdminAuditLog",
+      "description": "Immutable append-only administrative activity log entry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "adminId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "adminEmail": { "type": "string", "minLength": 5, "maxLength": 120 },
+        "adminRole": { "type": "string", "enum": ["super_admin", "admin", "moderator", "support_admin"] },
+        "action": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "targetType": { "type": "string", "enum": ["user", "product", "booking", "report", "support_ticket", "admin", "settings"] },
+        "targetId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "targetLabel": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "previousValue": { "type": "string", "minLength": 0, "maxLength": 1000 },
+        "newValue": { "type": "string", "minLength": 0, "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "adminId",
+        "adminEmail",
+        "adminRole",
+        "action",
+        "targetType",
+        "targetId",
+        "targetLabel",
+        "previousValue",
+        "newValue",
+        "createdAt"
+      ]
+    },
+    "PlatformSettings": {
+      "title": "PlatformSettings",
+      "description": "Global platform configuration managed by Super Admins.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "enum": ["global"] },
+        "platformFeePercent": { "type": "integer" },
+        "minDepositINR": { "type": "integer" },
+        "requireListingApproval": { "type": "boolean" },
+        "maintenanceMode": { "type": "boolean" },
+        "autoFlagHighValueThresholdINR": { "type": "integer" },
+        "supportEscalationEmail": { "type": "string", "minLength": 5, "maxLength": 120 },
+        "updatedByEmail": { "type": "string", "minLength": 5, "maxLength": 120 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "platformFeePercent",
+        "minDepositINR",
+        "requireListingApproval",
+        "maintenanceMode",
+        "autoFlagHighValueThresholdINR",
+        "supportEscalationEmail",
+        "updatedByEmail",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -584,7 +794,7 @@
     },
     "/admins/{adminId}": {
       "schema": { "$ref": "#/entities/AdminRecord" },
-      "description": "Dedicated administrator registry kept strictly separate from standard user profiles."
+      "description": "Dedicated RBAC administrator registry kept strictly separate from standard user profiles."
     },
     "/listings/{listingId}": {
       "schema": { "$ref": "#/entities/MarketplaceListing" },
@@ -601,6 +811,30 @@
     "/reviews/{reviewId}": {
       "schema": { "$ref": "#/entities/RentalReview" },
       "description": "Verified reviews linked strictly to completed rental bookings."
+    },
+    "/user_moderation/{userId}": {
+      "schema": { "$ref": "#/entities/UserModeration" },
+      "description": "Administrative user suspension and moderation records."
+    },
+    "/listing_moderation/{listingId}": {
+      "schema": { "$ref": "#/entities/ListingModeration" },
+      "description": "Administrative listing approval, rejection, and flag status records."
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/PlatformReport" },
+      "description": "Reported listings, users, and booking complaints."
+    },
+    "/support_tickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/SupportTicket" },
+      "description": "Customer support tickets and internal support notes."
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AdminAuditLog" },
+      "description": "Immutable append-only administrative activity logs."
+    },
+    "/platform_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/PlatformSettings" },
+      "description": "Global platform configuration settings."
     }
   }
 }

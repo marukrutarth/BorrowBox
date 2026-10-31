@@ -181,7 +181,7 @@ function evaluateAdminCreate(
   return 'ALLOWED';
 }
 
-test('Firestore rules file enforces all 8 hardened security pillars in syntax', () => {
+test('Firestore rules file enforces all 8 hardened security pillars plus Admin RBAC & immutable audit logs in syntax', () => {
   assert.ok(
     rulesSource.includes("rules_version = '2';"),
     'Must use rules_version 2'
@@ -201,6 +201,15 @@ test('Firestore rules file enforces all 8 hardened security pillars in syntax', 
   assert.ok(
     rulesSource.includes('request.auth.token.email_verified == true'),
     'Must enforce email_verified == true on email-based admin checks'
+  );
+  assert.ok(
+    rulesSource.includes('function isSuperAdmin()'),
+    'Must enforce separate Super Admin authority check'
+  );
+  assert.ok(
+    rulesSource.includes('match /audit_logs/{logId}') &&
+      rulesSource.includes('isValidAuditLog(incoming(), logId)'),
+    'Must validate immutable audit logs'
   );
 });
 

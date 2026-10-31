@@ -11,6 +11,10 @@ service cloud.firestore {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function isValidAdminKey(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_.@\\-]+$');
+    }
+
     function incoming() {
       return request.resource.data;
     }
@@ -28,10 +32,36 @@ service cloud.firestore {
     }
 
     // Separate Administrator Verification (Never trusts unverified email or user-editable profile fields)
+    function isSuperAdmin() {
+      return isSignedIn() && request.auth.token.email_verified == true && (
+        request.auth.token.email == 'marukrutarth@gmail.com' ||
+        (
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.status == 'active' &&
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'super_admin'
+        ) ||
+        (
+          request.auth.token.email != null &&
+          exists(/databases/$(database)/documents/admins/$(request.auth.token.email)) &&
+          get(/databases/$(database)/documents/admins/$(request.auth.token.email)).data.status == 'active' &&
+          get(/databases/$(database)/documents/admins/$(request.auth.token.email)).data.role == 'super_admin'
+        )
+      );
+    }
+
     function isAdmin() {
       return isSignedIn() && (
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        (request.auth.token.email == 'marukrutarth@gmail.com' && request.auth.token.email_verified == true)
+        isSuperAdmin() ||
+        (
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.status == 'active'
+        ) ||
+        (
+          request.auth.token.email_verified == true &&
+          request.auth.token.email != null &&
+          exists(/databases/$(database)/documents/admins/$(request.auth.token.email)) &&
+          get(/databases/$(database)/documents/admins/$(request.auth.token.email)).data.status == 'active'
+        )
       );
     }
 
@@ -66,7 +96,7 @@ service cloud.firestore {
         && data.uid.size() <= 128
         && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
         && data.uid == userId
-        && data.uid == request.auth.uid
+        && (data.uid == request.auth.uid || isAdmin())
         && data.name is string
         && data.name.size() >= 2
         && data.name.size() <= 80
@@ -97,7 +127,7 @@ service cloud.firestore {
         && data.uid.size() <= 128
         && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
         && data.uid == userId
-        && data.uid == request.auth.uid
+        && (data.uid == request.auth.uid || isAdmin())
         && data.email is string
         && data.email.size() >= 5
         && data.email.size() <= 120
@@ -108,17 +138,59 @@ service cloud.firestore {
     }
 
     function isValidAdminRecord(data, adminId) {
-      return data.keys().hasAll(['uid', 'email', 'grantedAt'])
-        && data.keys().hasOnly(['uid', 'email', 'grantedAt'])
+      return data.keys().hasAll([
+          'id',
+          'uid',
+          'email',
+          'name',
+          'role',
+          'status',
+          'customPermissions',
+          'revokedPermissions',
+          'grantedBy',
+          'grantedAt',
+          'lastLoginAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'uid',
+          'email',
+          'name',
+          'role',
+          'status',
+          'customPermissions',
+          'revokedPermissions',
+          'grantedBy',
+          'grantedAt',
+          'lastLoginAt',
+          'updatedAt'
+        ])
+        && data.id is string
+        && data.id == adminId
         && data.uid is string
         && data.uid.size() >= 1
         && data.uid.size() <= 128
-        && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
-        && data.uid == adminId
         && data.email is string
         && data.email.size() >= 5
         && data.email.size() <= 120
-        && data.grantedAt is timestamp;
+        && data.name is string
+        && data.name.size() >= 2
+        && data.name.size() <= 80
+        && data.role is string
+        && data.role in ['super_admin', 'admin', 'moderator', 'support_admin']
+        && data.status is string
+        && data.status in ['active', 'deactivated']
+        && data.customPermissions is list
+        && data.customPermissions.size() <= 20
+        && data.revokedPermissions is list
+        && data.revokedPermissions.size() <= 20
+        && data.grantedBy is string
+        && data.grantedBy.size() >= 2
+        && data.grantedBy.size() <= 120
+        && data.grantedAt is timestamp
+        && data.lastLoginAt is timestamp
+        && data.updatedAt is timestamp;
     }
 
     function isValidMarketplaceListing(data, listingId) {
@@ -490,9 +562,199 @@ service cloud.firestore {
         && data.createdAt is timestamp;
     }
 
+    function isValidUserModeration(data, userId) {
+      return data.keys().hasAll(['userId', 'status', 'reason', 'updatedByEmail', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'status', 'reason', 'updatedByEmail', 'updatedAt'])
+        && data.userId == userId
+        && data.status in ['active', 'suspended', 'deleted']
+        && data.reason is string && data.reason.size() <= 500
+        && data.updatedByEmail is string && data.updatedByEmail.size() >= 3 && data.updatedByEmail.size() <= 120
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidListingModeration(data, listingId) {
+      return data.keys().hasAll(['listingId', 'moderationStatus', 'reason', 'reviewedByEmail', 'reviewedAt'])
+        && data.keys().hasOnly(['listingId', 'moderationStatus', 'reason', 'reviewedByEmail', 'reviewedAt'])
+        && data.listingId == listingId
+        && data.moderationStatus in ['pending', 'approved', 'rejected', 'flagged']
+        && data.reason is string && data.reason.size() <= 500
+        && data.reviewedByEmail is string && data.reviewedByEmail.size() >= 3 && data.reviewedByEmail.size() <= 120
+        && data.reviewedAt is timestamp;
+    }
+
+    function isValidPlatformReport(data, reportId) {
+      return data.keys().hasAll([
+          'id',
+          'targetType',
+          'targetId',
+          'targetTitle',
+          'reporterId',
+          'reporterName',
+          'reason',
+          'category',
+          'severity',
+          'status',
+          'resolutionNote',
+          'assignedAdminEmail',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'targetType',
+          'targetId',
+          'targetTitle',
+          'reporterId',
+          'reporterName',
+          'reason',
+          'category',
+          'severity',
+          'status',
+          'resolutionNote',
+          'assignedAdminEmail',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.id == reportId
+        && data.targetType in ['listing', 'user', 'booking']
+        && data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 128
+        && data.targetTitle is string && data.targetTitle.size() >= 2 && data.targetTitle.size() <= 160
+        && data.reporterId is string && data.reporterId.size() >= 1 && data.reporterId.size() <= 128
+        && data.reporterName is string && data.reporterName.size() >= 2 && data.reporterName.size() <= 80
+        && data.reason is string && data.reason.size() >= 5 && data.reason.size() <= 800
+        && data.category in ['fraud_scam', 'damaged_item', 'prohibited_item', 'no_show', 'abusive_behavior', 'other']
+        && data.severity in ['low', 'medium', 'high', 'critical']
+        && data.status in ['open', 'investigating', 'resolved', 'dismissed']
+        && data.resolutionNote is string && data.resolutionNote.size() <= 800
+        && data.assignedAdminEmail is string && data.assignedAdminEmail.size() <= 120
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSupportTicket(data, ticketId) {
+      return data.keys().hasAll([
+          'id',
+          'userId',
+          'userName',
+          'userEmail',
+          'bookingId',
+          'subject',
+          'description',
+          'priority',
+          'status',
+          'internalNotes',
+          'assignedToEmail',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'userId',
+          'userName',
+          'userEmail',
+          'bookingId',
+          'subject',
+          'description',
+          'priority',
+          'status',
+          'internalNotes',
+          'assignedToEmail',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.id == ticketId
+        && data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.userName is string && data.userName.size() >= 2 && data.userName.size() <= 80
+        && data.userEmail is string && data.userEmail.size() >= 3 && data.userEmail.size() <= 120
+        && data.bookingId is string && data.bookingId.size() <= 128
+        && data.subject is string && data.subject.size() >= 3 && data.subject.size() <= 160
+        && data.description is string && data.description.size() >= 5 && data.description.size() <= 1200
+        && data.priority in ['low', 'medium', 'high', 'urgent']
+        && data.status in ['open', 'in_progress', 'resolved', 'closed']
+        && data.internalNotes is string && data.internalNotes.size() <= 2000
+        && data.assignedToEmail is string && data.assignedToEmail.size() <= 120
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAuditLog(data, logId) {
+      return data.keys().hasAll([
+          'id',
+          'adminId',
+          'adminEmail',
+          'adminRole',
+          'action',
+          'targetType',
+          'targetId',
+          'targetLabel',
+          'previousValue',
+          'newValue',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'adminId',
+          'adminEmail',
+          'adminRole',
+          'action',
+          'targetType',
+          'targetId',
+          'targetLabel',
+          'previousValue',
+          'newValue',
+          'createdAt'
+        ])
+        && data.id == logId
+        && data.adminId is string && data.adminId.size() >= 1 && data.adminId.size() <= 128
+        && data.adminEmail is string && data.adminEmail.size() >= 5 && data.adminEmail.size() <= 120
+        && data.adminRole in ['super_admin', 'admin', 'moderator', 'support_admin']
+        && data.action is string && data.action.size() >= 2 && data.action.size() <= 120
+        && data.targetType in ['user', 'product', 'booking', 'report', 'support_ticket', 'admin', 'settings']
+        && data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 128
+        && data.targetLabel is string && data.targetLabel.size() >= 1 && data.targetLabel.size() <= 160
+        && data.previousValue is string && data.previousValue.size() <= 1000
+        && data.newValue is string && data.newValue.size() <= 1000
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPlatformSettings(data) {
+      return data.keys().hasAll([
+          'id',
+          'platformFeePercent',
+          'minDepositINR',
+          'requireListingApproval',
+          'maintenanceMode',
+          'autoFlagHighValueThresholdINR',
+          'supportEscalationEmail',
+          'updatedByEmail',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'platformFeePercent',
+          'minDepositINR',
+          'requireListingApproval',
+          'maintenanceMode',
+          'autoFlagHighValueThresholdINR',
+          'supportEscalationEmail',
+          'updatedByEmail',
+          'updatedAt'
+        ])
+        && data.id == 'global'
+        && data.platformFeePercent is int && data.platformFeePercent >= 0 && data.platformFeePercent <= 30
+        && data.minDepositINR is int && data.minDepositINR >= 0 && data.minDepositINR <= 50000
+        && data.requireListingApproval is bool
+        && data.maintenanceMode is bool
+        && data.autoFlagHighValueThresholdINR is int && data.autoFlagHighValueThresholdINR >= 1000 && data.autoFlagHighValueThresholdINR <= 2000000
+        && data.supportEscalationEmail is string && data.supportEscalationEmail.size() >= 5 && data.supportEscalationEmail.size() <= 120
+        && data.updatedByEmail is string && data.updatedByEmail.size() >= 5 && data.updatedByEmail.size() <= 120
+        && data.updatedAt is timestamp;
+    }
+
     // 4. Collection Rules: Public User Profiles (/users/{userId})
     match /users/{userId} {
       allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
 
       allow create: if isSignedIn()
         && isValidId(userId)
@@ -535,6 +797,8 @@ service cloud.firestore {
           && (isOwner(userId) || isAdmin())
           && exists(/databases/$(database)/documents/users/$(userId));
 
+        allow list: if isAdmin();
+
         allow create: if isSignedIn()
           && isValidId(userId)
           && isValidId(docId)
@@ -569,25 +833,45 @@ service cloud.firestore {
       }
     }
 
-    // 6. Collection Rules: Separate Administrator Registry (/admins/{adminId})
+    // 6. Collection Rules: Separate RBAC Administrator Registry (/admins/{adminId})
     match /admins/{adminId} {
-      allow get: if isSignedIn() && isValidId(adminId) && (request.auth.uid == adminId || isAdmin());
+      allow get: if isSignedIn() && isValidAdminKey(adminId) && (
+        request.auth.uid == adminId ||
+        request.auth.token.email == adminId ||
+        isAdmin()
+      );
+
+      allow list: if isAdmin();
 
       allow create: if isSignedIn()
-        && isValidId(adminId)
+        && isValidAdminKey(adminId)
         && isValidAdminRecord(incoming(), adminId)
         && incoming().grantedAt == request.time
-        && isAdmin();
+        && incoming().updatedAt == request.time
+        && isSuperAdmin();
 
       allow update: if isSignedIn()
-        && isValidId(adminId)
+        && isValidAdminKey(adminId)
         && isValidAdminRecord(incoming(), adminId)
-        && incoming().uid == existing().uid
+        && incoming().id == existing().id
+        && incoming().email == existing().email
         && incoming().grantedAt == existing().grantedAt
-        && isAdmin()
-        && incoming().diff(existing()).affectedKeys().hasOnly(['email']);
+        && incoming().updatedAt == request.time
+        && (
+          isSuperAdmin() ||
+          (
+            isAdmin() &&
+            request.auth.token.email_verified == true &&
+            request.auth.token.email == existing().email &&
+            incoming().role == existing().role &&
+            incoming().status == existing().status &&
+            incoming().customPermissions == existing().customPermissions &&
+            incoming().revokedPermissions == existing().revokedPermissions &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['uid', 'name', 'lastLoginAt', 'updatedAt'])
+          )
+        );
 
-      allow delete: if isSignedIn() && isValidId(adminId) && isAdmin();
+      allow delete: if isSignedIn() && isValidAdminKey(adminId) && isSuperAdmin() && adminId != 'marukrutarth@gmail.com';
     }
 
     // 7. Collection Rules: Marketplace Listings (/listings/{listingId})
@@ -599,7 +883,8 @@ service cloud.firestore {
       );
 
       allow list: if existing().status == 'active' ||
-        (isSignedIn() && existing().ownerId == request.auth.uid);
+        (isSignedIn() && existing().ownerId == request.auth.uid) ||
+        isAdmin();
 
       allow create: if isSignedIn()
         && isValidId(listingId)
@@ -658,7 +943,8 @@ service cloud.firestore {
       allow list: if isSignedIn() && (
         existing().borrowerId == request.auth.uid ||
         existing().ownerId == request.auth.uid ||
-        existing().status in ['accepted', 'picked_up']
+        existing().status in ['accepted', 'picked_up'] ||
+        isAdmin()
       );
 
       allow create: if isSignedIn()
@@ -686,7 +972,6 @@ service cloud.firestore {
           (
             !(existing().status in ['rejected', 'cancelled', 'completed']) &&
             (
-              // Owner actions: accept/reject, confirm pickup, confirm return/completion, or dispute
               (
                 existing().ownerId == request.auth.uid &&
                 incoming().diff(existing()).affectedKeys().hasOnly([
@@ -700,7 +985,6 @@ service cloud.firestore {
                   'updatedAt'
                 ])
               ) ||
-              // Borrower actions: cancel pending, log pickup/return condition, or raise dispute
               (
                 existing().borrowerId == request.auth.uid &&
                 incoming().diff(existing()).affectedKeys().hasOnly([
@@ -734,7 +1018,8 @@ service cloud.firestore {
         allow list: if isSignedIn()
           && (
             existing().borrowerId == request.auth.uid ||
-            existing().ownerId == request.auth.uid
+            existing().ownerId == request.auth.uid ||
+            isAdmin()
           );
 
         allow create: if isSignedIn()
@@ -756,9 +1041,9 @@ service cloud.firestore {
 
     // 10. Collection Rules: Verified Rental Reviews (/reviews/{reviewId})
     match /reviews/{reviewId} {
-      allow get: if isValidId(reviewId) && existing().rating >= 1;
+      allow get: if isValidId(reviewId) && (existing().rating >= 1 || isAdmin());
 
-      allow list: if existing().rating >= 1;
+      allow list: if existing().rating >= 1 || isAdmin();
 
       allow create: if isSignedIn()
         && isValidId(reviewId)
@@ -769,6 +1054,83 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.status in ['returned', 'completed'];
 
       allow update, delete: if false;
+    }
+
+    // 11. Collection Rules: User Moderation (/user_moderation/{userId})
+    match /user_moderation/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isAdmin()
+        && isValidId(userId)
+        && isValidUserModeration(incoming(), userId)
+        && incoming().updatedAt == request.time;
+      allow delete: if isSuperAdmin();
+    }
+
+    // 12. Collection Rules: Listing Moderation (/listing_moderation/{listingId})
+    match /listing_moderation/{listingId} {
+      allow get, list: if true;
+      allow create, update: if isAdmin()
+        && isValidId(listingId)
+        && isValidListingModeration(incoming(), listingId)
+        && incoming().reviewedAt == request.time;
+      allow delete: if isSuperAdmin();
+    }
+
+    // 13. Collection Rules: Platform Reports & Complaints (/reports/{reportId})
+    match /reports/{reportId} {
+      allow get, list: if isAdmin() || (isSignedIn() && existing().reporterId == request.auth.uid);
+      allow create: if isSignedIn()
+        && isValidId(reportId)
+        && isValidPlatformReport(incoming(), reportId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (incoming().reporterId == request.auth.uid || isAdmin());
+      allow update: if isAdmin()
+        && isValidId(reportId)
+        && isValidPlatformReport(incoming(), reportId)
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isSuperAdmin();
+    }
+
+    // 14. Collection Rules: Support Tickets (/support_tickets/{ticketId})
+    match /support_tickets/{ticketId} {
+      allow get, list: if isAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create: if isSignedIn()
+        && isValidId(ticketId)
+        && isValidSupportTicket(incoming(), ticketId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (incoming().userId == request.auth.uid || isAdmin());
+      allow update: if isAdmin()
+        && isValidId(ticketId)
+        && isValidSupportTicket(incoming(), ticketId)
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isSuperAdmin();
+    }
+
+    // 15. Collection Rules: Immutable Administrative Audit Logs (/audit_logs/{logId})
+    match /audit_logs/{logId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin()
+        && isValidId(logId)
+        && isValidAuditLog(incoming(), logId)
+        && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // 16. Collection Rules: Global Platform Settings (/platform_settings/{settingId})
+    match /platform_settings/{settingId} {
+      allow get, list: if true;
+      allow create, update: if isSuperAdmin()
+        && settingId == 'global'
+        && isValidPlatformSettings(incoming())
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
     }
   }
 }

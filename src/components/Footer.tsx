@@ -163,6 +163,19 @@ export const Footer: React.FC<FooterProps> = ({
                   Help
                 </button>
               </li>
+              <li>
+                <a
+                  href="/admin"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onNavigate({ page: 'admin' });
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="text-[#94A3B8] hover:text-[#8B5CF6] transition-colors cursor-pointer font-mono text-xs"
+                >
+                  Admin Console (/admin)
+                </a>
+              </li>
             </ul>
           </div>
         </div>

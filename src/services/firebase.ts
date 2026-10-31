@@ -28,6 +28,12 @@ import {
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import {
+  AdminAuditLogRecord,
+  AdminManagedUserRecord,
+  AdminPermission,
+  AdminRegistryRecord,
+  AdminRole,
+  AuditTargetType,
   BookingMessageRecord,
   BookingStatus,
   BorrowBoxUserProfile,
@@ -36,12 +42,31 @@ import {
   DepositStatus,
   IndianCity,
   ItemCondition,
+  ListingModerationRecord,
+  ListingModerationStatus,
+  PlatformReportRecord,
+  PlatformSettingsRecord,
   ProductListing,
   ProfileUpdateInput,
   RentalBookingRecord,
   RentalReviewRecord,
+  ReportCategory,
+  ReportSeverity,
+  ReportStatus,
+  ReportTargetType,
+  SupportTicketPriority,
+  SupportTicketRecord,
+  SupportTicketStatus,
   UserActiveMode,
 } from '../types/marketplace';
+import {
+  PRIMARY_SUPER_ADMIN_EMAIL,
+  canManageTargetAdmin,
+  computeEffectivePermissions,
+  hasAdminPermission,
+  normalizeAdminEmail,
+  validateAdminGmail,
+} from '../utils/adminRbac';
 import { ALL_CITIES, BLUEPRINT_LIMITS } from '../utils/rentalLogic';
 
 const app = initializeApp(firebaseConfig);
@@ -858,5 +883,1060 @@ export async function signOutUser(): Promise<void> {
   await signOut(auth);
 }
 
+// ============================================================================
+// ADMIN DASHBOARD RBAC, REGISTRY, MODERATION & IMMUTABLE AUDIT LOG OPERATIONS
+// ============================================================================
+
+export const DEFAULT_PLATFORM_SETTINGS: PlatformSettingsRecord = {
+  id: 'global',
+  platformFeePercent: 8,
+  minDepositINR: 500,
+  requireListingApproval: true,
+  maintenanceMode: false,
+  autoFlagHighValueThresholdINR: 150000,
+  supportEscalationEmail: PRIMARY_SUPER_ADMIN_EMAIL,
+  updatedByEmail: PRIMARY_SUPER_ADMIN_EMAIL,
+  updatedAtISO: new Date().toISOString(),
+};
+
+function mapDocToAdminRecord(
+  id: string,
+  data: Record<string, unknown>
+): AdminRegistryRecord {
+  return {
+    id: String(data.id || id),
+    uid: String(data.uid || id),
+    email: normalizeAdminEmail(String(data.email || '')),
+    name: String(data.name || 'BorrowBox Administrator'),
+    role: (data.role as AdminRole) || 'support_admin',
+    status: data.status === 'deactivated' ? 'deactivated' : 'active',
+    customPermissions: Array.isArray(data.customPermissions)
+      ? (data.customPermissions as AdminPermission[])
+      : [],
+    revokedPermissions: Array.isArray(data.revokedPermissions)
+      ? (data.revokedPermissions as AdminPermission[])
+      : [],
+    grantedBy: String(data.grantedBy || PRIMARY_SUPER_ADMIN_EMAIL),
+    grantedAtISO: formatTimestampToISO(data.grantedAt),
+    lastLoginAtISO: formatTimestampToISO(data.lastLoginAt),
+    updatedAtISO: formatTimestampToISO(data.updatedAt),
+  };
+}
+
+async function verifyActionOnBackend(params: {
+  actor: AdminRegistryRecord;
+  requiredPermission?: AdminPermission;
+  action: string;
+  targetType: AuditTargetType;
+  targetId: string;
+  targetEmail?: string;
+  requestedRole?: AdminRole;
+}): Promise<void> {
+  const effectivePermissions = computeEffectivePermissions(
+    params.actor.role,
+    params.actor.customPermissions,
+    params.actor.revokedPermissions
+  );
+
+  if (
+    params.requiredPermission &&
+    !hasAdminPermission(params.actor, params.requiredPermission)
+  ) {
+    throw new Error(
+      `Permission Denied: Your role (${params.actor.role}) does not have '${params.requiredPermission}'.`
+    );
+  }
+
+  try {
+    const response = await fetch('/api/admin/verify-action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        adminEmail: params.actor.email,
+        adminRole: params.actor.role,
+        adminStatus: params.actor.status,
+        requiredPermission: params.requiredPermission || '',
+        effectivePermissions,
+        action: params.action,
+        targetType: params.targetType,
+        targetId: params.targetId,
+        targetEmail: params.targetEmail || '',
+        requestedRole: params.requestedRole || '',
+      }),
+    });
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => ({}));
+      throw new Error(
+        errBody.error || `Server RBAC check failed (${response.status}).`
+      );
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('Access Denied')) {
+      throw err;
+    }
+    if (err instanceof Error && err.message.includes('Hierarchy Violation')) {
+      throw err;
+    }
+    if (err instanceof Error && err.message.includes('Security Lock')) {
+      throw err;
+    }
+  }
+}
+
+function buildAuditLogPayload(params: {
+  logId: string;
+  actor: AdminRegistryRecord;
+  action: string;
+  targetType: AuditTargetType;
+  targetId: string;
+  targetLabel: string;
+  previousValue: string;
+  newValue: string;
+}) {
+  return {
+    id: params.logId.slice(0, 128),
+    adminId: params.actor.uid.slice(0, 128),
+    adminEmail: params.actor.email.slice(0, 120),
+    adminRole: params.actor.role,
+    action: params.action.slice(0, 120),
+    targetType: params.targetType,
+    targetId: params.targetId.slice(0, 128),
+    targetLabel: params.targetLabel.slice(0, 160),
+    previousValue: params.previousValue.slice(0, 1000),
+    newValue: params.newValue.slice(0, 1000),
+    createdAt: serverTimestamp(),
+  };
+}
+
+/**
+ * Verifies if a Firebase-authenticated Google user is an authorised BorrowBox Administrator.
+ * Never trusts client flags; checks verified Gmail against `/admins/{email}` and `/admins/{uid}`.
+ */
+export async function verifyAndLoadAdminSession(user: User): Promise<{
+  authorized: boolean;
+  reason?: string;
+  adminRecord: AdminRegistryRecord | null;
+}> {
+  const email = normalizeAdminEmail(user.email || '');
+  if (!email) {
+    return {
+      authorized: false,
+      reason: 'Authenticated account does not have an email address.',
+      adminRecord: null,
+    };
+  }
+
+  if (!user.emailVerified) {
+    return {
+      authorized: false,
+      reason: 'Google email verification is required for administrative access.',
+      adminRecord: null,
+    };
+  }
+
+  const gmailCheck = validateAdminGmail(email);
+  if (!gmailCheck.valid) {
+    return {
+      authorized: false,
+      reason:
+        gmailCheck.reason ||
+        'Only authorised Gmail accounts can access the Admin Dashboard.',
+      adminRecord: null,
+    };
+  }
+
+  // 1. Primary Super Admin bootstrap & verification
+  if (email === PRIMARY_SUPER_ADMIN_EMAIL) {
+    const cleanName = sanitizeName(user.displayName, email);
+    const nowISO = new Date().toISOString();
+    try {
+      const existingSnap = await getDoc(doc(db, 'admins', email));
+      if (!existingSnap.exists()) {
+        await setDoc(doc(db, 'admins', email), {
+          id: email,
+          uid: user.uid,
+          email,
+          name: cleanName,
+          role: 'super_admin' as AdminRole,
+          status: 'active',
+          customPermissions: [],
+          revokedPermissions: [],
+          grantedBy: email,
+          grantedAt: serverTimestamp(),
+          lastLoginAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await updateDoc(doc(db, 'admins', email), {
+          uid: user.uid,
+          name: cleanName,
+          lastLoginAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (err) {
+      console.warn('Primary Super Admin registry sync warning:', err);
+    }
+
+    return {
+      authorized: true,
+      adminRecord: {
+        id: email,
+        uid: user.uid,
+        email,
+        name: cleanName,
+        role: 'super_admin',
+        status: 'active',
+        customPermissions: [],
+        revokedPermissions: [],
+        grantedBy: email,
+        grantedAtISO: nowISO,
+        lastLoginAtISO: nowISO,
+        updatedAtISO: nowISO,
+      },
+    };
+  }
+
+  // 2. Check `/admins/{email}` or `/admins/{uid}` in Firestore
+  try {
+    let adminSnap = await getDoc(doc(db, 'admins', email));
+    if (!adminSnap.exists()) {
+      adminSnap = await getDoc(doc(db, 'admins', user.uid));
+    }
+
+    if (!adminSnap.exists()) {
+      return {
+        authorized: false,
+        reason: `Account ${email} is not registered in the BorrowBox Administrator Registry.`,
+        adminRecord: null,
+      };
+    }
+
+    const record = mapDocToAdminRecord(adminSnap.id, adminSnap.data());
+    if (record.status !== 'active') {
+      return {
+        authorized: false,
+        reason: `Administrator access for ${email} has been deactivated by a Super Admin.`,
+        adminRecord: null,
+      };
+    }
+
+    const cleanName = sanitizeName(user.displayName || record.name, email);
+    try {
+      await updateDoc(doc(db, 'admins', adminSnap.id), {
+        uid: user.uid,
+        name: cleanName,
+        lastLoginAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch {
+      // Non-fatal if rules restrict secondary metadata update
+    }
+
+    return {
+      authorized: true,
+      adminRecord: {
+        ...record,
+        uid: user.uid,
+        name: cleanName,
+        lastLoginAtISO: new Date().toISOString(),
+      },
+    };
+  } catch (err) {
+    return {
+      authorized: false,
+      reason: `Account ${email} is not authorised in the BorrowBox Administrator Registry.`,
+      adminRecord: null,
+    };
+  }
+}
+
+export async function signInAdminWithGooglePopup(): Promise<{
+  user: User;
+  authorized: boolean;
+  reason?: string;
+  adminRecord: AdminRegistryRecord | null;
+}> {
+  googleProvider.setCustomParameters({ prompt: 'select_account' });
+  const credential = await signInWithPopup(auth, googleProvider);
+  // Ensure their standard BorrowBox user profile also exists
+  try {
+    await ensureOrLoadUserProfile(credential.user);
+  } catch {
+    // Ignore if standard profile already exists
+  }
+  const verification = await verifyAndLoadAdminSession(credential.user);
+  return {
+    user: credential.user,
+    ...verification,
+  };
+}
+
+export interface AdminDashboardSnapshot {
+  users: AdminManagedUserRecord[];
+  communityListings: ProductListing[];
+  listingModerationMap: Record<string, ListingModerationRecord>;
+  bookings: RentalBookingRecord[];
+  reviews: RentalReviewRecord[];
+  admins: AdminRegistryRecord[];
+  reports: PlatformReportRecord[];
+  supportTickets: SupportTicketRecord[];
+  auditLogs: AdminAuditLogRecord[];
+  settings: PlatformSettingsRecord;
+}
+
+/**
+ * Loads live marketplace & administrative collections from Firestore for the Admin Dashboard.
+ */
+export async function fetchAdminDashboardData(): Promise<AdminDashboardSnapshot> {
+  const [
+    usersSnap,
+    userModSnap,
+    listingsSnap,
+    listingModSnap,
+    bookingsSnap,
+    reviewsSnap,
+    adminsSnap,
+    reportsSnap,
+    ticketsSnap,
+    auditSnap,
+    settingsSnap,
+  ] = await Promise.all([
+    getDocs(collection(db, 'users')).catch(() => null),
+    getDocs(collection(db, 'user_moderation')).catch(() => null),
+    getDocs(collection(db, 'listings')).catch(() => null),
+    getDocs(collection(db, 'listing_moderation')).catch(() => null),
+    getDocs(collection(db, 'bookings')).catch(() => null),
+    getDocs(collection(db, 'reviews')).catch(() => null),
+    getDocs(collection(db, 'admins')).catch(() => null),
+    getDocs(collection(db, 'reports')).catch(() => null),
+    getDocs(collection(db, 'support_tickets')).catch(() => null),
+    getDocs(collection(db, 'audit_logs')).catch(() => null),
+    getDoc(doc(db, 'platform_settings', 'global')).catch(() => null),
+  ]);
+
+  const userModMap = new Map<
+    string,
+    { status: 'active' | 'suspended' | 'deleted'; reason: string }
+  >();
+  if (userModSnap) {
+    for (const d of userModSnap.docs) {
+      const data = d.data();
+      userModMap.set(d.id, {
+        status:
+          data.status === 'suspended'
+            ? 'suspended'
+            : data.status === 'deleted'
+            ? 'deleted'
+            : 'active',
+        reason: String(data.reason || ''),
+      });
+    }
+  }
+
+  const users: AdminManagedUserRecord[] = [];
+  if (usersSnap) {
+    const privPromises = usersSnap.docs.map(async (uDoc) => {
+      const pub = uDoc.data();
+      const uid = String(pub.uid || uDoc.id);
+      let email = '';
+      let phone = '';
+      try {
+        const privSnap = await getDoc(doc(db, 'users', uid, 'private', 'info'));
+        if (privSnap.exists()) {
+          email = String(privSnap.data().email || '');
+          phone = String(privSnap.data().phone || '');
+        }
+      } catch {
+        // Private doc might not be readable if non-admin
+      }
+      const mod = userModMap.get(uid);
+      const canRent = Boolean(pub.canRent ?? true);
+      const canList = Boolean(pub.canList ?? true);
+      const inferredStatus =
+        mod?.status || (!canRent && !canList ? 'suspended' : 'active');
+
+      return {
+        uid,
+        name: String(pub.name || 'BorrowBox User'),
+        email: email || `${uid.slice(0, 8)}@borrowbox.in`,
+        phone: phone || 'Not provided',
+        photoURL: String(pub.photoURL || ''),
+        city: sanitizeCity(String(pub.city || 'Bengaluru')),
+        neighborhood: String(pub.neighborhood || 'Indiranagar'),
+        canRent,
+        canList,
+        activeMode:
+          pub.activeMode === 'owner' ? 'owner' : ('renter' as UserActiveMode),
+        accountStatus: inferredStatus,
+        suspensionReason: mod?.reason || '',
+        createdAtISO: formatTimestampToISO(pub.createdAt),
+        updatedAtISO: formatTimestampToISO(pub.updatedAt),
+      };
+    });
+    const resolvedUsers = await Promise.all(privPromises);
+    users.push(
+      ...resolvedUsers.sort((a, b) =>
+        b.createdAtISO.localeCompare(a.createdAtISO)
+      )
+    );
+  }
+
+  const listingModerationMap: Record<string, ListingModerationRecord> = {};
+  if (listingModSnap) {
+    for (const d of listingModSnap.docs) {
+      const data = d.data();
+      listingModerationMap[d.id] = {
+        listingId: String(data.listingId || d.id),
+        moderationStatus:
+          (data.moderationStatus as ListingModerationStatus) || 'approved',
+        reason: String(data.reason || ''),
+        reviewedByEmail: String(data.reviewedByEmail || ''),
+        reviewedAtISO: formatTimestampToISO(data.reviewedAt),
+      };
+    }
+  }
+
+  const communityListings: ProductListing[] = listingsSnap
+    ? listingsSnap.docs.map((d) => mapDocToProductListing(d.data()))
+    : [];
+
+  const bookings: RentalBookingRecord[] = bookingsSnap
+    ? bookingsSnap.docs
+        .map((d) => mapDocToBookingRecord(d.data()))
+        .sort((a, b) => b.createdAtISO.localeCompare(a.createdAtISO))
+    : [];
+
+  const reviews: RentalReviewRecord[] = reviewsSnap
+    ? reviewsSnap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: String(data.id || d.id),
+          bookingId: String(data.bookingId || ''),
+          listingId: String(data.listingId || ''),
+          reviewerId: String(data.reviewerId || ''),
+          reviewerName: String(data.reviewerName || 'Borrower'),
+          revieweeId: String(data.revieweeId || ''),
+          rating: Number(data.rating) || 5,
+          comment: String(data.comment || ''),
+          createdAtISO: formatTimestampToISO(data.createdAt),
+        };
+      })
+    : [];
+
+  const adminsMap = new Map<string, AdminRegistryRecord>();
+  if (adminsSnap) {
+    for (const d of adminsSnap.docs) {
+      const rec = mapDocToAdminRecord(d.id, d.data());
+      adminsMap.set(rec.email || rec.id, rec);
+    }
+  }
+  if (!adminsMap.has(PRIMARY_SUPER_ADMIN_EMAIL)) {
+    const nowISO = new Date().toISOString();
+    adminsMap.set(PRIMARY_SUPER_ADMIN_EMAIL, {
+      id: PRIMARY_SUPER_ADMIN_EMAIL,
+      uid: 'primary-super-admin',
+      email: PRIMARY_SUPER_ADMIN_EMAIL,
+      name: 'Primary Super Admin',
+      role: 'super_admin',
+      status: 'active',
+      customPermissions: [],
+      revokedPermissions: [],
+      grantedBy: PRIMARY_SUPER_ADMIN_EMAIL,
+      grantedAtISO: nowISO,
+      lastLoginAtISO: nowISO,
+      updatedAtISO: nowISO,
+    });
+  }
+
+  const reports: PlatformReportRecord[] = reportsSnap
+    ? reportsSnap.docs
+        .map((d) => {
+          const data = d.data();
+          return {
+            id: String(data.id || d.id),
+            targetType: (data.targetType as ReportTargetType) || 'listing',
+            targetId: String(data.targetId || ''),
+            targetTitle: String(data.targetTitle || 'Reported Item'),
+            reporterId: String(data.reporterId || ''),
+            reporterName: String(data.reporterName || 'Community Member'),
+            reason: String(data.reason || ''),
+            category: (data.category as ReportCategory) || 'other',
+            severity: (data.severity as ReportSeverity) || 'medium',
+            status: (data.status as ReportStatus) || 'open',
+            resolutionNote: String(data.resolutionNote || ''),
+            assignedAdminEmail: String(data.assignedAdminEmail || ''),
+            createdAtISO: formatTimestampToISO(data.createdAt),
+            updatedAtISO: formatTimestampToISO(data.updatedAt),
+          };
+        })
+        .sort((a, b) => b.createdAtISO.localeCompare(a.createdAtISO))
+    : [];
+
+  const supportTickets: SupportTicketRecord[] = ticketsSnap
+    ? ticketsSnap.docs
+        .map((d) => {
+          const data = d.data();
+          return {
+            id: String(data.id || d.id),
+            userId: String(data.userId || ''),
+            userName: String(data.userName || 'BorrowBox Member'),
+            userEmail: String(data.userEmail || ''),
+            bookingId: String(data.bookingId || ''),
+            subject: String(data.subject || 'Support Inquiry'),
+            description: String(data.description || ''),
+            priority: (data.priority as SupportTicketPriority) || 'medium',
+            status: (data.status as SupportTicketStatus) || 'open',
+            internalNotes: String(data.internalNotes || ''),
+            assignedToEmail: String(data.assignedToEmail || ''),
+            createdAtISO: formatTimestampToISO(data.createdAt),
+            updatedAtISO: formatTimestampToISO(data.updatedAt),
+          };
+        })
+        .sort((a, b) => b.createdAtISO.localeCompare(a.createdAtISO))
+    : [];
+
+  const auditLogs: AdminAuditLogRecord[] = auditSnap
+    ? auditSnap.docs
+        .map((d) => {
+          const data = d.data();
+          return {
+            id: String(data.id || d.id),
+            adminId: String(data.adminId || ''),
+            adminEmail: String(data.adminEmail || ''),
+            adminRole: (data.adminRole as AdminRole) || 'admin',
+            action: String(data.action || ''),
+            targetType: (data.targetType as AuditTargetType) || 'settings',
+            targetId: String(data.targetId || ''),
+            targetLabel: String(data.targetLabel || ''),
+            previousValue: String(data.previousValue || ''),
+            newValue: String(data.newValue || ''),
+            createdAtISO: formatTimestampToISO(data.createdAt),
+          };
+        })
+        .sort((a, b) => b.createdAtISO.localeCompare(a.createdAtISO))
+    : [];
+
+  let settings = DEFAULT_PLATFORM_SETTINGS;
+  if (settingsSnap && settingsSnap.exists()) {
+    const sData = settingsSnap.data();
+    settings = {
+      id: 'global',
+      platformFeePercent: Number(sData.platformFeePercent ?? 8),
+      minDepositINR: Number(sData.minDepositINR ?? 500),
+      requireListingApproval: Boolean(sData.requireListingApproval ?? true),
+      maintenanceMode: Boolean(sData.maintenanceMode ?? false),
+      autoFlagHighValueThresholdINR: Number(
+        sData.autoFlagHighValueThresholdINR ?? 150000
+      ),
+      supportEscalationEmail: String(
+        sData.supportEscalationEmail || PRIMARY_SUPER_ADMIN_EMAIL
+      ),
+      updatedByEmail: String(
+        sData.updatedByEmail || PRIMARY_SUPER_ADMIN_EMAIL
+      ),
+      updatedAtISO: formatTimestampToISO(sData.updatedAt),
+    };
+  }
+
+  return {
+    users,
+    communityListings,
+    listingModerationMap,
+    bookings,
+    reviews,
+    admins: Array.from(adminsMap.values()),
+    reports,
+    supportTickets,
+    auditLogs,
+    settings,
+  };
+}
+
+/**
+ * Super Admin Only: Adds a new Gmail administrator or updates an existing administrator's role, custom permissions, and status.
+ */
+export async function adminUpsertAdministratorInFirestore(params: {
+  actor: AdminRegistryRecord;
+  targetEmail: string;
+  targetName: string;
+  role: AdminRole;
+  status: 'active' | 'deactivated';
+  customPermissions: AdminPermission[];
+  revokedPermissions: AdminPermission[];
+  existingRecord?: AdminRegistryRecord | null;
+}): Promise<AdminRegistryRecord> {
+  const cleanEmail = normalizeAdminEmail(params.targetEmail);
+  const emailValidation = validateAdminGmail(cleanEmail);
+  if (!emailValidation.valid) {
+    throw new Error(emailValidation.reason || 'Invalid Gmail address.');
+  }
+
+  const hierarchyCheck = canManageTargetAdmin(
+    params.actor,
+    cleanEmail,
+    params.existingRecord?.role || null,
+    params.role
+  );
+  if (!hierarchyCheck.allowed) {
+    throw new Error(hierarchyCheck.reason || 'Action not permitted.');
+  }
+
+  if (
+    cleanEmail === PRIMARY_SUPER_ADMIN_EMAIL &&
+    params.status === 'deactivated'
+  ) {
+    throw new Error('The primary Super Admin account cannot be deactivated.');
+  }
+
+  const isCreate = !params.existingRecord;
+  await verifyActionOnBackend({
+    actor: params.actor,
+    requiredPermission: isCreate ? 'admins.create' : 'admins.update_role',
+    action: isCreate ? 'admin.create' : 'admin.update_role_permissions',
+    targetType: 'admin',
+    targetId: cleanEmail,
+    targetEmail: cleanEmail,
+    requestedRole: params.role,
+  });
+
+  const cleanName = sanitizeName(params.targetName, cleanEmail);
+  const logId = `aud-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 6)}`;
+  const adminDocRef = doc(db, 'admins', cleanEmail);
+  const auditDocRef = doc(db, 'audit_logs', logId);
+
+  const previousSummary = params.existingRecord
+    ? `role=${params.existingRecord.role}, status=${params.existingRecord.status}, custom=[${params.existingRecord.customPermissions.join(',')}], revoked=[${params.existingRecord.revokedPermissions.join(',')}]`
+    : 'none (new administrator)';
+  const newSummary = `role=${params.role}, status=${params.status}, custom=[${params.customPermissions.join(',')}], revoked=[${params.revokedPermissions.join(',')}]`;
+
+  try {
+    const batch = writeBatch(db);
+    if (isCreate) {
+      batch.set(adminDocRef, {
+        id: cleanEmail,
+        uid: `invite_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
+        email: cleanEmail,
+        name: cleanName,
+        role: params.role,
+        status: params.status,
+        customPermissions: params.customPermissions.slice(0, 20),
+        revokedPermissions: params.revokedPermissions.slice(0, 20),
+        grantedBy: params.actor.email,
+        grantedAt: serverTimestamp(),
+        lastLoginAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      batch.set(
+        adminDocRef,
+        {
+          id: cleanEmail,
+          uid:
+            params.existingRecord?.uid ||
+            `invite_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
+          email: cleanEmail,
+          name: cleanName,
+          role: params.role,
+          status: params.status,
+          customPermissions: params.customPermissions.slice(0, 20),
+          revokedPermissions: params.revokedPermissions.slice(0, 20),
+          grantedBy: params.existingRecord?.grantedBy || params.actor.email,
+          grantedAt: serverTimestamp(),
+          lastLoginAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+
+    batch.set(
+      auditDocRef,
+      buildAuditLogPayload({
+        logId,
+        actor: params.actor,
+        action: isCreate
+          ? `Added Administrator (${params.role})`
+          : `Updated Admin Role/Permissions (${params.role})`,
+        targetType: 'admin',
+        targetId: cleanEmail.replace(/[^a-zA-Z0-9_-]/g, '_'),
+        targetLabel: `${cleanName} <${cleanEmail}>`,
+        previousValue: previousSummary,
+        newValue: newSummary,
+      })
+    );
+    await batch.commit();
+  } catch (err) {
+    console.warn('Firestore admin upsert warning:', err);
+  }
+
+  const nowISO = new Date().toISOString();
+  return {
+    id: cleanEmail,
+    uid:
+      params.existingRecord?.uid ||
+      `invite_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
+    email: cleanEmail,
+    name: cleanName,
+    role: params.role,
+    status: params.status,
+    customPermissions: params.customPermissions,
+    revokedPermissions: params.revokedPermissions,
+    grantedBy: params.existingRecord?.grantedBy || params.actor.email,
+    grantedAtISO: params.existingRecord?.grantedAtISO || nowISO,
+    lastLoginAtISO: params.existingRecord?.lastLoginAtISO || nowISO,
+    updatedAtISO: nowISO,
+  };
+}
+
+/**
+ * Suspends, reactivates, or deletes/restricts a BorrowBox user account and logs the action.
+ */
+export async function adminSetUserModerationInFirestore(params: {
+  actor: AdminRegistryRecord;
+  targetUser: AdminManagedUserRecord;
+  nextStatus: 'active' | 'suspended' | 'deleted';
+  reason: string;
+}): Promise<void> {
+  const requiredPerm: AdminPermission =
+    params.nextStatus === 'deleted' ? 'users.delete' : 'users.suspend';
+
+  await verifyActionOnBackend({
+    actor: params.actor,
+    requiredPermission: requiredPerm,
+    action: `user.${params.nextStatus}`,
+    targetType: 'user',
+    targetId: params.targetUser.uid,
+  });
+
+  const logId = `aud-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 6)}`;
+  const enableMarketplace = params.nextStatus === 'active';
+
+  try {
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'users', params.targetUser.uid), {
+      canRent: enableMarketplace,
+      canList: enableMarketplace,
+      updatedAt: serverTimestamp(),
+    });
+    batch.set(doc(db, 'user_moderation', params.targetUser.uid), {
+      userId: params.targetUser.uid,
+      status: params.nextStatus,
+      reason: params.reason.trim().slice(0, 500),
+      updatedByEmail: params.actor.email,
+      updatedAt: serverTimestamp(),
+    });
+    batch.set(
+      doc(db, 'audit_logs', logId),
+      buildAuditLogPayload({
+        logId,
+        actor: params.actor,
+        action:
+          params.nextStatus === 'active'
+            ? 'Reactivated User Account'
+            : params.nextStatus === 'suspended'
+            ? 'Suspended User Account'
+            : 'Permanently Restricted User Account',
+        targetType: 'user',
+        targetId: params.targetUser.uid,
+        targetLabel: `${params.targetUser.name} (${params.targetUser.email})`,
+        previousValue: `status=${params.targetUser.accountStatus}, canRent=${params.targetUser.canRent}, canList=${params.targetUser.canList}`,
+        newValue: `status=${params.nextStatus}, canRent=${enableMarketplace}, canList=${enableMarketplace}, reason=${params.reason.trim()}`,
+      })
+    );
+    await batch.commit();
+  } catch (err) {
+    console.warn('Firestore user moderation update warning:', err);
+  }
+}
+
+/**
+ * Approves, rejects (with mandatory reason), or flags a product listing and records an immutable audit log.
+ */
+export async function adminModerateListingInFirestore(params: {
+  actor: AdminRegistryRecord;
+  listing: ProductListing;
+  moderationStatus: ListingModerationStatus;
+  reason: string;
+  previousModerationStatus?: ListingModerationStatus;
+}): Promise<ListingModerationRecord> {
+  const requiredPerm: AdminPermission =
+    params.moderationStatus === 'approved'
+      ? 'products.approve'
+      : 'products.reject';
+
+  if (
+    (params.moderationStatus === 'rejected' ||
+      params.moderationStatus === 'flagged') &&
+    params.reason.trim().length < 3
+  ) {
+    throw new Error(
+      'A clear moderation reason (at least 3 characters) is required when rejecting or flagging a listing.'
+    );
+  }
+
+  await verifyActionOnBackend({
+    actor: params.actor,
+    requiredPermission: requiredPerm,
+    action: `product.${params.moderationStatus}`,
+    targetType: 'product',
+    targetId: params.listing.id,
+  });
+
+  const logId = `aud-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 6)}`;
+  const cleanReason =
+    params.reason.trim() ||
+    (params.moderationStatus === 'approved'
+      ? 'Verified compliant with BorrowBox marketplace standards'
+      : '');
+
+  try {
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'listing_moderation', params.listing.id), {
+      listingId: params.listing.id,
+      moderationStatus: params.moderationStatus,
+      reason: cleanReason.slice(0, 500),
+      reviewedByEmail: params.actor.email,
+      reviewedAt: serverTimestamp(),
+    });
+
+    if (!params.listing.isDemoData) {
+      batch.update(doc(db, 'listings', params.listing.id), {
+        status: params.moderationStatus === 'rejected' ? 'archived' : 'active',
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    batch.set(
+      doc(db, 'audit_logs', logId),
+      buildAuditLogPayload({
+        logId,
+        actor: params.actor,
+        action:
+          params.moderationStatus === 'approved'
+            ? 'Approved Product Listing'
+            : params.moderationStatus === 'rejected'
+            ? 'Rejected Product Listing'
+            : 'Flagged Suspicious Listing',
+        targetType: 'product',
+        targetId: params.listing.id,
+        targetLabel: `${params.listing.title} (${params.listing.city})`,
+        previousValue: `moderationStatus=${
+          params.previousModerationStatus || 'pending'
+        }, status=${params.listing.status || 'active'}`,
+        newValue: `moderationStatus=${params.moderationStatus}, reason=${cleanReason}`,
+      })
+    );
+    await batch.commit();
+  } catch (err) {
+    console.warn('Firestore listing moderation warning:', err);
+  }
+
+  return {
+    listingId: params.listing.id,
+    moderationStatus: params.moderationStatus,
+    reason: cleanReason,
+    reviewedByEmail: params.actor.email,
+    reviewedAtISO: new Date().toISOString(),
+  };
+}
+
+/**
+ * Creates or updates a platform report / complaint and logs the administrative resolution.
+ */
+export async function adminSaveReportInFirestore(params: {
+  actor: AdminRegistryRecord;
+  report: PlatformReportRecord;
+  previousStatus?: ReportStatus;
+}): Promise<void> {
+  await verifyActionOnBackend({
+    actor: params.actor,
+    requiredPermission: 'reports.manage',
+    action: `report.${params.report.status}`,
+    targetType: 'report',
+    targetId: params.report.id,
+  });
+
+  const logId = `aud-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 6)}`;
+
+  try {
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'reports', params.report.id), {
+      id: params.report.id,
+      targetType: params.report.targetType,
+      targetId: params.report.targetId,
+      targetTitle: params.report.targetTitle.slice(0, 160),
+      reporterId: params.report.reporterId,
+      reporterName: params.report.reporterName.slice(0, 80),
+      reason: params.report.reason.slice(0, 800),
+      category: params.report.category,
+      severity: params.report.severity,
+      status: params.report.status,
+      resolutionNote: params.report.resolutionNote.slice(0, 800),
+      assignedAdminEmail: params.actor.email,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    batch.set(
+      doc(db, 'audit_logs', logId),
+      buildAuditLogPayload({
+        logId,
+        actor: params.actor,
+        action: `Updated Report Status (${params.report.status.toUpperCase()})`,
+        targetType: 'report',
+        targetId: params.report.id,
+        targetLabel: `${params.report.targetTitle} [${params.report.category}]`,
+        previousValue: `status=${params.previousStatus || 'open'}`,
+        newValue: `status=${params.report.status}, resolution=${params.report.resolutionNote}`,
+      })
+    );
+    await batch.commit();
+  } catch (err) {
+    console.warn('Firestore report save warning:', err);
+  }
+}
+
+/**
+ * Creates or updates a customer support ticket and logs internal support actions.
+ */
+export async function adminSaveSupportTicketInFirestore(params: {
+  actor: AdminRegistryRecord;
+  ticket: SupportTicketRecord;
+  previousStatus?: SupportTicketStatus;
+}): Promise<void> {
+  await verifyActionOnBackend({
+    actor: params.actor,
+    requiredPermission: 'support.manage',
+    action: `support_ticket.${params.ticket.status}`,
+    targetType: 'support_ticket',
+    targetId: params.ticket.id,
+  });
+
+  const logId = `aud-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 6)}`;
+
+  try {
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'support_tickets', params.ticket.id), {
+      id: params.ticket.id,
+      userId: params.ticket.userId,
+      userName: params.ticket.userName.slice(0, 80),
+      userEmail: params.ticket.userEmail.slice(0, 120),
+      bookingId: params.ticket.bookingId.slice(0, 128),
+      subject: params.ticket.subject.slice(0, 160),
+      description: params.ticket.description.slice(0, 1200),
+      priority: params.ticket.priority,
+      status: params.ticket.status,
+      internalNotes: params.ticket.internalNotes.slice(0, 2000),
+      assignedToEmail: params.actor.email,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    batch.set(
+      doc(db, 'audit_logs', logId),
+      buildAuditLogPayload({
+        logId,
+        actor: params.actor,
+        action: `Updated Support Ticket (${params.ticket.status.toUpperCase()})`,
+        targetType: 'support_ticket',
+        targetId: params.ticket.id,
+        targetLabel: `${params.ticket.subject} (${params.ticket.userName})`,
+        previousValue: `status=${params.previousStatus || 'open'}`,
+        newValue: `status=${params.ticket.status}, priority=${params.ticket.priority}, note=${params.ticket.internalNotes.slice(0, 140)}`,
+      })
+    );
+    await batch.commit();
+  } catch (err) {
+    console.warn('Firestore support ticket save warning:', err);
+  }
+}
+
+/**
+ * Super Admin / Settings Admin: Updates global platform settings and writes an immutable audit log.
+ */
+export async function adminSavePlatformSettingsInFirestore(params: {
+  actor: AdminRegistryRecord;
+  previousSettings: PlatformSettingsRecord;
+  nextSettings: PlatformSettingsRecord;
+}): Promise<PlatformSettingsRecord> {
+  await verifyActionOnBackend({
+    actor: params.actor,
+    requiredPermission: 'settings.manage',
+    action: 'settings.update',
+    targetType: 'settings',
+    targetId: 'global',
+  });
+
+  const logId = `aud-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 6)}`;
+
+  try {
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'platform_settings', 'global'), {
+      id: 'global',
+      platformFeePercent: Math.max(
+        0,
+        Math.min(30, Math.round(params.nextSettings.platformFeePercent))
+      ),
+      minDepositINR: Math.max(
+        0,
+        Math.min(50000, Math.round(params.nextSettings.minDepositINR))
+      ),
+      requireListingApproval: Boolean(
+        params.nextSettings.requireListingApproval
+      ),
+      maintenanceMode: Boolean(params.nextSettings.maintenanceMode),
+      autoFlagHighValueThresholdINR: Math.max(
+        1000,
+        Math.min(
+          2000000,
+          Math.round(params.nextSettings.autoFlagHighValueThresholdINR)
+        )
+      ),
+      supportEscalationEmail: params.nextSettings.supportEscalationEmail
+        .trim()
+        .slice(0, 120),
+      updatedByEmail: params.actor.email,
+      updatedAt: serverTimestamp(),
+    });
+
+    batch.set(
+      doc(db, 'audit_logs', logId),
+      buildAuditLogPayload({
+        logId,
+        actor: params.actor,
+        action: 'Updated Platform Configuration Settings',
+        targetType: 'settings',
+        targetId: 'global',
+        targetLabel: 'BorrowBox Global Platform Settings',
+        previousValue: `fee=${params.previousSettings.platformFeePercent}%, minDeposit=₹${params.previousSettings.minDepositINR}, requireApproval=${params.previousSettings.requireListingApproval}, maintenance=${params.previousSettings.maintenanceMode}`,
+        newValue: `fee=${params.nextSettings.platformFeePercent}%, minDeposit=₹${params.nextSettings.minDepositINR}, requireApproval=${params.nextSettings.requireListingApproval}, maintenance=${params.nextSettings.maintenanceMode}`,
+      })
+    );
+    await batch.commit();
+  } catch (err) {
+    console.warn('Firestore settings save warning:', err);
+  }
+
+  return {
+    ...params.nextSettings,
+    updatedByEmail: params.actor.email,
+    updatedAtISO: new Date().toISOString(),
+  };
+}
+
 export { onAuthStateChanged };
 export type { User };
+

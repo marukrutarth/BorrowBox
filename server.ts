@@ -430,6 +430,97 @@ Allowed Cities: "All", "Bengaluru", "Mumbai", "Delhi NCR", "Hyderabad", "Pune", 
     }
   });
 
+  // 5. Server-Side RBAC & Audit Log Verification Endpoint for Admin Dashboard
+  app.post('/api/admin/verify-action', (req, res) => {
+    const {
+      adminEmail = '',
+      adminRole = '',
+      adminStatus = 'active',
+      requiredPermission = '',
+      effectivePermissions = [],
+      action = '',
+      targetType = '',
+      targetId = '',
+      targetEmail = '',
+      requestedRole = '',
+    } = req.body || {};
+
+    const normalizedEmail = String(adminEmail).trim().toLowerCase();
+    const gmailRegex = /^[a-z0-9._%+-]+@(gmail\.com|googlemail\.com)$/;
+    if (!gmailRegex.test(normalizedEmail)) {
+      res.status(403).json({
+        allowed: false,
+        error: 'Access Denied: Only verified Google (@gmail.com) accounts are permitted.',
+      });
+      return;
+    }
+
+    if (adminStatus !== 'active') {
+      res.status(403).json({
+        allowed: false,
+        error: 'Access Denied: Administrator account is deactivated.',
+      });
+      return;
+    }
+
+    const allowedRoles = ['super_admin', 'admin', 'moderator', 'support_admin'];
+    if (!allowedRoles.includes(adminRole)) {
+      res.status(403).json({
+        allowed: false,
+        error: 'Access Denied: Invalid administrator hierarchy level.',
+      });
+      return;
+    }
+
+    // Super Admin hierarchy guardrails
+    if (
+      (requiredPermission === 'admins.create' ||
+        requiredPermission === 'admins.update_role' ||
+        targetType === 'admin' ||
+        requestedRole === 'super_admin') &&
+      adminRole !== 'super_admin'
+    ) {
+      res.status(403).json({
+        allowed: false,
+        error: 'Hierarchy Violation: Only a Super Admin can create administrators or modify administrator roles.',
+      });
+      return;
+    }
+
+    if (
+      targetType === 'admin' &&
+      String(targetEmail).trim().toLowerCase() === 'marukrutarth@gmail.com' &&
+      requestedRole &&
+      requestedRole !== 'super_admin'
+    ) {
+      res.status(403).json({
+        allowed: false,
+        error: 'Security Lock: The primary Super Admin account cannot be demoted or deactivated.',
+      });
+      return;
+    }
+
+    if (
+      requiredPermission &&
+      adminRole !== 'super_admin' &&
+      (!Array.isArray(effectivePermissions) ||
+        !effectivePermissions.includes(requiredPermission))
+    ) {
+      res.status(403).json({
+        allowed: false,
+        error: `Missing required permission: ${requiredPermission}`,
+      });
+      return;
+    }
+
+    res.json({
+      allowed: true,
+      verifiedAtISO: new Date().toISOString(),
+      auditToken: `AUD-${Date.now().toString(36).toUpperCase()}`,
+      summary: `${adminRole.toUpperCase()} (${normalizedEmail}) authorised for ${action || requiredPermission} on ${targetType}:${targetId}`,
+    });
+  });
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },

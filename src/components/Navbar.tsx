@@ -25,7 +25,8 @@ export type PageRoute =
   | { page: 'dashboard' }
   | { page: 'profile' }
   | { page: 'login' }
-  | { page: 'signup' };
+  | { page: 'signup' }
+  | { page: 'admin' };
 
 interface NavbarProps {
   currentRoute: PageRoute;

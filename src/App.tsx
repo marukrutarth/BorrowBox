@@ -23,6 +23,7 @@ import {
   SortOption,
 } from './types/marketplace';
 import {
+  User,
   auth,
   createBookingInFirestore,
   createListingInFirestore,
@@ -48,6 +49,7 @@ import { ListItemPage } from './pages/ListItemPage';
 import { AuthPage } from './pages/AuthPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { DashboardPage } from './pages/DashboardPage';
+import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { InfoModal, RequestsModal } from './components/InfoAndRequestsModal';
 
 function parseUrlToRoute(pathname: string, search: string): PageRoute {
@@ -81,6 +83,9 @@ function parseUrlToRoute(pathname: string, search: string): PageRoute {
   if (pathname === '/signup') {
     return { page: 'signup' };
   }
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+    return { page: 'admin' };
+  }
   return { page: 'home' };
 }
 
@@ -112,6 +117,8 @@ function routeToUrl(route: PageRoute): string {
       return '/login';
     case 'signup':
       return '/signup';
+    case 'admin':
+      return '/admin';
     case 'home':
     default:
       return '/';
@@ -144,6 +151,7 @@ export default function App() {
   const [sortBy, setSortBy] = useState<SortOption>('featured');
 
   // Firebase Auth & Firestore User Profile state
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] =
     useState<BorrowBoxUserProfile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -214,14 +222,15 @@ export default function App() {
 
   // Subscribe to Firebase Authentication state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (!firebaseUser) {
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      setFirebaseUser(fbUser);
+      if (!fbUser) {
         setUserProfile(null);
         setIsAuthLoading(false);
         return;
       }
       try {
-        const profile = await ensureOrLoadUserProfile(firebaseUser);
+        const profile = await ensureOrLoadUserProfile(fbUser);
         setUserProfile(profile);
 
         // Load user's bookings and owner listings (including archived)
@@ -749,6 +758,33 @@ export default function App() {
     currentRoute.page === 'details'
       ? `details-${currentRoute.itemId}`
       : currentRoute.page;
+
+  // Dedicated standalone Admin Console route (/admin)
+  if (currentRoute.page === 'admin') {
+    return (
+      <AdminDashboardPage
+        firebaseUser={firebaseUser}
+        userProfile={userProfile}
+        allListings={listings}
+        allBookings={bookings}
+        allReviews={reviews}
+        onNavigate={handleNavigate}
+        onLogout={handleLogout}
+        onListingModerationChanged={(listingId, modStatus) => {
+          setListings((prev) =>
+            prev.map((item) =>
+              item.id === listingId
+                ? {
+                    ...item,
+                    status: modStatus === 'rejected' ? 'archived' : 'active',
+                  }
+                : item
+            )
+          );
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#090D16] text-[#F8FAFC] bb-ambient-canvas relative overflow-x-hidden">

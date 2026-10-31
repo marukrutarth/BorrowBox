@@ -32,3 +32,8 @@
 10. **Payload 10 (Resource Exhaustion / String Overflow)**: User `user_A` sends a 5,000-character `name` or `photoURL` exceeding blueprint `maxLength`. -> `PERMISSION_DENIED`.
 11. **Payload 11 (Invalid Enum City or Mode)**: User `user_A` updates `city` to `"Atlantis"` or `activeMode` to `"superadmin"`. -> `PERMISSION_DENIED`.
 12. **Payload 12 (ID Poisoning Attack)**: User attempts to target a document ID containing invalid characters or length > 128 (`!isValidId(userId)`). -> `PERMISSION_DENIED`.
+13. **Admin RBAC & Immutable Audit Trail**:
+    - Administrator records in `/admins/{adminId}` store `role` (`super_admin`, `admin`, `moderator`, `support_admin`), `status` (`active`, `deactivated`), and bounded permission override lists (`customPermissions`, `revokedPermissions`).
+    - Only `isSuperAdmin()` can create, delete, or change roles/permissions in `/admins/{adminId}`.
+    - Audit logs in `/audit_logs/{logId}` are strictly append-only (`allow update, delete: if false;`) and can only be created by active administrators (`isAdmin()`) with `createdAt == request.time`.
+
