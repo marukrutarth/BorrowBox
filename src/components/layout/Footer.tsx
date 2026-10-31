@@ -110,6 +110,19 @@ export const Footer: React.FC<FooterProps> = ({
                   Contact
                 </button>
               </li>
+              <li>
+                <a
+                  href="/about"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onNavigate({ page: 'about' });
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="text-[#94A3B8] hover:text-[#F8FAFC] transition-colors cursor-pointer"
+                >
+                  Our Team
+                </a>
+              </li>
             </ul>
           </div>
 

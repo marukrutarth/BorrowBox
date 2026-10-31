@@ -53,6 +53,7 @@ import { AuthPage } from './pages/AuthPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
+import { About } from './pages/About';
 import {
   InfoModal,
   RequestsModal,
@@ -98,6 +99,9 @@ function parseUrlToRoute(pathname: string, search: string): PageRoute {
   if (pathname === '/admin' || pathname.startsWith('/admin/')) {
     return { page: 'admin' };
   }
+  if (pathname === '/about' || pathname === '/about/') {
+    return { page: 'about' };
+  }
   return { page: 'home' };
 }
 
@@ -131,6 +135,8 @@ function routeToUrl(route: PageRoute): string {
       return '/signup';
     case 'admin':
       return '/admin';
+    case 'about':
+      return '/about';
     case 'home':
     default:
       return '/';
@@ -822,6 +828,10 @@ export default function App() {
           onNavigate={handleNavigate}
         />
       );
+    }
+
+    if (currentRoute.page === 'about') {
+      return <About onNavigate={handleNavigate} />;
     }
 
     return (
