@@ -85,7 +85,6 @@ import {
   adminSetUserModerationInFirestore,
   adminUpsertAdministratorInFirestore,
   fetchAdminDashboardData,
-  signInAdminWithGooglePopup,
   verifyAndLoadAdminSession,
 } from '../services/firebase';
 import { ProductImage } from '../components/ProductImage';
@@ -94,6 +93,9 @@ import { PageRoute } from '../components/Navbar';
 interface AdminDashboardPageProps {
   firebaseUser: User | null;
   userProfile: BorrowBoxUserProfile | null;
+  verifiedAdminRecord?: AdminRegistryRecord | null;
+  isVerifyingAdminSession?: boolean;
+  adminAccessDeniedReason?: string | null;
   allListings: ProductListing[];
   allBookings: RentalBookingRecord[];
   allReviews: RentalReviewRecord[];
@@ -122,6 +124,9 @@ const SECTION_ICONS: Record<AdminSectionId, React.ReactNode> = {
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   firebaseUser,
   userProfile,
+  verifiedAdminRecord = null,
+  isVerifyingAdminSession = false,
+  adminAccessDeniedReason = null,
   allListings,
   allBookings,
   allReviews,
@@ -130,20 +135,18 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   onListingModerationChanged,
 }) => {
   // Authentication & RBAC Session State
-  const [isVerifyingAdmin, setIsVerifyingAdmin] = useState(true);
+  const [isVerifyingAdmin, setIsVerifyingAdmin] = useState(
+    isVerifyingAdminSession
+  );
   const [adminRecord, setAdminRecord] = useState<AdminRegistryRecord | null>(
-    null
+    verifiedAdminRecord
   );
   const [accessDeniedReason, setAccessDeniedReason] = useState<string | null>(
-    null
+    adminAccessDeniedReason
   );
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [isSigningInGoogle, setIsSigningInGoogle] = useState(false);
 
-  // Role Preview / RBAC Simulator (allows testing all 4 hierarchy levels & permission gates)
+  // Role Preview / RBAC Simulator (available only to verified Super Admins)
   const [simulatedRole, setSimulatedRole] = useState<AdminRole | null>(null);
-  const [sandboxAdminSession, setSandboxAdminSession] =
-    useState<AdminRegistryRecord | null>(null);
 
   // Active Sidebar Module
   const [activeSection, setActiveSection] =
@@ -300,14 +303,35 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     }
   };
 
-  // Verify Authenticated Firebase User against Administrator Registry
+  // Sync with parent App's verifiedAdminRecord or verify directly if needed
   useEffect(() => {
     let mounted = true;
+
+    if (verifiedAdminRecord) {
+      setAdminRecord(verifiedAdminRecord);
+      setAccessDeniedReason(null);
+      setIsVerifyingAdmin(false);
+      void refreshDashboardSnapshot();
+      return () => {
+        mounted = false;
+      };
+    }
+
+    if (isVerifyingAdminSession) {
+      setIsVerifyingAdmin(true);
+      return () => {
+        mounted = false;
+      };
+    }
+
     const runVerification = async () => {
       if (!firebaseUser) {
         if (mounted) {
           setAdminRecord(null);
-          setAccessDeniedReason(null);
+          setAccessDeniedReason(
+            adminAccessDeniedReason ||
+              'Please sign in with your authorised BorrowBox account.'
+          );
           setIsVerifyingAdmin(false);
         }
         return;
@@ -325,7 +349,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           setAdminRecord(null);
           setAccessDeniedReason(
             result.reason ||
-              'Your Google account is not registered in the BorrowBox Administrator Registry.'
+              'Your account is not registered in the BorrowBox Administrator Registry.'
           );
         }
       } catch (err) {
@@ -347,20 +371,27 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     return () => {
       mounted = false;
     };
-  }, [firebaseUser]);
+  }, [
+    firebaseUser,
+    verifiedAdminRecord,
+    isVerifyingAdminSession,
+    adminAccessDeniedReason,
+  ]);
 
-  // Effective Active Admin Identity (Real Firebase Admin or RBAC Role Simulator)
+  // Effective Active Admin Identity (Verified Firebase Admin, with optional Super Admin role hierarchy inspector)
   const effectiveAdmin: AdminRegistryRecord | null = useMemo(() => {
-    const base = adminRecord || sandboxAdminSession;
-    if (!base) return null;
-    if (!simulatedRole) return base;
-    return {
-      ...base,
-      role: simulatedRole,
-      customPermissions: [],
-      revokedPermissions: [],
-    };
-  }, [adminRecord, sandboxAdminSession, simulatedRole]);
+    const base = verifiedAdminRecord || adminRecord;
+    if (!base || base.status !== 'active') return null;
+    if (base.role === 'super_admin' && simulatedRole) {
+      return {
+        ...base,
+        role: simulatedRole,
+        customPermissions: [],
+        revokedPermissions: [],
+      };
+    }
+    return base;
+  }, [verifiedAdminRecord, adminRecord, simulatedRole]);
 
   const effectivePermissions = useMemo(() => {
     if (!effectiveAdmin) return [];
@@ -543,53 +574,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       }))
       .sort((a, b) => b.count - a.count);
   }, [combinedListings]);
-
-  // Handlers
-  const handleGoogleAdminSignIn = async () => {
-    setAuthError(null);
-    setIsSigningInGoogle(true);
-    try {
-      const result = await signInAdminWithGooglePopup();
-      if (result.authorized && result.adminRecord) {
-        setAdminRecord(result.adminRecord);
-        setAccessDeniedReason(null);
-        await refreshDashboardSnapshot();
-      } else {
-        setAdminRecord(null);
-        setAccessDeniedReason(
-          result.reason ||
-            'Access Denied: Your Google account is not in the Administrator Registry.'
-        );
-      }
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : 'Google Sign-In failed.';
-      setAuthError(msg);
-    } finally {
-      setIsSigningInGoogle(false);
-    }
-  };
-
-  const handleLaunchRbacInspector = (role: AdminRole = 'super_admin') => {
-    const nowISO = new Date().toISOString();
-    const session: AdminRegistryRecord = {
-      id: PRIMARY_SUPER_ADMIN_EMAIL,
-      uid: firebaseUser?.uid || 'rbac-inspector-session',
-      email: PRIMARY_SUPER_ADMIN_EMAIL,
-      name: 'Krutarth Maru (Super Admin)',
-      role: 'super_admin',
-      status: 'active',
-      customPermissions: [],
-      revokedPermissions: [],
-      grantedBy: PRIMARY_SUPER_ADMIN_EMAIL,
-      grantedAtISO: nowISO,
-      lastLoginAtISO: nowISO,
-      updatedAtISO: nowISO,
-    };
-    setSandboxAdminSession(session);
-    setSimulatedRole(role === 'super_admin' ? null : role);
-    void refreshDashboardSnapshot();
-  };
 
   const appendLocalAuditLog = (entry: Omit<AdminAuditLogRecord, 'id' | 'createdAtISO'>) => {
     const newLog: AdminAuditLogRecord = {
@@ -1182,11 +1166,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   }
 
   // ============================================================================
-  // VIEW 2: DEDICATED ADMIN LOGIN OR ACCESS DENIED SCREEN
+  // VIEW 2: ACCESS DENIED SCREEN FOR UNAUTHORISED ACCOUNTS
   // ============================================================================
   if (!effectiveAdmin) {
-    const isAccessDenied = Boolean(firebaseUser && accessDeniedReason);
-
     return (
       <div className="min-h-screen bg-[#0B0F19] text-[#F8FAFC] flex flex-col justify-between p-6 relative overflow-hidden">
         <div className="max-w-[1280px] w-full mx-auto flex items-center justify-between">
@@ -1205,155 +1187,68 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         </div>
 
         <div className="max-w-lg w-full mx-auto my-12 bg-[#161E2E] border border-white/[0.08] rounded-2xl p-8 shadow-2xl relative z-10">
-          {isAccessDenied ? (
-            <>
-              <div className="w-12 h-12 rounded-xl bg-[#EF4444]/15 border border-[#EF4444]/30 flex items-center justify-center text-[#EF4444] mb-5">
-                <ShieldAlert className="w-6 h-6" />
-              </div>
-              <span className="text-[11px] font-semibold uppercase tracking-widest text-[#EF4444]">
-                HTTP 403 · Administrative Access Denied
+          <div className="w-12 h-12 rounded-xl bg-[#EF4444]/15 border border-[#EF4444]/30 flex items-center justify-center text-[#EF4444] mb-5">
+            <ShieldAlert className="w-6 h-6" />
+          </div>
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-[#EF4444]">
+            HTTP 403 · Administrative Access Denied
+          </span>
+          <h1 className="text-2xl font-bold tracking-tight text-[#F8FAFC] mt-1">
+            Access Denied
+          </h1>
+          <p className="text-sm text-[#94A3B8] mt-2 leading-relaxed">
+            {accessDeniedReason ||
+              adminAccessDeniedReason ||
+              'Your account does not have administrative permissions in the BorrowBox Administrator Registry (/admins).'}
+          </p>
+
+          <div className="mt-5 p-4 rounded-xl bg-[#111827] border border-white/[0.07] space-y-1.5 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[#94A3B8]">Authenticated Account:</span>
+              <span className="font-mono text-[#F8FAFC]">
+                {firebaseUser?.email || userProfile?.email || 'Not Signed In'}
               </span>
-              <h1 className="text-2xl font-bold tracking-tight text-[#F8FAFC] mt-1">
-                Unauthorised Gmail Account
-              </h1>
-              <p className="text-sm text-[#94A3B8] mt-2 leading-relaxed">
-                {accessDeniedReason}
-              </p>
-
-              <div className="mt-5 p-4 rounded-xl bg-[#111827] border border-white/[0.07] space-y-1.5 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-[#94A3B8]">Authenticated Account:</span>
-                  <span className="font-mono text-[#F8FAFC]">
-                    {firebaseUser?.email || 'Unknown'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[#94A3B8]">Registry Status:</span>
-                  <span className="text-[#EF4444] font-semibold">
-                    Not in /admins Registry
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[#94A3B8]">Marketplace Login:</span>
-                  <span className="text-[#22C55E]">
-                    Standard Borrower/Owner Access Only
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                <button
-                  type="button"
-                  onClick={() => void handleGoogleAdminSignIn()}
-                  disabled={isSigningInGoogle}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold transition-colors cursor-pointer"
-                >
-                  <KeyRound className="w-4 h-4" />
-                  <span>Switch Google Account</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onNavigate({ page: 'home' })}
-                  className="px-4 py-2.5 rounded-xl bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-semibold text-[#F8FAFC] transition-colors cursor-pointer"
-                >
-                  Exit to Marketplace
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="w-12 h-12 rounded-xl bg-[#8B5CF6]/15 border border-[#8B5CF6]/30 flex items-center justify-center text-[#8B5CF6] mb-5">
-                <Shield className="w-6 h-6" />
-              </div>
-              <span className="text-[11px] font-semibold uppercase tracking-widest text-[#8B5CF6]">
-                BorrowBox Administration Console
-              </span>
-              <h1 className="text-2xl font-bold tracking-tight text-[#F8FAFC] mt-1">
-                Authorised Gmail Sign-In
-              </h1>
-              <p className="text-sm text-[#94A3B8] mt-2 leading-relaxed">
-                Administrative access is restricted to verified Google accounts
-                registered in the BorrowBox Administrator Registry (
-                <code className="text-xs text-[#F8FAFC] font-mono">
-                  /admins
-                </code>
-                ).
-              </p>
-
-              {authError && (
-                <div className="mt-4 p-3.5 rounded-xl bg-[#EF4444]/10 border border-[#EF4444]/30 text-xs text-[#EF4444] flex items-start gap-2.5">
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{authError}</span>
-                </div>
-              )}
-
-              <div className="mt-6 space-y-3">
-                <button
-                  type="button"
-                  onClick={() => void handleGoogleAdminSignIn()}
-                  disabled={isSigningInGoogle}
-                  className="w-full inline-flex items-center justify-center gap-3 px-5 py-3 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-semibold transition-all cursor-pointer shadow-lg shadow-[#8B5CF6]/20"
-                >
-                  <Mail className="w-4 h-4" />
-                  <span>
-                    {isSigningInGoogle
-                      ? 'Verifying Google Account...'
-                      : 'Sign in with Authorised Google Account'}
-                  </span>
-                </button>
-              </div>
-
-              <div className="mt-6 pt-5 border-t border-white/[0.08] space-y-3">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-[#94A3B8]">
-                    Primary Super Admin Registry:
-                  </span>
-                  <span className="font-mono text-[#06B6D4]">
-                    {PRIMARY_SUPER_ADMIN_EMAIL}
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#94A3B8] leading-relaxed">
-                   Four-Tier RBAC Hierarchy enforced via Firestore Security
-                  Rules: Super Admin (L1) · Admin (L2) · Moderator (L3) ·
-                  Support Admin (L4).
-                </p>
-              </div>
-            </>
-          )}
-
-          {/* Interactive RBAC Hierarchy & Console Verification Mode */}
-          <div className="mt-6 pt-5 border-t border-white/[0.08]">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-[#06B6D4]">
-                RBAC Console Verification & Role Preview
-              </span>
-              <span className="text-[11px] text-[#94A3B8]">4 Hierarchy Tiers</span>
             </div>
-            <p className="text-xs text-[#94A3B8] mb-3">
-              Launch the Admin Console in live Firestore RBAC inspection mode to
-              verify Super Admin, Admin, Moderator, and Support Admin permission
-              boundaries:
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {(
-                ['super_admin', 'admin', 'moderator', 'support_admin'] as AdminRole[]
-              ).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => handleLaunchRbacInspector(r)}
-                  className="px-3 py-2 rounded-lg bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-left transition-colors cursor-pointer"
-                >
-                  <div className="text-xs font-semibold text-[#F8FAFC]">
-                    Preview as {ROLE_DEFINITIONS[r].label}
-                  </div>
-                  <div className="text-[10px] text-[#94A3B8] font-mono">
-                    Level {ROLE_DEFINITIONS[r].level} ·{' '}
-                    {ROLE_DEFINITIONS[r].defaultPermissions.length} perms
-                  </div>
-                </button>
-              ))}
+            <div className="flex items-center justify-between">
+              <span className="text-[#94A3B8]">Registry Verification:</span>
+              <span className="text-[#EF4444] font-semibold">
+                Unauthorised / Not in /admins
+              </span>
             </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[#94A3B8]">Account Access:</span>
+              <span className="text-[#22C55E]">
+                Standard Borrower & Owner Access Only
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-col sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={() => onNavigate({ page: 'home' })}
+              className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Return to BorrowBox Marketplace</span>
+            </button>
+            {firebaseUser ? (
+              <button
+                type="button"
+                onClick={() => void onLogout()}
+                className="px-4 py-2.5 rounded-xl bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-semibold text-[#F8FAFC] transition-colors cursor-pointer"
+              >
+                Sign Out
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onNavigate({ page: 'login' })}
+                className="px-4 py-2.5 rounded-xl bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-semibold text-[#F8FAFC] transition-colors cursor-pointer"
+              >
+                Sign In to BorrowBox
+              </button>
+            )}
           </div>
         </div>
 
@@ -1498,8 +1393,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               {effectiveAdmin.email}
             </div>
 
-            {/* Role Hierarchy Switcher (for Super Admin / RBAC verification) */}
-            {(adminRecord?.role === 'super_admin' || sandboxAdminSession) && (
+            {/* Role Hierarchy Switcher (for Super Admin RBAC verification) */}
+            {(verifiedAdminRecord?.role === 'super_admin' ||
+              adminRecord?.role === 'super_admin') && (
               <div className="mt-3 pt-3 border-t border-white/[0.07]">
                 <label
                   htmlFor="rbac-role-simulator"
@@ -1592,7 +1488,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           <button
             type="button"
             onClick={async () => {
-              setSandboxAdminSession(null);
+              setAdminRecord(null);
               setSimulatedRole(null);
               if (firebaseUser) {
                 await onLogout();

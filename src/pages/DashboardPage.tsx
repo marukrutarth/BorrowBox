@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import {
+  AdminRegistryRecord,
   AppNotificationItem,
   BookingMessageRecord,
   BookingStatus,
@@ -33,6 +34,10 @@ import {
   RentalReviewRecord,
 } from '../types/marketplace';
 import {
+  ROLE_DEFINITIONS,
+  shouldShowAdminPanelOption,
+} from '../utils/adminRbac';
+import {
   ALL_CATEGORIES,
   formatINR,
   isListingAvailableForDates,
@@ -41,6 +46,7 @@ import { PageRoute } from '../components/Navbar';
 
 interface DashboardPageProps {
   userProfile: BorrowBoxUserProfile;
+  verifiedAdminRecord?: AdminRegistryRecord | null;
   listings: ProductListing[];
   bookings: RentalBookingRecord[];
   messagesByBooking: Record<string, BookingMessageRecord[]>;
@@ -162,6 +168,7 @@ const HandoverQrMatrix: React.FC<{ code: string }> = ({ code }) => {
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   userProfile,
+  verifiedAdminRecord = null,
   listings,
   bookings,
   messagesByBooking,
@@ -904,7 +911,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </h1>
           </div>
 
-          <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+            {shouldShowAdminPanelOption(verifiedAdminRecord) &&
+              verifiedAdminRecord && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate({ page: 'admin' })}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#8B5CF6]/15 hover:bg-[#8B5CF6]/25 text-[#F8FAFC] border border-[#8B5CF6]/40 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#8B5CF6]" />
+                  <span>
+                    Admin Panel (
+                    {ROLE_DEFINITIONS[verifiedAdminRecord.role]?.label ||
+                      'Admin'}
+                    )
+                  </span>
+                </button>
+              )}
             <button
               type="button"
               onClick={() => onNavigate({ page: 'profile' })}

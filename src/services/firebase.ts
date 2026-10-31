@@ -19,6 +19,7 @@ import {
   getDocFromServer,
   getDocs,
   getFirestore,
+  onSnapshot,
   query,
   serverTimestamp,
   setDoc,
@@ -65,6 +66,7 @@ import {
   computeEffectivePermissions,
   hasAdminPermission,
   normalizeAdminEmail,
+  shouldShowAdminPanelOption,
   validateAdminGmail,
 } from '../utils/adminRbac';
 import { ALL_CITIES, BLUEPRINT_LIMITS } from '../utils/rentalLogic';
@@ -205,12 +207,19 @@ export async function ensureOrLoadUserProfile(
     handleFirestoreError(error, OperationType.GET, publicPath);
   }
 
-  let isAdminUser =
-    user.email === 'marukrutarth@gmail.com' && user.emailVerified === true;
+  const normalizedUserEmail = normalizeAdminEmail(user.email || '');
+  let isAdminUser = normalizedUserEmail === PRIMARY_SUPER_ADMIN_EMAIL;
   if (!isAdminUser) {
     try {
-      const adminSnap = await getDoc(doc(db, 'admins', uid));
-      isAdminUser = adminSnap.exists();
+      let adminSnap = normalizedUserEmail
+        ? await getDoc(doc(db, 'admins', normalizedUserEmail))
+        : null;
+      if (!adminSnap || !adminSnap.exists()) {
+        adminSnap = await getDoc(doc(db, 'admins', uid));
+      }
+      isAdminUser = Boolean(
+        adminSnap.exists() && adminSnap.data()?.status === 'active'
+      );
     } catch {
       isAdminUser = false;
     }
@@ -1009,8 +1018,9 @@ function buildAuditLogPayload(params: {
 }
 
 /**
- * Verifies if a Firebase-authenticated Google user is an authorised BorrowBox Administrator.
- * Never trusts client flags; checks verified Gmail against `/admins/{email}` and `/admins/{uid}`.
+ * Verifies if a Firebase-authenticated user is an authorised BorrowBox Administrator.
+ * Never trusts client flags; checks verified Gmail against `/admins/{email}` and `/admins/{uid}`
+ * and validates against `/api/admin/verify-session`.
  */
 export async function verifyAndLoadAdminSession(user: User): Promise<{
   authorized: boolean;
@@ -1026,14 +1036,6 @@ export async function verifyAndLoadAdminSession(user: User): Promise<{
     };
   }
 
-  if (!user.emailVerified) {
-    return {
-      authorized: false,
-      reason: 'Google email verification is required for administrative access.',
-      adminRecord: null,
-    };
-  }
-
   const gmailCheck = validateAdminGmail(email);
   if (!gmailCheck.valid) {
     return {
@@ -1045,7 +1047,7 @@ export async function verifyAndLoadAdminSession(user: User): Promise<{
     };
   }
 
-  // 1. Primary Super Admin bootstrap & verification
+  // 1. Primary Super Admin bootstrap & verification (marukrutarth@gmail.com)
   if (email === PRIMARY_SUPER_ADMIN_EMAIL) {
     const cleanName = sanitizeName(user.displayName, email);
     const nowISO = new Date().toISOString();
@@ -1078,22 +1080,40 @@ export async function verifyAndLoadAdminSession(user: User): Promise<{
       console.warn('Primary Super Admin registry sync warning:', err);
     }
 
+    const bootstrappedRecord: AdminRegistryRecord = {
+      id: email,
+      uid: user.uid,
+      email,
+      name: cleanName,
+      role: 'super_admin',
+      status: 'active',
+      customPermissions: [],
+      revokedPermissions: [],
+      grantedBy: email,
+      grantedAtISO: nowISO,
+      lastLoginAtISO: nowISO,
+      updatedAtISO: nowISO,
+    };
+
+    try {
+      await fetch('/api/admin/verify-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid: user.uid,
+          email,
+          role: 'super_admin',
+          status: 'active',
+          effectivePermissions: computeEffectivePermissions('super_admin', [], []),
+        }),
+      });
+    } catch {
+      // Non-fatal network check
+    }
+
     return {
       authorized: true,
-      adminRecord: {
-        id: email,
-        uid: user.uid,
-        email,
-        name: cleanName,
-        role: 'super_admin',
-        status: 'active',
-        customPermissions: [],
-        revokedPermissions: [],
-        grantedBy: email,
-        grantedAtISO: nowISO,
-        lastLoginAtISO: nowISO,
-        updatedAtISO: nowISO,
-      },
+      adminRecord: bootstrappedRecord,
     };
   }
 
@@ -1113,12 +1133,45 @@ export async function verifyAndLoadAdminSession(user: User): Promise<{
     }
 
     const record = mapDocToAdminRecord(adminSnap.id, adminSnap.data());
-    if (record.status !== 'active') {
+    if (record.status !== 'active' || !shouldShowAdminPanelOption(record)) {
       return {
         authorized: false,
-        reason: `Administrator access for ${email} has been deactivated by a Super Admin.`,
+        reason: `Administrator access for ${email} has been deactivated or has no active permissions.`,
         adminRecord: null,
       };
+    }
+
+    const effectivePermissions = computeEffectivePermissions(
+      record.role,
+      record.customPermissions,
+      record.revokedPermissions
+    );
+
+    // 3. Server-side RBAC session verification
+    try {
+      const res = await fetch('/api/admin/verify-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid: user.uid,
+          email: record.email,
+          role: record.role,
+          status: record.status,
+          effectivePermissions,
+        }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        return {
+          authorized: false,
+          reason:
+            errData.error ||
+            `Server rejected administrative session for ${email}.`,
+          adminRecord: null,
+        };
+      }
+    } catch {
+      // Allow Firestore-verified record if local fetch is offline
     }
 
     const cleanName = sanitizeName(user.displayName || record.name, email);
@@ -1142,13 +1195,117 @@ export async function verifyAndLoadAdminSession(user: User): Promise<{
         lastLoginAtISO: new Date().toISOString(),
       },
     };
-  } catch (err) {
+  } catch {
     return {
       authorized: false,
       reason: `Account ${email} is not authorised in the BorrowBox Administrator Registry.`,
       adminRecord: null,
     };
   }
+}
+
+/**
+ * Subscribes in real time to the authenticated user's `/admins/{email}` document
+ * so permission changes are immediately revalidated and deactivated accounts are
+ * immediately revoked from navigation and administrative routes.
+ */
+export function subscribeToVerifiedAdminSession(
+  user: User,
+  onChange: (result: {
+    authorized: boolean;
+    reason?: string;
+    adminRecord: AdminRegistryRecord | null;
+  }) => void
+): () => void {
+  let active = true;
+  const email = normalizeAdminEmail(user.email || '');
+
+  void verifyAndLoadAdminSession(user).then((res) => {
+    if (active) {
+      onChange(res);
+    }
+  });
+
+  if (!email || !validateAdminGmail(email).valid) {
+    return () => {
+      active = false;
+    };
+  }
+
+  const unsub = onSnapshot(
+    doc(db, 'admins', email),
+    (snap) => {
+      if (!active) return;
+      if (email === PRIMARY_SUPER_ADMIN_EMAIL) {
+        const cleanName = sanitizeName(user.displayName, email);
+        const nowISO = new Date().toISOString();
+        const data = snap.exists() ? snap.data() : null;
+        onChange({
+          authorized: true,
+          adminRecord: {
+            id: email,
+            uid: user.uid,
+            email,
+            name: String(data?.name || cleanName),
+            role: 'super_admin',
+            status: 'active',
+            customPermissions: [],
+            revokedPermissions: [],
+            grantedBy: email,
+            grantedAtISO: data?.grantedAt
+              ? formatTimestampToISO(data.grantedAt)
+              : nowISO,
+            lastLoginAtISO: nowISO,
+            updatedAtISO: nowISO,
+          },
+        });
+        return;
+      }
+
+      if (!snap.exists()) {
+        onChange({
+          authorized: false,
+          reason: `Account ${email} is not registered in the BorrowBox Administrator Registry.`,
+          adminRecord: null,
+        });
+        return;
+      }
+
+      const record = mapDocToAdminRecord(snap.id, snap.data());
+      if (record.status !== 'active' || !shouldShowAdminPanelOption(record)) {
+        onChange({
+          authorized: false,
+          reason: `Administrator access for ${email} has been deactivated by a Super Admin.`,
+          adminRecord: null,
+        });
+        return;
+      }
+
+      onChange({
+        authorized: true,
+        adminRecord: {
+          ...record,
+          uid: user.uid,
+        },
+      });
+    },
+    () => {
+      // If Firestore read is denied for non-admin, ensure non-primary accounts remain unauthorized
+      if (!active) return;
+      if (email !== PRIMARY_SUPER_ADMIN_EMAIL) {
+        onChange({
+          authorized: false,
+          reason: `Account ${email} is not authorised in the BorrowBox Administrator Registry.`,
+          adminRecord: null,
+        });
+      }
+    }
+  );
+
+  return () => {
+    active = false;
+    unsub();
+  };
 }
 
 export async function signInAdminWithGooglePopup(): Promise<{

@@ -3,18 +3,25 @@ import {
   Box,
   ChevronDown,
   LayoutDashboard,
+  LogOut,
   MapPin,
   Menu,
   Search,
+  Shield,
   User,
   X,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
+  AdminRegistryRecord,
   BorrowBoxUserProfile,
   IndianCity,
   RentalRequestRecord,
 } from '../types/marketplace';
+import {
+  ROLE_DEFINITIONS,
+  shouldShowAdminPanelOption,
+} from '../utils/adminRbac';
 import { ALL_CITIES } from '../utils/rentalLogic';
 
 export type PageRoute =
@@ -33,6 +40,7 @@ interface NavbarProps {
   onNavigate: (route: PageRoute) => void;
   onScrollToHowItWorks: () => void;
   userProfile: BorrowBoxUserProfile | null;
+  verifiedAdminRecord?: AdminRegistryRecord | null;
   onLogout: () => Promise<void>;
   rentalRequests: RentalRequestRecord[];
   onOpenRequestsModal: () => void;
@@ -48,6 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onNavigate,
   onScrollToHowItWorks,
   userProfile,
+  verifiedAdminRecord = null,
   onLogout,
   rentalRequests,
   onOpenRequestsModal,
@@ -59,8 +68,16 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [cityMenuOpen, setCityMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const cityDropdownRef = useRef<HTMLDivElement | null>(null);
+  const profileDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  const hasVerifiedAdminAccess = shouldShowAdminPanelOption(verifiedAdminRecord);
+  const adminRoleLabel =
+    hasVerifiedAdminAccess && verifiedAdminRecord
+      ? ROLE_DEFINITIONS[verifiedAdminRecord.role]?.label || 'Administrator'
+      : null;
 
   useEffect(() => {
     const onScroll = () => {
@@ -79,6 +96,12 @@ export const Navbar: React.FC<NavbarProps> = ({
       ) {
         setCityMenuOpen(false);
       }
+      if (
+        profileDropdownRef.current &&
+        !profileDropdownRef.current.contains(event.target as Node)
+      ) {
+        setProfileMenuOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
@@ -88,12 +111,14 @@ export const Navbar: React.FC<NavbarProps> = ({
     e.preventDefault();
     setMobileMenuOpen(false);
     setCityMenuOpen(false);
+    setProfileMenuOpen(false);
     action();
   };
 
   const handleNavbarSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setMobileMenuOpen(false);
+    setProfileMenuOpen(false);
     onNavigate({
       page: 'browse',
       query: searchQuery.trim() || undefined,
@@ -232,7 +257,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </form>
 
         {/* Right Zone: Navigation Links + Auth Actions */}
-        <div className="flex items-center gap-5 shrink-0">
+        <div className="flex items-center gap-4 shrink-0">
           <nav
             aria-label="Primary Navigation"
             className="hidden md:flex items-center gap-1 text-sm font-medium text-[#94A3B8]"
@@ -306,6 +331,24 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </a>
 
+            {/* Dynamic Admin Panel Navigation Link — rendered ONLY for verified active administrators */}
+            {userProfile && hasVerifiedAdminAccess && (
+              <a
+                href="/admin"
+                onClick={(e) =>
+                  handleNavClick(e, () => onNavigate({ page: 'admin' }))
+                }
+                className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 whitespace-nowrap shrink-0 ${
+                  currentRoute.page === 'admin'
+                    ? 'bg-[#8B5CF6] text-white shadow-sm'
+                    : 'bg-[#8B5CF6]/12 text-[#F8FAFC] border border-[#8B5CF6]/35 hover:bg-[#8B5CF6]/20 hover:border-[#8B5CF6]/55'
+                }`}
+              >
+                <Shield className="w-3.5 h-3.5 text-[#8B5CF6] shrink-0" />
+                <span>Admin Panel</span>
+              </a>
+            )}
+
             <a
               href="/#how-it-works"
               onClick={(e) => handleNavClick(e, onScrollToHowItWorks)}
@@ -324,63 +367,182 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            <a
-              href="/profile"
-              onClick={(e) =>
-                handleNavClick(e, () => onNavigate({ page: 'profile' }))
-              }
-              className={`relative inline-flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors duration-200 whitespace-nowrap shrink-0 ${
-                currentRoute.page === 'profile'
-                  ? 'text-[#F8FAFC] font-medium'
-                  : 'hover:text-[#F8FAFC]'
-              }`}
-            >
-              <User className="w-3.5 h-3.5 text-[#94A3B8]" />
-              <span>
-                {userProfile
-                  ? `Profile (${userProfile.name.split(' ')[0]})`
-                  : 'Profile'}
-              </span>
-              {currentRoute.page === 'profile' && (
-                <motion.span
-                  layoutId="navbar-active-indicator"
-                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute inset-x-3 -bottom-[11px] h-[2px] bg-[#8B5CF6] rounded-full"
-                />
-              )}
-            </a>
-
             {userProfile ? (
-              <button
-                type="button"
-                onClick={() => {
-                  void onLogout();
-                }}
-                className="px-3 py-2 rounded-lg hover:text-[#F8FAFC] transition-colors duration-200 whitespace-nowrap shrink-0 text-[#94A3B8] cursor-pointer"
-              >
-                Log Out
-              </button>
-            ) : (
-              <a
-                href="/login"
-                onClick={(e) =>
-                  handleNavClick(e, () => onNavigate({ page: 'login' }))
-                }
-                className={`relative px-3 py-2 rounded-lg transition-colors duration-200 whitespace-nowrap shrink-0 ${
-                  currentRoute.page === 'login'
-                    ? 'text-[#F8FAFC] font-medium'
-                    : 'hover:text-[#F8FAFC]'
-                }`}
-              >
-                <span>Login</span>
-                {currentRoute.page === 'login' && (
-                  <motion.span
-                    layoutId="navbar-active-indicator"
-                    transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                    className="absolute inset-x-3 -bottom-[11px] h-[2px] bg-[#8B5CF6] rounded-full"
+              /* Authenticated User Profile Dropdown Menu */
+              <div ref={profileDropdownRef} className="relative">
+                <button
+                  type="button"
+                  aria-label={`Account menu for ${userProfile.name}`}
+                  aria-expanded={profileMenuOpen}
+                  onClick={() => setProfileMenuOpen((prev) => !prev)}
+                  className={`relative inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-colors duration-200 whitespace-nowrap shrink-0 cursor-pointer ${
+                    currentRoute.page === 'profile' || profileMenuOpen
+                      ? 'bg-[#161E2E] border-[#8B5CF6]/45 text-[#F8FAFC]'
+                      : 'bg-[#141C2B] border-white/[0.08] text-[#F8FAFC] hover:border-white/[0.18]'
+                  }`}
+                >
+                  <span className="w-5 h-5 rounded-full bg-[#8B5CF6] text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+                    {userProfile.name.charAt(0).toUpperCase()}
+                  </span>
+                  <span className="text-xs font-semibold">
+                    {userProfile.name.split(' ')[0]}
+                  </span>
+                  {hasVerifiedAdminAccess && (
+                    <Shield
+                      className="w-3.5 h-3.5 text-[#06B6D4] shrink-0"
+                      aria-label="Verified Administrator"
+                    />
+                  )}
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-[#94A3B8] transition-transform duration-200 ${
+                      profileMenuOpen ? 'rotate-180' : ''
+                    }`}
                   />
-                )}
-              </a>
+                </button>
+
+                <AnimatePresence>
+                  {profileMenuOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                      role="menu"
+                      aria-label="User Account Menu"
+                      className="absolute right-0 mt-2 w-64 rounded-2xl bg-[#141C2B] border border-white/[0.1] shadow-2xl py-2 z-50"
+                    >
+                      {/* User Identity Header */}
+                      <div className="px-4 py-2.5 border-b border-white/[0.08]">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-bold text-[#F8FAFC] truncate">
+                            {userProfile.name}
+                          </p>
+                          {hasVerifiedAdminAccess && adminRoleLabel && (
+                            <span className="px-2 py-0.5 rounded-md bg-[#8B5CF6]/20 border border-[#8B5CF6]/40 text-[10px] font-semibold text-purple-300 shrink-0">
+                              {adminRoleLabel}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[#94A3B8] truncate mt-0.5">
+                          {userProfile.email}
+                        </p>
+                      </div>
+
+                      <div className="py-1.5 px-1.5 space-y-0.5">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={(e) =>
+                            handleNavClick(e, () =>
+                              onNavigate({ page: 'profile' })
+                            )
+                          }
+                          className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-[#F8FAFC] hover:bg-white/[0.06] flex items-center gap-2.5 transition-colors cursor-pointer"
+                        >
+                          <User className="w-3.5 h-3.5 text-[#94A3B8]" />
+                          <span>Profile & Account Settings</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={(e) =>
+                            handleNavClick(e, () =>
+                              onNavigate({ page: 'dashboard' })
+                            )
+                          }
+                          className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-[#F8FAFC] hover:bg-white/[0.06] flex items-center gap-2.5 transition-colors cursor-pointer"
+                        >
+                          <LayoutDashboard className="w-3.5 h-3.5 text-[#8B5CF6]" />
+                          <span>Borrower & Lender Dashboard</span>
+                        </button>
+
+                        {/* Dynamic Admin Panel Option in Profile Dropdown */}
+                        {hasVerifiedAdminAccess && verifiedAdminRecord && (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={(e) =>
+                              handleNavClick(e, () =>
+                                onNavigate({ page: 'admin' })
+                              )
+                            }
+                            className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold text-[#F8FAFC] bg-[#8B5CF6]/12 hover:bg-[#8B5CF6]/22 border border-[#8B5CF6]/30 flex items-center justify-between gap-2 transition-colors cursor-pointer mt-1"
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              <Shield className="w-3.5 h-3.5 text-[#8B5CF6]" />
+                              <span>Admin Panel</span>
+                            </span>
+                            <span className="text-[10px] font-mono text-[#06B6D4]">
+                              {adminRoleLabel}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="pt-1.5 mt-1 px-1.5 border-t border-white/[0.08]">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setProfileMenuOpen(false);
+                            void onLogout();
+                          }}
+                          className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-[#EF4444] hover:bg-[#EF4444]/10 flex items-center gap-2.5 transition-colors cursor-pointer"
+                        >
+                          <LogOut className="w-3.5 h-3.5" />
+                          <span>Log Out</span>
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <>
+                <a
+                  href="/profile"
+                  onClick={(e) =>
+                    handleNavClick(e, () => onNavigate({ page: 'profile' }))
+                  }
+                  className={`relative inline-flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors duration-200 whitespace-nowrap shrink-0 ${
+                    currentRoute.page === 'profile'
+                      ? 'text-[#F8FAFC] font-medium'
+                      : 'hover:text-[#F8FAFC]'
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5 text-[#94A3B8]" />
+                  <span>Profile</span>
+                  {currentRoute.page === 'profile' && (
+                    <motion.span
+                      layoutId="navbar-active-indicator"
+                      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                      className="absolute inset-x-3 -bottom-[11px] h-[2px] bg-[#8B5CF6] rounded-full"
+                    />
+                  )}
+                </a>
+
+                <a
+                  href="/login"
+                  onClick={(e) =>
+                    handleNavClick(e, () => onNavigate({ page: 'login' }))
+                  }
+                  className={`relative px-3 py-2 rounded-lg transition-colors duration-200 whitespace-nowrap shrink-0 ${
+                    currentRoute.page === 'login'
+                      ? 'text-[#F8FAFC] font-medium'
+                      : 'hover:text-[#F8FAFC]'
+                  }`}
+                >
+                  <span>Login</span>
+                  {currentRoute.page === 'login' && (
+                    <motion.span
+                      layoutId="navbar-active-indicator"
+                      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                      className="absolute inset-x-3 -bottom-[11px] h-[2px] bg-[#8B5CF6] rounded-full"
+                    />
+                  )}
+                </a>
+              </>
             )}
           </nav>
 
@@ -515,6 +677,28 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 {userProfile ? `Profile (${userProfile.name})` : 'Profile'}
               </a>
+
+              {/* Dynamic Mobile Admin Panel Link — only for verified active admins */}
+              {userProfile && hasVerifiedAdminAccess && (
+                <a
+                  href="/admin"
+                  onClick={(e) =>
+                    handleNavClick(e, () => onNavigate({ page: 'admin' }))
+                  }
+                  className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold text-[#F8FAFC] bg-[#8B5CF6]/15 border border-[#8B5CF6]/35 hover:bg-[#8B5CF6]/25"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-[#8B5CF6]" />
+                    <span>Admin Panel</span>
+                  </span>
+                  {adminRoleLabel && (
+                    <span className="text-xs font-mono text-[#06B6D4]">
+                      {adminRoleLabel}
+                    </span>
+                  )}
+                </a>
+              )}
+
               <a
                 href="/#how-it-works"
                 onClick={(e) => handleNavClick(e, onScrollToHowItWorks)}
@@ -563,3 +747,4 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
+

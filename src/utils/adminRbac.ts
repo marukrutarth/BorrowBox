@@ -295,3 +295,30 @@ export function canManageTargetAdmin(
 
   return { allowed: true };
 }
+
+/**
+ * Determines whether the dynamic "Admin Panel" option should be displayed in user navigation.
+ * Requires a verified administrator registry record with active status, valid Gmail,
+ * valid hierarchy role, and at least one effective permission.
+ */
+export function shouldShowAdminPanelOption(
+  admin:
+    | Pick<
+        AdminIdentityRecord,
+        'email' | 'role' | 'status' | 'customPermissions' | 'revokedPermissions'
+      >
+    | null
+    | undefined
+): boolean {
+  if (!admin) return false;
+  if (admin.status !== 'active') return false;
+  if (!ROLE_DEFINITIONS[admin.role]) return false;
+  if (!validateAdminGmail(admin.email).valid) return false;
+  const effective = computeEffectivePermissions(
+    admin.role,
+    admin.customPermissions || [],
+    admin.revokedPermissions || []
+  );
+  return effective.length > 0;
+}
+

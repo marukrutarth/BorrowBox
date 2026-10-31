@@ -430,7 +430,71 @@ Allowed Cities: "All", "Bengaluru", "Mumbai", "Delhi NCR", "Hyderabad", "Pune", 
     }
   });
 
-  // 5. Server-Side RBAC & Audit Log Verification Endpoint for Admin Dashboard
+  // 5. Server-Side Administrator Session Verification Endpoint
+  app.post('/api/admin/verify-session', (req, res) => {
+    const {
+      uid = '',
+      email = '',
+      role = '',
+      status = 'active',
+      effectivePermissions = [],
+    } = req.body || {};
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const gmailRegex = /^[a-z0-9._%+-]+@(gmail\.com|googlemail\.com)$/;
+    if (!uid || !gmailRegex.test(normalizedEmail)) {
+      res.status(403).json({
+        authorized: false,
+        error: 'Access Denied: Only verified Google (@gmail.com) accounts are permitted.',
+      });
+      return;
+    }
+
+    // Bootstrap primary Super Admin check
+    if (normalizedEmail === 'marukrutarth@gmail.com') {
+      res.json({
+        authorized: true,
+        role: 'super_admin',
+        status: 'active',
+        verifiedAtISO: new Date().toISOString(),
+      });
+      return;
+    }
+
+    if (status !== 'active') {
+      res.status(403).json({
+        authorized: false,
+        error: 'Access Denied: Administrator account is deactivated.',
+      });
+      return;
+    }
+
+    const allowedRoles = ['super_admin', 'admin', 'moderator', 'support_admin'];
+    if (!allowedRoles.includes(role)) {
+      res.status(403).json({
+        authorized: false,
+        error: 'Access Denied: Invalid administrator hierarchy role.',
+      });
+      return;
+    }
+
+    if (!Array.isArray(effectivePermissions) || effectivePermissions.length === 0) {
+      res.status(403).json({
+        authorized: false,
+        error: 'Access Denied: No active administrative permissions assigned.',
+      });
+      return;
+    }
+
+    res.json({
+      authorized: true,
+      role,
+      status: 'active',
+      verifiedAtISO: new Date().toISOString(),
+    });
+  });
+
+  // 6. Server-Side RBAC & Audit Log Verification Endpoint for Admin Dashboard
   app.post('/api/admin/verify-action', (req, res) => {
     const {
       adminEmail = '',

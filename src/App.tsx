@@ -8,6 +8,7 @@ import { Loader2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { DEMO_PRODUCT_LISTINGS } from './data/demoCatalog';
 import {
+  AdminRegistryRecord,
   AppNotificationItem,
   BookingMessageRecord,
   BookingStatus,
@@ -37,8 +38,10 @@ import {
   onAuthStateChanged,
   sendBookingMessageInFirestore,
   signOutUser,
+  subscribeToVerifiedAdminSession,
   updateBookingWorkflowInFirestore,
   updateListingInFirestore,
+  verifyAndLoadAdminSession,
 } from './services/firebase';
 import { Navbar, PageRoute } from './components/Navbar';
 import { Footer, FooterInfoPageKey } from './components/Footer';
@@ -158,6 +161,14 @@ export default function App() {
   const [pendingProtectedRoute, setPendingProtectedRoute] =
     useState<PageRoute | null>(null);
 
+  // Verified Administrator session state (populated after Firebase Auth login & synced in real time)
+  const [verifiedAdminRecord, setVerifiedAdminRecord] =
+    useState<AdminRegistryRecord | null>(null);
+  const [isVerifyingAdminSession, setIsVerifyingAdminSession] = useState(false);
+  const [adminAccessDeniedReason, setAdminAccessDeniedReason] = useState<
+    string | null
+  >(null);
+
   // Bookings, messages, reviews, notifications & modals
   const [bookings, setBookings] = useState<RentalBookingRecord[]>([]);
   const [messagesByBooking, setMessagesByBooking] = useState<
@@ -261,6 +272,35 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Real-time administrator verification & live revocation listener whenever firebaseUser changes
+  useEffect(() => {
+    if (!firebaseUser) {
+      setVerifiedAdminRecord(null);
+      setIsVerifyingAdminSession(false);
+      setAdminAccessDeniedReason(null);
+      return;
+    }
+
+    setIsVerifyingAdminSession(true);
+    const unsubscribeAdmin = subscribeToVerifiedAdminSession(
+      firebaseUser,
+      (res) => {
+        if (res.authorized && res.adminRecord) {
+          setVerifiedAdminRecord(res.adminRecord);
+          setAdminAccessDeniedReason(null);
+        } else {
+          setVerifiedAdminRecord(null);
+          setAdminAccessDeniedReason(res.reason || null);
+        }
+        setIsVerifyingAdminSession(false);
+      }
+    );
+
+    return () => {
+      unsubscribeAdmin();
+    };
+  }, [firebaseUser]);
 
   // Sync browse filters if browser back/forward buttons are used
   useEffect(() => {
@@ -550,10 +590,13 @@ export default function App() {
   const handleLogout = async () => {
     await signOutUser();
     setUserProfile(null);
+    setVerifiedAdminRecord(null);
+    setAdminAccessDeniedReason(null);
     if (
       currentRoute.page === 'profile' ||
       currentRoute.page === 'list-item' ||
-      currentRoute.page === 'dashboard'
+      currentRoute.page === 'dashboard' ||
+      currentRoute.page === 'admin'
     ) {
       handleNavigate({ page: 'home' });
     }
@@ -561,6 +604,19 @@ export default function App() {
 
   const handleAuthenticated = (profile: BorrowBoxUserProfile) => {
     setUserProfile(profile);
+    if (auth.currentUser) {
+      setIsVerifyingAdminSession(true);
+      void verifyAndLoadAdminSession(auth.currentUser).then((res) => {
+        if (res.authorized && res.adminRecord) {
+          setVerifiedAdminRecord(res.adminRecord);
+          setAdminAccessDeniedReason(null);
+        } else {
+          setVerifiedAdminRecord(null);
+          setAdminAccessDeniedReason(res.reason || null);
+        }
+        setIsVerifyingAdminSession(false);
+      });
+    }
     if (pendingProtectedRoute) {
       const target = pendingProtectedRoute;
       setPendingProtectedRoute(null);
@@ -690,6 +746,7 @@ export default function App() {
       return (
         <DashboardPage
           userProfile={userProfile}
+          verifiedAdminRecord={verifiedAdminRecord}
           listings={listings}
           bookings={bookings}
           messagesByBooking={messagesByBooking}
@@ -714,6 +771,7 @@ export default function App() {
       return (
         <ProfilePage
           userProfile={userProfile}
+          verifiedAdminRecord={verifiedAdminRecord}
           onProfileUpdated={setUserProfile}
           onLogout={handleLogout}
           onNavigate={handleNavigate}
@@ -765,6 +823,9 @@ export default function App() {
       <AdminDashboardPage
         firebaseUser={firebaseUser}
         userProfile={userProfile}
+        verifiedAdminRecord={verifiedAdminRecord}
+        isVerifyingAdminSession={isVerifyingAdminSession || isAuthLoading}
+        adminAccessDeniedReason={adminAccessDeniedReason}
         allListings={listings}
         allBookings={bookings}
         allReviews={reviews}
@@ -793,6 +854,7 @@ export default function App() {
         onNavigate={handleNavigate}
         onScrollToHowItWorks={handleScrollToHowItWorks}
         userProfile={userProfile}
+        verifiedAdminRecord={verifiedAdminRecord}
         onLogout={handleLogout}
         rentalRequests={rentalRequests}
         onOpenRequestsModal={() => setIsRequestsModalOpen(true)}

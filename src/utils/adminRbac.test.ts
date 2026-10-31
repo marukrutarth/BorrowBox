@@ -6,6 +6,7 @@ import {
   getAccessibleAdminSections,
   canManageTargetAdmin,
   validateAdminGmail,
+  shouldShowAdminPanelOption,
   PRIMARY_SUPER_ADMIN_EMAIL,
   AdminIdentityRecord,
 } from './adminRbac';
@@ -122,4 +123,38 @@ describe('Admin RBAC & Hierarchy Engine', () => {
     assert.equal(canManageTargetAdmin(superAdmin, 'new.mod@gmail.com', null, 'moderator').allowed, true);
     assert.equal(canManageTargetAdmin(superAdmin, PRIMARY_SUPER_ADMIN_EMAIL, 'super_admin', 'admin').allowed, false);
   });
+
+  it('dynamically displays Admin Panel option only for active verified administrators and revokes on deactivation', () => {
+    assert.equal(shouldShowAdminPanelOption(null), false);
+    assert.equal(shouldShowAdminPanelOption(undefined), false);
+
+    const activeSuperAdmin: AdminIdentityRecord = {
+      uid: 'super-1',
+      email: PRIMARY_SUPER_ADMIN_EMAIL,
+      name: 'Krutarth Maru',
+      role: 'super_admin',
+      status: 'active',
+    };
+    assert.equal(shouldShowAdminPanelOption(activeSuperAdmin), true);
+
+    const deactivatedMod: AdminIdentityRecord = {
+      uid: 'mod-2',
+      email: 'former.mod@gmail.com',
+      name: 'Former Mod',
+      role: 'moderator',
+      status: 'deactivated',
+    };
+    assert.equal(shouldShowAdminPanelOption(deactivatedMod), false);
+
+    const strippedSupport: AdminIdentityRecord = {
+      uid: 'sup-2',
+      email: 'stripped.sup@gmail.com',
+      name: 'Stripped Support',
+      role: 'support_admin',
+      status: 'active',
+      revokedPermissions: ['users.view', 'bookings.view', 'support.manage'],
+    };
+    assert.equal(shouldShowAdminPanelOption(strippedSupport), false);
+  });
 });
+
