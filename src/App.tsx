@@ -894,6 +894,7 @@ export default function App() {
         onNavigate={handleNavigate}
         onScrollToHowItWorks={handleScrollToHowItWorks}
         onOpenWishlist={() => setIsWishlistModalOpen(true)}
+        isWishlistModalOpen={isWishlistModalOpen}
         userProfile={userProfile}
         verifiedAdminRecord={verifiedAdminRecord}
         onLogout={handleLogout}

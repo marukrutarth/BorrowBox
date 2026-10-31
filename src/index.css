@@ -48,14 +48,21 @@
   }
 }
 
-/* 4px-based layout container with exact responsive horizontal padding (20px / 32px / 48px, max 1280px) */
+/* 4px-based layout container with responsive horizontal padding (16px at 320px, 20px at 360px+, 32px tablet, 48px desktop, max 1280px) */
 .bb-container {
   width: 100%;
   max-width: 1280px;
   margin-left: auto;
   margin-right: auto;
-  padding-left: 20px;
-  padding-right: 20px;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+@media (min-width: 360px) {
+  .bb-container {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
 }
 
 @media (min-width: 640px) {
@@ -92,26 +99,77 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* Consistent tactile button finish */
+/* Primary purple CTA button with smooth transitions and 0.98 press scale */
 .bb-glow-button {
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
   transition:
-    background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 200ms cubic-bezier(0.22, 1, 0.36, 1),
     transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.bb-glow-button:hover {
-  box-shadow:
-    0 4px 14px -2px rgba(139, 92, 246, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+@media (hover: hover) {
+  .bb-glow-button:hover {
+    box-shadow:
+      0 6px 18px -3px rgba(139, 92, 246, 0.34),
+      inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
 }
 
 .bb-glow-button:active {
-  transform: translateY(0.5px) scale(0.995);
+  transform: scale(0.98);
+}
+
+/* Secondary / utility button interaction */
+.bb-btn-interactive {
+  transition:
+    background-color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bb-btn-interactive:active {
+  transform: scale(0.98);
+}
+
+/* Product card interaction: 3-4px desktop hover lift, 220ms border & image scale, subtle mobile press feedback */
+.bb-card-interactive {
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (hover: hover) {
+  .bb-card-interactive:hover {
+    transform: translateY(-3.5px);
+    border-color: rgba(139, 92, 246, 0.32);
+    box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.55);
+  }
+
+  .bb-card-interactive:hover .bb-card-image {
+    transform: scale(1.03);
+  }
+}
+
+.bb-card-interactive:active {
+  transform: scale(0.99);
+}
+
+.bb-card-image {
+  transition: transform 230ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* iOS safe-area bottom padding support */
+.bb-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* Hide scrollbar for horizontal mobile category strip while keeping scroll usability */

@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 import {
   AdminRegistryRecord,
   BorrowBoxUserProfile,
   IndianCity,
   RentalRequestRecord,
 } from '../types/marketplace';
+import { headerEntranceVariants } from '../utils/motionVariants';
 import {
   WISHLIST_CHANGE_EVENT,
   loadWishlistIds,
 } from '../utils/wishlist';
 import { DesktopHeader } from './layout/DesktopHeader';
+import { MobileBottomNav } from './layout/MobileBottomNav';
 import { MobileHeader } from './layout/MobileHeader';
 
 export type PageRoute =
@@ -28,6 +31,7 @@ export interface NavbarProps {
   onNavigate: (route: PageRoute) => void;
   onScrollToHowItWorks: () => void;
   onOpenWishlist?: () => void;
+  isWishlistModalOpen?: boolean;
   userProfile: BorrowBoxUserProfile | null;
   verifiedAdminRecord?: AdminRegistryRecord | null;
   onLogout: () => Promise<void>;
@@ -45,6 +49,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onNavigate,
   onScrollToHowItWorks,
   onOpenWishlist,
+  isWishlistModalOpen = false,
   userProfile,
   verifiedAdminRecord = null,
   onLogout,
@@ -60,6 +65,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [wishlistCount, setWishlistCount] = useState<number>(() =>
     loadWishlistIds().length
   );
+  const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
     const onScroll = () => {
@@ -91,47 +97,61 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header
-      className={`sticky top-0 z-40 transition-colors duration-200 border-b border-white/[0.08] ${
-        isScrolled
-          ? 'bg-[#0B0F19]/95 backdrop-blur-md'
-          : 'bg-[#0B0F19]/85 backdrop-blur-sm'
-      }`}
-    >
-      <DesktopHeader
-        currentRoute={currentRoute}
-        onNavigate={onNavigate}
-        onOpenHowItWorks={onScrollToHowItWorks}
-        onOpenWishlist={handleOpenWishlist}
-        wishlistCount={wishlistCount}
-        userProfile={userProfile}
-        verifiedAdminRecord={verifiedAdminRecord}
-        onLogout={onLogout}
-        rentalRequests={rentalRequests}
-        onOpenRequestsModal={onOpenRequestsModal}
-        selectedCity={selectedCity}
-        onCityChange={onCityChange}
-        searchQuery={searchQuery}
-        onSearchQueryChange={onSearchQueryChange}
-        unreadNotificationsCount={unreadNotificationsCount}
-      />
+    <>
+      <motion.header
+        initial={prefersReducedMotion ? false : 'hidden'}
+        animate="visible"
+        variants={headerEntranceVariants}
+        className={`sticky top-0 z-40 transition-colors duration-200 border-b border-white/[0.08] ${
+          isScrolled
+            ? 'bg-[#0B0F19]/95 backdrop-blur-md'
+            : 'bg-[#0B0F19]/85 backdrop-blur-sm'
+        }`}
+      >
+        <DesktopHeader
+          currentRoute={currentRoute}
+          onNavigate={onNavigate}
+          onOpenHowItWorks={onScrollToHowItWorks}
+          onOpenWishlist={handleOpenWishlist}
+          wishlistCount={wishlistCount}
+          userProfile={userProfile}
+          verifiedAdminRecord={verifiedAdminRecord}
+          onLogout={onLogout}
+          rentalRequests={rentalRequests}
+          onOpenRequestsModal={onOpenRequestsModal}
+          selectedCity={selectedCity}
+          onCityChange={onCityChange}
+          searchQuery={searchQuery}
+          onSearchQueryChange={onSearchQueryChange}
+          unreadNotificationsCount={unreadNotificationsCount}
+        />
 
-      <MobileHeader
+        <MobileHeader
+          currentRoute={currentRoute}
+          onNavigate={onNavigate}
+          onOpenHowItWorks={onScrollToHowItWorks}
+          onOpenWishlist={handleOpenWishlist}
+          wishlistCount={wishlistCount}
+          userProfile={userProfile}
+          verifiedAdminRecord={verifiedAdminRecord}
+          onLogout={onLogout}
+          rentalRequests={rentalRequests}
+          onOpenRequestsModal={onOpenRequestsModal}
+          selectedCity={selectedCity}
+          onCityChange={onCityChange}
+          searchQuery={searchQuery}
+          onSearchQueryChange={onSearchQueryChange}
+        />
+      </motion.header>
+
+      <MobileBottomNav
         currentRoute={currentRoute}
         onNavigate={onNavigate}
-        onOpenHowItWorks={onScrollToHowItWorks}
         onOpenWishlist={handleOpenWishlist}
         wishlistCount={wishlistCount}
+        isWishlistModalOpen={isWishlistModalOpen}
         userProfile={userProfile}
-        verifiedAdminRecord={verifiedAdminRecord}
-        onLogout={onLogout}
-        rentalRequests={rentalRequests}
-        onOpenRequestsModal={onOpenRequestsModal}
-        selectedCity={selectedCity}
-        onCityChange={onCityChange}
-        searchQuery={searchQuery}
-        onSearchQueryChange={onSearchQueryChange}
       />
-    </header>
+    </>
   );
 };

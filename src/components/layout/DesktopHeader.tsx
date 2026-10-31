@@ -185,7 +185,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
             type="button"
             aria-expanded={categoriesOpen}
             onClick={() => setCategoriesOpen((prev) => !prev)}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg transition-colors duration-150 cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bb-btn-interactive cursor-pointer ${
               categoriesOpen
                 ? 'text-[#F8FAFC] bg-white/[0.05]'
                 : 'hover:text-[#F8FAFC] hover:bg-white/[0.03]'
@@ -224,7 +224,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
                         onNavigate({ page: 'browse', category });
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
-                      className="w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#1D293B] transition-colors flex items-center justify-between cursor-pointer"
+                      className="w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#1D293B] bb-btn-interactive flex items-center justify-between cursor-pointer"
                     >
                       <span>{CATEGORY_DISPLAY_LABELS[category] || category}</span>
                       <span className="text-[11px] text-[#64748B]">→</span>
@@ -239,7 +239,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
         <button
           type="button"
           onClick={onOpenHowItWorks}
-          className="px-3.5 py-2 rounded-lg hover:text-[#F8FAFC] hover:bg-white/[0.03] transition-colors duration-150 cursor-pointer"
+          className="px-3.5 py-2 rounded-lg hover:text-[#F8FAFC] hover:bg-white/[0.03] bb-btn-interactive cursor-pointer"
         >
           How It Works
         </button>
@@ -254,7 +254,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
             aria-label="Open quick search"
             aria-expanded={searchOpen}
             onClick={() => setSearchOpen((prev) => !prev)}
-            className={`inline-flex items-center gap-2 h-9 px-3 rounded-lg border text-xs font-medium transition-colors duration-150 cursor-pointer ${
+            className={`inline-flex items-center gap-2 h-9 px-3 rounded-lg border text-xs font-medium bb-btn-interactive cursor-pointer ${
               searchOpen || searchQuery
                 ? 'bg-[#1D293B] border-[#8B5CF6]/40 text-[#F8FAFC]'
                 : 'bg-[#161E2E] border-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] hover:border-white/[0.16]'
@@ -313,7 +313,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
                   </div>
                   <button
                     type="submit"
-                    className="px-3.5 py-1.5 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    className="px-3.5 py-1.5 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold rounded-lg bb-glow-button cursor-pointer"
                   >
                     Search
                   </button>
@@ -328,11 +328,11 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
           type="button"
           onClick={onOpenWishlist}
           aria-label={`Wishlist (${wishlistCount} saved items)`}
-          className="relative inline-flex items-center justify-center h-9 px-2.5 rounded-lg bg-[#161E2E] border border-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] hover:border-white/[0.16] transition-colors duration-150 cursor-pointer"
+          className="relative inline-flex items-center justify-center h-9 px-2.5 rounded-lg bg-[#161E2E] border border-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] hover:border-white/[0.16] bb-btn-interactive cursor-pointer"
         >
           <Heart
-            className={`w-4 h-4 ${
-              wishlistCount > 0 ? 'fill-[#8B5CF6] text-[#8B5CF6]' : ''
+            className={`w-4 h-4 transition-transform duration-200 ${
+              wishlistCount > 0 ? 'fill-[#8B5CF6] text-[#8B5CF6] scale-110' : ''
             }`}
           />
           {wishlistCount > 0 && (
@@ -363,7 +363,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
               e.preventDefault();
               onNavigate({ page: 'admin' });
             }}
-            className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-semibold transition-colors duration-150 whitespace-nowrap ${
+            className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-semibold bb-btn-interactive whitespace-nowrap ${
               currentRoute.page === 'admin'
                 ? 'bg-[#8B5CF6] text-white'
                 : 'bg-[#8B5CF6]/15 text-[#F8FAFC] border border-[#8B5CF6]/35 hover:bg-[#8B5CF6]/25'
@@ -385,7 +385,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
             }
             aria-expanded={profileMenuOpen}
             onClick={() => setProfileMenuOpen((prev) => !prev)}
-            className={`inline-flex items-center gap-2 h-9 px-2.5 rounded-lg border transition-colors duration-150 cursor-pointer ${
+            className={`inline-flex items-center gap-2 h-9 px-2.5 rounded-lg border bb-btn-interactive cursor-pointer ${
               profileMenuOpen ||
               currentRoute.page === 'profile' ||
               currentRoute.page === 'dashboard'

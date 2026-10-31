@@ -21,8 +21,8 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenInfoModal,
 }) => {
   return (
-    <footer className="bg-[#0B0F19] border-t border-white/[0.08] text-[#94A3B8] relative z-10">
-      <div className="bb-container py-12 lg:py-16">
+    <footer className="bg-[#0B0F19] border-t border-white/[0.08] text-[#94A3B8] relative z-10 pb-20 md:pb-0">
+      <div className="bb-container py-10 sm:py-12 lg:py-16">
         <div className="grid grid-cols-2 md:grid-cols-12 gap-8 lg:gap-12">
           {/* Brand Summary */}
           <div className="col-span-2 md:col-span-5 space-y-3">
