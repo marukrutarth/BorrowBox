@@ -58,7 +58,6 @@ import { LogoIntroAnimation } from './components/LogoIntroAnimation';
 import {
   DEFAULT_INTRO_TIMING,
   detectPrefersReducedMotion,
-  readSessionIntroPlayed,
   shouldPlayIntroAnimation,
 } from './utils/introAnimation';
 
@@ -149,11 +148,10 @@ export default function App() {
     parseUrlToRoute(window.location.pathname, window.location.search)
   );
 
-  // Initial brand signature intro state (runs once per session, respects prefers-reduced-motion)
+  // Brand signature intro state (plays on every website load/refresh, never replays during internal SPA navigation)
   const [isIntroActive, setIsIntroActive] = useState<boolean>(() =>
     shouldPlayIntroAnimation({
       prefersReducedMotion: detectPrefersReducedMotion(),
-      sessionAlreadyPlayed: readSessionIntroPlayed(),
     })
   );
   const [isInitialRevealTiming, setIsInitialRevealTiming] = useState<boolean>(
@@ -925,7 +923,7 @@ export default function App() {
         <AnimatePresence mode="wait">
           <motion.div
             key={routeTransitionKey}
-            initial={{ opacity: 0, y: isInitialRevealTiming ? 14 : 10 }}
+            initial={{ opacity: 0, y: isInitialRevealTiming ? 12 : 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{

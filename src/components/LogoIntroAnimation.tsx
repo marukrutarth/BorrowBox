@@ -11,97 +11,154 @@ interface LogoIntroAnimationProps {
   isActive: boolean;
   /** Callback fired once the 1.80s intro sequence finishes */
   onComplete: () => void;
+  /** Optional configuration to persist skip state across refreshes (defaults to false so every refresh plays the intro) */
+  persistAcrossRefreshes?: boolean;
 }
 
 /**
- * Minimal, Apple/ASUS-inspired brand signature intro screen for BorrowBox.
+ * Minimal, Apple/Vercel/Linear-inspired brand introduction animation for BorrowBox.
  *
- * Strict Sequential Choreography (1.80s total):
- * 1. Full-screen dark background appears immediately.
- * 2. Centered BorrowBox symbol logo fades in with a very slight scale-up (0.94 -> 1.0).
- * 3. Holds briefly in center without any text or clutter.
- * 4. Symbol smoothly fades out completely while dark background stays solid.
- * 5. Intro background transitions into the website background as homepage content gently rises.
+ * Exact 4-Stage Choreography (1.80s total):
+ * 1. 0.00s - 0.45s (Logo Appearance): Deep black background appears immediately;
+ *    official uploaded BorrowBox symbol logo fades in smoothly (0 -> 1) and scales up slightly (94% -> 100%).
+ * 2. 0.45s - 0.95s (Logo Hold): Logo remains centred and clearly visible (100% scale, opacity 1).
+ * 3. 0.95s - 1.30s (Logo Disappearance): Logo smoothly fades out (1 -> 0) with a slight scale-down (100% -> 96%).
+ * 4. 1.30s - 1.80s (Website Reveal): Intro background smoothly fades away while homepage content
+ *    appears with a subtle fade-in and slight upward movement.
  */
 export const LogoIntroAnimation: React.FC<LogoIntroAnimationProps> = ({
   isActive,
   onComplete,
+  persistAcrossRefreshes = false,
 }) => {
   const [phase, setPhase] = useState<
-    'logo-enter-hold' | 'logo-fade-out' | 'overlay-dissolve'
-  >('logo-enter-hold');
+    'logo-appear-and-hold' | 'logo-disappear' | 'website-reveal'
+  >('logo-appear-and-hold');
 
   useEffect(() => {
     if (!isActive) return;
 
-    markIntroAnimationPlayed();
+    let logoDisappearTimer: number | undefined;
+    let websiteRevealTimer: number | undefined;
+    let finishTimer: number | undefined;
+    let hasStartedTimers = false;
 
-    const logoExitTimer = window.setTimeout(() => {
-      setPhase('logo-fade-out');
-    }, DEFAULT_INTRO_TIMING.logoFadeOutDelaySec * 1000);
+    const startSequenceTimers = () => {
+      if (hasStartedTimers) return;
+      hasStartedTimers = true;
 
-    const overlayDissolveTimer = window.setTimeout(() => {
-      setPhase('overlay-dissolve');
-    }, DEFAULT_INTRO_TIMING.overlayFadeOutDelaySec * 1000);
+      setPhase('logo-appear-and-hold');
+      markIntroAnimationPlayed({ persistAcrossRefreshes });
 
-    const finishTimer = window.setTimeout(() => {
-      onComplete();
-    }, DEFAULT_INTRO_TIMING.totalDurationMs);
+      // Stage 3 begins at 0.95s: Logo Disappearance (0.95s - 1.30s)
+      logoDisappearTimer = window.setTimeout(() => {
+        setPhase('logo-disappear');
+      }, DEFAULT_INTRO_TIMING.logoFadeOutDelaySec * 1000);
+
+      // Stage 4 begins at 1.30s: Website Reveal (1.30s - 1.80s)
+      websiteRevealTimer = window.setTimeout(() => {
+        setPhase('website-reveal');
+      }, DEFAULT_INTRO_TIMING.overlayFadeOutDelaySec * 1000);
+
+      // Complete & unmount overlay at 1.80s
+      finishTimer = window.setTimeout(() => {
+        onComplete();
+      }, DEFAULT_INTRO_TIMING.totalDurationMs);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        startSequenceTimers();
+      }
+    };
+
+    if (
+      typeof document !== 'undefined' &&
+      document.visibilityState === 'hidden'
+    ) {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    } else {
+      startSequenceTimers();
+    }
 
     return () => {
-      window.clearTimeout(logoExitTimer);
-      window.clearTimeout(overlayDissolveTimer);
-      window.clearTimeout(finishTimer);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener(
+          'visibilitychange',
+          handleVisibilityChange
+        );
+      }
+      if (logoDisappearTimer !== undefined) {
+        window.clearTimeout(logoDisappearTimer);
+      }
+      if (websiteRevealTimer !== undefined) {
+        window.clearTimeout(websiteRevealTimer);
+      }
+      if (finishTimer !== undefined) {
+        window.clearTimeout(finishTimer);
+      }
     };
-  }, [isActive, onComplete]);
+  }, [isActive, onComplete, persistAcrossRefreshes]);
 
   return (
     <AnimatePresence>
       {isActive && (
         <motion.div
           key="borrowbox-logo-intro-overlay"
+          data-testid="borrowbox-logo-intro-overlay"
+          data-intro-phase={phase}
           aria-hidden="true"
           initial={{ opacity: 1 }}
           animate={{
-            opacity: phase === 'overlay-dissolve' ? 0 : 1,
+            opacity: phase === 'website-reveal' ? 0 : 1,
           }}
           exit={{ opacity: 0 }}
           transition={{
             duration:
-              phase === 'overlay-dissolve'
+              phase === 'website-reveal'
                 ? DEFAULT_INTRO_TIMING.overlayFadeOutSec
-                : 0.15,
+                : 0.1,
             ease: [0.22, 1, 0.36, 1],
           }}
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-[#090D16] pointer-events-none select-none overflow-hidden"
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-[#070210] pointer-events-none select-none overflow-hidden"
         >
-          {/* Seamless center backdrop matching the logo asset's deep obsidian-indigo tone */}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#080214_0%,#090D16_58%)]" />
+          {/* Deep black-obsidian canvas matching the exact uploaded BorrowBox logo backdrop and dark theme */}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#070210_0%,#090D16_75%)]" />
 
-          {/* Centered BorrowBox Symbol Logo (symbol only, no text) */}
+          {/* Official uploaded BorrowBox symbol logo positioned perfectly in the centre */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.94 }}
+            data-testid="borrowbox-logo-intro-symbol"
+            initial={{
+              opacity: 0,
+              scale: DEFAULT_INTRO_TIMING.initialScale,
+            }}
             animate={
-              phase === 'logo-enter-hold'
-                ? { opacity: 1, scale: 1 }
-                : { opacity: 0, scale: 1.025 }
+              phase === 'logo-appear-and-hold'
+                ? {
+                    opacity: 1,
+                    scale: DEFAULT_INTRO_TIMING.holdScale,
+                  }
+                : {
+                    opacity: 0,
+                    scale: DEFAULT_INTRO_TIMING.exitScale,
+                  }
             }
             transition={{
               duration:
-                phase === 'logo-enter-hold'
+                phase === 'logo-appear-and-hold'
                   ? DEFAULT_INTRO_TIMING.logoFadeInSec
                   : DEFAULT_INTRO_TIMING.logoFadeOutSec,
               ease: [0.22, 1, 0.36, 1],
             }}
-            className="relative flex items-center justify-center w-36 h-36 sm:w-44 sm:h-44"
+            className="relative flex items-center justify-center w-36 h-36 sm:w-44 sm:h-44 aspect-square"
           >
             <img
               src={BORROWBOX_LOGO_ASSET_PATH}
-              alt=""
+              alt="BorrowBox"
               fetchPriority="high"
               decoding="sync"
               draggable={false}
-              className="w-full h-full object-contain mix-blend-lighten [mask-image:radial-gradient(circle_at_center,black_46%,transparent_72%)]"
+              className="w-full h-full object-contain aspect-square"
             />
           </motion.div>
         </motion.div>
