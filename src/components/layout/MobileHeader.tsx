@@ -110,15 +110,13 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
             onNavigate({ page: 'home' });
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          className="inline-flex items-center gap-2 text-base font-bold tracking-tight text-[#F8FAFC] min-h-[44px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8B5CF6]"
+          className="inline-flex items-center gap-1.5 text-base font-bold tracking-tight text-[#F8FAFC] min-h-[44px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8B5CF6]"
         >
-          <span className="w-8 h-8 rounded-lg bg-[#161E2E] border border-white/[0.08] flex items-center justify-center p-1 shrink-0">
-            <img
-              src={BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH}
-              alt=""
-              className="w-full h-full object-contain"
-            />
-          </span>
+          <img
+            src={BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH}
+            alt=""
+            className="w-9 h-9 object-contain shrink-0 -mx-1"
+          />
           <span className="truncate">
             Borrow<span className="text-[#8B5CF6]">Box</span>
           </span>
@@ -269,14 +267,12 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                 >
                   {/* Menu Top Bar with Clear Close Action */}
                   <div className="h-14 px-4 border-b border-white/[0.08] flex items-center justify-between gap-3 shrink-0">
-                    <div className="inline-flex items-center gap-2 text-sm font-bold text-[#F8FAFC]">
-                      <span className="w-7 h-7 rounded-lg bg-[#161E2E] border border-white/[0.08] flex items-center justify-center p-1">
-                        <img
-                          src={BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH}
-                          alt=""
-                          className="w-full h-full object-contain"
-                        />
-                      </span>
+                    <div className="inline-flex items-center gap-1.5 text-sm font-bold text-[#F8FAFC]">
+                      <img
+                        src={BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH}
+                        alt=""
+                        className="w-8 h-8 object-contain shrink-0 -mx-1"
+                      />
                       <span>
                         Borrow<span className="text-[#8B5CF6]">Box</span>
                       </span>

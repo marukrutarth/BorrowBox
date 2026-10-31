@@ -33,15 +33,13 @@ export const Footer: React.FC<FooterProps> = ({
                 onNavigate({ page: 'home' });
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className="inline-flex items-center gap-2.5 text-lg font-bold tracking-tight text-[#F8FAFC]"
+              className="inline-flex items-center gap-2 text-lg font-bold tracking-tight text-[#F8FAFC]"
             >
-              <span className="w-7 h-7 rounded-lg bg-[#161E2E] border border-white/[0.08] flex items-center justify-center p-1">
-                <img
-                  src={BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH}
-                  alt=""
-                  className="w-full h-full object-contain"
-                />
-              </span>
+              <img
+                src={BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH}
+                alt=""
+                className="w-10 h-10 object-contain shrink-0 -mx-1.5"
+              />
               <span>
                 Borrow<span className="text-[#8B5CF6]">Box</span>
               </span>

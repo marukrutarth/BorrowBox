@@ -143,15 +143,13 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
             onNavigate({ page: 'home' });
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          className="group inline-flex items-center gap-2.5 text-lg font-bold tracking-tight text-[#F8FAFC] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#8B5CF6]"
+          className="group inline-flex items-center gap-2 text-lg font-bold tracking-tight text-[#F8FAFC] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#8B5CF6]"
         >
-          <span className="w-8 h-8 rounded-lg bg-[#161E2E] border border-white/[0.08] flex items-center justify-center p-1 group-hover:border-[#8B5CF6]/50 transition-colors duration-150">
-            <img
-              src={BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH}
-              alt=""
-              className="w-full h-full object-contain"
-            />
-          </span>
+          <img
+            src={BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH}
+            alt=""
+            className="w-10 h-10 object-contain shrink-0 -mx-1.5"
+          />
           <span>
             Borrow<span className="text-[#8B5CF6]">Box</span>
           </span>

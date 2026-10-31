@@ -88,6 +88,7 @@ import {
   verifyAndLoadAdminSession,
 } from '../services/firebase';
 import { ProductImage } from '../components/ProductImage';
+import { BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH } from '../utils/introAnimation';
 import { PageRoute } from '../components/Navbar';
 
 interface AdminDashboardPageProps {
@@ -1344,13 +1345,17 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         <div>
           {/* Brand Header */}
           <div className="h-16 px-5 border-b border-white/[0.08] flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <span className="w-8 h-8 rounded-lg bg-[#161E2E] border border-white/[0.1] flex items-center justify-center text-[#8B5CF6]">
-                <Box className="w-4 h-4" />
-              </span>
+            <div className="flex items-center gap-2">
+              <img
+                src={BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH}
+                alt=""
+                className="w-9 h-9 object-contain shrink-0 -mx-1"
+              />
               <div>
                 <div className="text-sm font-bold tracking-tight text-[#F8FAFC] flex items-center gap-1.5">
-                  <span>BorrowBox</span>
+                  <span>
+                    Borrow<span className="text-[#8B5CF6]">Box</span>
+                  </span>
                   <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#8B5CF6]/20 text-[#8B5CF6] border border-[#8B5CF6]/30">
                     Admin
                   </span>
