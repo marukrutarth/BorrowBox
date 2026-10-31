@@ -177,12 +177,17 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
   };
 
   return (
-    <div className="bg-transparent min-h-screen py-10 lg:py-12 text-[#F8FAFC]">
+    <div className="bg-transparent min-h-screen py-12 lg:py-16 text-[#F8FAFC]">
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6">
         {/* Page Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-8 border-b border-white/[0.08]">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-8 border-b border-white/[0.07]"
+        >
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#8B5CF6] mb-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#8B5CF6] mb-1">
               Marketplace Directory
             </p>
             <h1 className="text-2xl sm:text-3xl font-bold text-[#F8FAFC] tracking-tight">
@@ -198,7 +203,7 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
           <div
             role="group"
             aria-label="Filter by listing source"
-            className="inline-flex flex-wrap items-center gap-1 p-1 bg-[#161E2E] border border-white/[0.08] rounded-xl self-start"
+            className="inline-flex flex-wrap items-center gap-1 p-1 bg-[#141C2B] border border-white/[0.07] rounded-xl self-start"
           >
             <button
               type="button"
@@ -234,7 +239,7 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
               Sample Previews ({counts.sample})
             </button>
           </div>
-        </div>
+        </motion.div>
 
         {/* Phase 4 Natural-Language Search Bar */}
         <form

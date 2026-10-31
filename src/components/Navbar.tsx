@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Box,
+  ChevronDown,
   LayoutDashboard,
   MapPin,
   Menu,
@@ -56,10 +57,36 @@ export const Navbar: React.FC<NavbarProps> = ({
   unreadNotificationsCount = 0,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [cityMenuOpen, setCityMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const cityDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onScroll = () => {
+      setIsScrolled(window.scrollY > 16);
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (
+        cityDropdownRef.current &&
+        !cityDropdownRef.current.contains(event.target as Node)
+      ) {
+        setCityMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
 
   const handleNavClick = (e: React.MouseEvent, action: () => void) => {
     e.preventDefault();
     setMobileMenuOpen(false);
+    setCityMenuOpen(false);
     action();
   };
 
@@ -76,6 +103,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleLocationSelect = (newCity: IndianCity | 'All') => {
     onCityChange(newCity);
+    setCityMenuOpen(false);
     if (currentRoute.page === 'browse') {
       onNavigate({
         page: 'browse',
@@ -89,9 +117,15 @@ export const Navbar: React.FC<NavbarProps> = ({
     currentRoute.page === 'browse' || currentRoute.page === 'details';
 
   return (
-    <header className="sticky top-0 z-40 bg-[#0B0F19]/80 backdrop-blur-xl border-b border-white/[0.08]">
+    <header
+      className={`sticky top-0 z-40 transition-all duration-300 ${
+        isScrolled
+          ? 'bg-[#090D16]/90 backdrop-blur-xl border-b border-white/[0.09] shadow-[0_8px_30px_rgba(0,0,0,0.45)]'
+          : 'bg-[#090D16]/60 backdrop-blur-md border-b border-white/[0.05]'
+      }`}
+    >
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-        {/* Left Zone: BorrowBox Wordmark + Location Selector */}
+        {/* Left Zone: BorrowBox Wordmark + Animated City Selector */}
         <div className="flex items-center gap-4 shrink-0">
           <a
             href="/"
@@ -100,7 +134,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }
             className="group inline-flex items-center gap-2.5 text-lg font-bold tracking-tight text-[#F8FAFC] whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#8B5CF6]"
           >
-            <span className="w-8 h-8 rounded-lg bg-[#8B5CF6]/15 border border-[#8B5CF6]/40 flex items-center justify-center text-[#8B5CF6] group-hover:bg-[#8B5CF6] group-hover:text-white transition-colors duration-200">
+            <span className="w-8 h-8 rounded-lg bg-[#141C2B] border border-white/[0.1] flex items-center justify-center text-[#8B5CF6] group-hover:border-[#8B5CF6]/50 transition-colors duration-200">
               <Box className="w-4 h-4" />
             </span>
             <span>
@@ -108,34 +142,73 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </a>
 
-          {/* Location Selector */}
-          <div className="hidden sm:flex items-center gap-1.5 bg-[#161E2E] border border-white/[0.08] hover:border-white/[0.16] rounded-lg px-2.5 py-1.5 transition-colors">
-            <MapPin className="w-3.5 h-3.5 text-[#8B5CF6] shrink-0" />
-            <label htmlFor="navbar-location-select" className="sr-only">
-              Select Location
-            </label>
-            <select
-              id="navbar-location-select"
+          {/* Elegant City Dropdown */}
+          <div ref={cityDropdownRef} className="hidden sm:block relative">
+            <button
+              type="button"
               aria-label="Select Location"
-              value={selectedCity}
-              onChange={(e) =>
-                handleLocationSelect(e.target.value as IndianCity | 'All')
-              }
-              className="bg-transparent text-xs font-medium text-[#F8FAFC] focus:outline-none cursor-pointer"
+              aria-expanded={cityMenuOpen}
+              onClick={() => setCityMenuOpen((prev) => !prev)}
+              className="inline-flex items-center gap-2 bg-[#141C2B] border border-white/[0.07] hover:border-white/[0.16] rounded-lg px-3 py-1.5 text-xs font-medium text-[#F8FAFC] transition-colors duration-200 cursor-pointer"
             >
-              <option value="All" className="bg-[#111827] text-[#F8FAFC]">
-                All India
-              </option>
-              {ALL_CITIES.map((city) => (
-                <option
-                  key={city}
-                  value={city}
-                  className="bg-[#111827] text-[#F8FAFC]"
+              <MapPin className="w-3.5 h-3.5 text-[#8B5CF6] shrink-0" />
+              <span>{selectedCity === 'All' ? 'All India' : selectedCity}</span>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-[#94A3B8] transition-transform duration-200 ${
+                  cityMenuOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            <AnimatePresence>
+              {cityMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                  transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                  role="listbox"
+                  aria-label="Choose city"
+                  className="absolute left-0 mt-2 w-44 rounded-xl bg-[#141C2B] border border-white/[0.09] shadow-2xl py-1.5 z-50"
                 >
-                  {city}
-                </option>
-              ))}
-            </select>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={selectedCity === 'All'}
+                    onClick={() => handleLocationSelect('All')}
+                    className={`w-full text-left px-3.5 py-2 text-xs font-medium transition-colors duration-150 flex items-center justify-between cursor-pointer ${
+                      selectedCity === 'All'
+                        ? 'text-[#F8FAFC] bg-white/[0.06]'
+                        : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-white/[0.04]'
+                    }`}
+                  >
+                    <span>All India</span>
+                    {selectedCity === 'All' && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#8B5CF6]" />
+                    )}
+                  </button>
+                  {ALL_CITIES.map((city) => (
+                    <button
+                      key={city}
+                      type="button"
+                      role="option"
+                      aria-selected={selectedCity === city}
+                      onClick={() => handleLocationSelect(city)}
+                      className={`w-full text-left px-3.5 py-2 text-xs font-medium transition-colors duration-150 flex items-center justify-between cursor-pointer ${
+                        selectedCity === city
+                          ? 'text-[#F8FAFC] bg-white/[0.06]'
+                          : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-white/[0.04]'
+                      }`}
+                    >
+                      <span>{city}</span>
+                      {selectedCity === city && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#8B5CF6]" />
+                      )}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
@@ -153,7 +226,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             value={searchQuery}
             onChange={(e) => onSearchQueryChange(e.target.value)}
             placeholder="Search cameras, tools, PS5..."
-            className="w-full pl-8 pr-3 py-1.5 bg-[#161E2E] border border-white/[0.08] rounded-lg text-xs text-[#F8FAFC] placeholder:text-[#94A3B8] focus:bg-[#1D293B] focus:outline-none focus:border-[#8B5CF6] transition-colors"
+            className="w-full pl-8 pr-3 py-1.5 bg-[#141C2B] border border-white/[0.07] rounded-lg text-xs text-[#F8FAFC] placeholder:text-[#94A3B8] focus:bg-[#1B2538] focus:outline-none focus:border-white/[0.2] transition-colors duration-200"
           />
         </form>
 
@@ -168,17 +241,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={(e) =>
                 handleNavClick(e, () => onNavigate({ page: 'browse' }))
               }
-              className={`relative px-3 py-2 rounded-lg transition-colors whitespace-nowrap shrink-0 ${
+              className={`relative px-3 py-2 rounded-lg transition-colors duration-200 whitespace-nowrap shrink-0 ${
                 isBrowseActive
-                  ? 'text-[#F8FAFC] font-semibold'
-                  : 'hover:text-[#F8FAFC] hover:bg-white/[0.04]'
+                  ? 'text-[#F8FAFC] font-medium'
+                  : 'hover:text-[#F8FAFC]'
               }`}
             >
               <span>Browse</span>
               {isBrowseActive && (
                 <motion.span
                   layoutId="navbar-active-indicator"
-                  className="absolute inset-x-2 -bottom-[11px] h-0.5 bg-[#8B5CF6] rounded-full"
+                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                  className="absolute inset-x-3 -bottom-[11px] h-[2px] bg-[#8B5CF6] rounded-full"
                 />
               )}
             </a>
@@ -188,17 +262,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={(e) =>
                 handleNavClick(e, () => onNavigate({ page: 'list-item' }))
               }
-              className={`relative px-3 py-2 rounded-lg transition-colors whitespace-nowrap shrink-0 ${
+              className={`relative px-3 py-2 rounded-lg transition-colors duration-200 whitespace-nowrap shrink-0 ${
                 currentRoute.page === 'list-item'
-                  ? 'text-[#F8FAFC] font-semibold'
-                  : 'hover:text-[#F8FAFC] hover:bg-white/[0.04]'
+                  ? 'text-[#F8FAFC] font-medium'
+                  : 'hover:text-[#F8FAFC]'
               }`}
             >
               <span>List an Item</span>
               {currentRoute.page === 'list-item' && (
                 <motion.span
                   layoutId="navbar-active-indicator"
-                  className="absolute inset-x-2 -bottom-[11px] h-0.5 bg-[#8B5CF6] rounded-full"
+                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                  className="absolute inset-x-3 -bottom-[11px] h-[2px] bg-[#8B5CF6] rounded-full"
                 />
               )}
             </a>
@@ -208,10 +283,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={(e) =>
                 handleNavClick(e, () => onNavigate({ page: 'dashboard' }))
               }
-              className={`relative inline-flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors whitespace-nowrap shrink-0 ${
+              className={`relative inline-flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors duration-200 whitespace-nowrap shrink-0 ${
                 currentRoute.page === 'dashboard'
-                  ? 'text-[#F8FAFC] font-semibold'
-                  : 'hover:text-[#F8FAFC] hover:bg-white/[0.04]'
+                  ? 'text-[#F8FAFC] font-medium'
+                  : 'hover:text-[#F8FAFC]'
               }`}
             >
               <LayoutDashboard className="w-3.5 h-3.5 text-[#8B5CF6]" />
@@ -224,7 +299,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               {currentRoute.page === 'dashboard' && (
                 <motion.span
                   layoutId="navbar-active-indicator"
-                  className="absolute inset-x-2 -bottom-[11px] h-0.5 bg-[#8B5CF6] rounded-full"
+                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                  className="absolute inset-x-3 -bottom-[11px] h-[2px] bg-[#8B5CF6] rounded-full"
                 />
               )}
             </a>
@@ -232,7 +308,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <a
               href="/#how-it-works"
               onClick={(e) => handleNavClick(e, onScrollToHowItWorks)}
-              className="hidden xl:inline-block px-3 py-2 rounded-lg hover:text-[#F8FAFC] hover:bg-white/[0.04] transition-colors whitespace-nowrap shrink-0"
+              className="hidden xl:inline-block px-3 py-2 rounded-lg hover:text-[#F8FAFC] transition-colors duration-200 whitespace-nowrap shrink-0"
             >
               How It Works
             </a>
@@ -241,7 +317,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 type="button"
                 onClick={onOpenRequestsModal}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[#06B6D4] bg-[#06B6D4]/10 border border-[#06B6D4]/30 hover:bg-[#06B6D4]/20 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[#06B6D4] bg-[#06B6D4]/10 border border-[#06B6D4]/25 hover:bg-[#06B6D4]/15 transition-colors duration-200 whitespace-nowrap shrink-0 cursor-pointer"
               >
                 Requests ({rentalRequests.length})
               </button>
@@ -252,10 +328,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={(e) =>
                 handleNavClick(e, () => onNavigate({ page: 'profile' }))
               }
-              className={`relative inline-flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors whitespace-nowrap shrink-0 ${
+              className={`relative inline-flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors duration-200 whitespace-nowrap shrink-0 ${
                 currentRoute.page === 'profile'
-                  ? 'text-[#F8FAFC] font-semibold'
-                  : 'hover:text-[#F8FAFC] hover:bg-white/[0.04]'
+                  ? 'text-[#F8FAFC] font-medium'
+                  : 'hover:text-[#F8FAFC]'
               }`}
             >
               <User className="w-3.5 h-3.5 text-[#94A3B8]" />
@@ -267,7 +343,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               {currentRoute.page === 'profile' && (
                 <motion.span
                   layoutId="navbar-active-indicator"
-                  className="absolute inset-x-2 -bottom-[11px] h-0.5 bg-[#8B5CF6] rounded-full"
+                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                  className="absolute inset-x-3 -bottom-[11px] h-[2px] bg-[#8B5CF6] rounded-full"
                 />
               )}
             </a>
@@ -278,7 +355,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={() => {
                   void onLogout();
                 }}
-                className="px-3 py-2 rounded-lg hover:text-[#F8FAFC] hover:bg-white/[0.04] transition-colors whitespace-nowrap shrink-0 text-[#94A3B8] cursor-pointer"
+                className="px-3 py-2 rounded-lg hover:text-[#F8FAFC] transition-colors duration-200 whitespace-nowrap shrink-0 text-[#94A3B8] cursor-pointer"
               >
                 Log Out
               </button>
@@ -288,17 +365,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={(e) =>
                   handleNavClick(e, () => onNavigate({ page: 'login' }))
                 }
-                className={`relative px-3 py-2 rounded-lg transition-colors whitespace-nowrap shrink-0 ${
+                className={`relative px-3 py-2 rounded-lg transition-colors duration-200 whitespace-nowrap shrink-0 ${
                   currentRoute.page === 'login'
-                    ? 'text-[#F8FAFC] font-semibold'
-                    : 'hover:text-[#F8FAFC] hover:bg-white/[0.04]'
+                    ? 'text-[#F8FAFC] font-medium'
+                    : 'hover:text-[#F8FAFC]'
                 }`}
               >
                 <span>Login</span>
                 {currentRoute.page === 'login' && (
                   <motion.span
                     layoutId="navbar-active-indicator"
-                    className="absolute inset-x-2 -bottom-[11px] h-0.5 bg-[#8B5CF6] rounded-full"
+                    transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                    className="absolute inset-x-3 -bottom-[11px] h-[2px] bg-[#8B5CF6] rounded-full"
                   />
                 )}
               </a>
@@ -311,7 +389,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 type="button"
                 onClick={() => onNavigate({ page: 'list-item' })}
-                className="hidden sm:inline-flex px-3.5 py-2 text-xs font-semibold text-white bg-[#8B5CF6] hover:bg-[#7C3AED] rounded-lg transition-all bb-glow-button whitespace-nowrap shrink-0 cursor-pointer"
+                className="hidden sm:inline-flex px-4 py-2 text-xs font-semibold text-white bg-[#8B5CF6] hover:bg-[#7C3AED] rounded-lg bb-glow-button whitespace-nowrap shrink-0 cursor-pointer"
               >
                 + List Item
               </button>
@@ -319,7 +397,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 type="button"
                 onClick={() => onNavigate({ page: 'signup' })}
-                className="px-3.5 py-2 text-xs font-semibold text-white bg-[#8B5CF6] hover:bg-[#7C3AED] rounded-lg transition-all bb-glow-button whitespace-nowrap shrink-0 cursor-pointer"
+                className="px-4 py-2 text-xs font-semibold text-white bg-[#8B5CF6] hover:bg-[#7C3AED] rounded-lg bb-glow-button whitespace-nowrap shrink-0 cursor-pointer"
               >
                 Sign Up
               </button>
@@ -334,7 +412,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }
               aria-expanded={mobileMenuOpen}
               onClick={() => setMobileMenuOpen((prev) => !prev)}
-              className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-lg border border-white/[0.08] bg-[#161E2E] text-[#F8FAFC] hover:bg-[#1D293B] cursor-pointer"
+              className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-lg border border-white/[0.08] bg-[#141C2B] text-[#F8FAFC] hover:bg-[#1B2538] transition-colors duration-200 cursor-pointer"
             >
               {mobileMenuOpen ? (
                 <X className="w-5 h-5" />
@@ -353,9 +431,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
             aria-label="Mobile Navigation"
-            className="md:hidden bg-[#111827] border-b border-white/[0.08] px-4 pt-3 pb-5 space-y-3 overflow-hidden"
+            className="md:hidden bg-[#0F1523] border-b border-white/[0.08] px-4 pt-3 pb-5 space-y-3 overflow-hidden"
           >
             {/* Mobile Search & Location Controls */}
             <form onSubmit={handleNavbarSearchSubmit} className="space-y-2">
@@ -367,11 +445,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                   value={searchQuery}
                   onChange={(e) => onSearchQueryChange(e.target.value)}
                   placeholder="Search cameras, tools, consoles..."
-                  className="w-full pl-9 pr-3 py-2 bg-[#161E2E] border border-white/[0.08] rounded-lg text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
+                  className="w-full pl-9 pr-3 py-2 bg-[#141C2B] border border-white/[0.08] rounded-lg text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-white/[0.2]"
                 />
               </div>
 
-              <div className="flex items-center gap-2 bg-[#161E2E] border border-white/[0.08] rounded-lg px-3 py-2">
+              <div className="flex items-center gap-2 bg-[#141C2B] border border-white/[0.08] rounded-lg px-3 py-2">
                 <MapPin className="w-4 h-4 text-[#8B5CF6] shrink-0" />
                 <label
                   htmlFor="mobile-location-select"
@@ -387,11 +465,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                   }
                   className="w-full bg-transparent text-xs font-semibold text-[#F8FAFC] focus:outline-none"
                 >
-                  <option value="All" className="bg-[#111827]">
+                  <option value="All" className="bg-[#0F1523]">
                     All India
                   </option>
                   {ALL_CITIES.map((city) => (
-                    <option key={city} value={city} className="bg-[#111827]">
+                    <option key={city} value={city} className="bg-[#0F1523]">
                       {city}
                     </option>
                   ))}
@@ -405,7 +483,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={(e) =>
                   handleNavClick(e, () => onNavigate({ page: 'browse' }))
                 }
-                className="block px-3 py-2.5 rounded-lg text-sm font-medium text-[#F8FAFC] hover:bg-[#161E2E]"
+                className="block px-3 py-2.5 rounded-lg text-sm font-medium text-[#F8FAFC] hover:bg-[#141C2B]"
               >
                 Browse
               </a>
@@ -414,7 +492,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={(e) =>
                   handleNavClick(e, () => onNavigate({ page: 'list-item' }))
                 }
-                className="block px-3 py-2.5 rounded-lg text-sm font-medium text-[#F8FAFC] hover:bg-[#161E2E]"
+                className="block px-3 py-2.5 rounded-lg text-sm font-medium text-[#F8FAFC] hover:bg-[#141C2B]"
               >
                 List an Item
               </a>
@@ -423,7 +501,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={(e) =>
                   handleNavClick(e, () => onNavigate({ page: 'dashboard' }))
                 }
-                className="block px-3 py-2.5 rounded-lg text-sm font-medium text-[#F8FAFC] hover:bg-[#161E2E]"
+                className="block px-3 py-2.5 rounded-lg text-sm font-medium text-[#F8FAFC] hover:bg-[#141C2B]"
               >
                 Dashboard
               </a>
@@ -432,14 +510,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={(e) =>
                   handleNavClick(e, () => onNavigate({ page: 'profile' }))
                 }
-                className="block px-3 py-2.5 rounded-lg text-sm font-medium text-[#F8FAFC] hover:bg-[#161E2E]"
+                className="block px-3 py-2.5 rounded-lg text-sm font-medium text-[#F8FAFC] hover:bg-[#141C2B]"
               >
                 {userProfile ? `Profile (${userProfile.name})` : 'Profile'}
               </a>
               <a
                 href="/#how-it-works"
                 onClick={(e) => handleNavClick(e, onScrollToHowItWorks)}
-                className="block px-3 py-2.5 rounded-lg text-sm font-medium text-[#F8FAFC] hover:bg-[#161E2E]"
+                className="block px-3 py-2.5 rounded-lg text-sm font-medium text-[#F8FAFC] hover:bg-[#141C2B]"
               >
                 How It Works
               </a>
@@ -450,7 +528,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     setMobileMenuOpen(false);
                     onOpenRequestsModal();
                   }}
-                  className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold text-[#06B6D4] hover:bg-[#161E2E]"
+                  className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold text-[#06B6D4] hover:bg-[#141C2B]"
                 >
                   My Rental Requests ({rentalRequests.length})
                 </button>
@@ -462,7 +540,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     setMobileMenuOpen(false);
                     void onLogout();
                   }}
-                  className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium text-[#94A3B8] hover:bg-[#161E2E]"
+                  className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium text-[#94A3B8] hover:bg-[#141C2B]"
                 >
                   Log Out
                 </button>
@@ -472,7 +550,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onClick={(e) =>
                     handleNavClick(e, () => onNavigate({ page: 'login' }))
                   }
-                  className="block px-3 py-2.5 rounded-lg text-sm font-medium text-[#F8FAFC] hover:bg-[#161E2E]"
+                  className="block px-3 py-2.5 rounded-lg text-sm font-medium text-[#F8FAFC] hover:bg-[#141C2B]"
                 >
                   Login
                 </a>

@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowRight,
+  ArrowUpRight,
   Calculator,
   Camera,
   CheckCircle2,
@@ -21,9 +22,8 @@ import {
   Sparkles,
   TrendingUp,
   Wrench,
-  Zap,
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, useScroll, useTransform } from 'motion/react';
 import { CATEGORY_DIRECTORY } from '../data/demoCatalog';
 import {
   CategoryName,
@@ -54,15 +54,17 @@ interface HomePageProps {
 }
 
 const CATEGORY_ICONS: Record<CategoryName, React.ReactNode> = {
-  Photography: <Camera className="w-5 h-5 text-[#8B5CF6]" />,
-  Gaming: <Gamepad2 className="w-5 h-5 text-[#8B5CF6]" />,
-  Electronics: <Cpu className="w-5 h-5 text-[#8B5CF6]" />,
-  Tools: <Wrench className="w-5 h-5 text-[#8B5CF6]" />,
-  Outdoor: <Compass className="w-5 h-5 text-[#8B5CF6]" />,
-  'Musical Instruments': <Music className="w-5 h-5 text-[#8B5CF6]" />,
-  Events: <Sparkles className="w-5 h-5 text-[#8B5CF6]" />,
-  Education: <GraduationCap className="w-5 h-5 text-[#8B5CF6]" />,
+  Photography: <Camera className="w-4 h-4 text-[#8B5CF6]" />,
+  Gaming: <Gamepad2 className="w-4 h-4 text-[#8B5CF6]" />,
+  Electronics: <Cpu className="w-4 h-4 text-[#8B5CF6]" />,
+  Tools: <Wrench className="w-4 h-4 text-[#8B5CF6]" />,
+  Outdoor: <Compass className="w-4 h-4 text-[#8B5CF6]" />,
+  'Musical Instruments': <Music className="w-4 h-4 text-[#8B5CF6]" />,
+  Events: <Sparkles className="w-4 h-4 text-[#8B5CF6]" />,
+  Education: <GraduationCap className="w-4 h-4 text-[#8B5CF6]" />,
 };
+
+const EASE_OUT_CINEMATIC: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 export const HomePage: React.FC<HomePageProps> = ({
   listings,
@@ -75,15 +77,24 @@ export const HomePage: React.FC<HomePageProps> = ({
 }) => {
   const [heroSearchQuery, setHeroSearchQuery] = useState('');
   const [heroCategory, setHeroCategory] = useState<CategoryName | 'All'>('All');
+  const [heroSpotlightIndex, setHeroSpotlightIndex] = useState(0);
   const [nearbySourceFilter, setNearbySourceFilter] =
     useState<ListingSourceFilter>('all');
   const [howItWorksTab, setHowItWorksTab] = useState<'borrower' | 'owner'>(
     'borrower'
   );
 
+  // Subtle scroll parallax for the hero product showcase
+  const heroSectionRef = useRef<HTMLElement | null>(null);
+  const { scrollYProgress } = useScroll({
+    target: heroSectionRef,
+    offset: ['start start', 'end start'],
+  });
+  const heroImageParallaxY = useTransform(scrollYProgress, [0, 1], [0, -24]);
+
   // Interactive Rent-vs-Buy Calculator state on Homepage
   const [calcItemId, setCalcItemId] = useState<string>(
-    listings[0]?.id || 'bb-cam-01'
+    listings[0]?.id || 'bb-ind-101'
   );
   const [calcDaysPerTrip, setCalcDaysPerTrip] = useState(3);
   const [calcTripsPerYear, setCalcTripsPerYear] = useState(4);
@@ -120,6 +131,9 @@ export const HomePage: React.FC<HomePageProps> = ({
     const base = cityMatches.length >= 3 ? cityMatches : listings;
     return base.slice(0, 3);
   }, [listings, selectedCity]);
+
+  const activeHeroListing =
+    heroArrangementListings[heroSpotlightIndex] || heroArrangementListings[0];
 
   const nearbyListings = useMemo(() => {
     return filterAndSortListings(listings, {
@@ -177,46 +191,73 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   return (
     <div className="bg-transparent text-[#F8FAFC]">
-      {/* 1. Hero Section */}
-      <section className="relative border-b border-white/[0.08] pt-12 pb-16 lg:pt-20 lg:pb-24 overflow-hidden bb-grid-pattern">
+      {/* 1. Cinematic, Minimal Hero Section */}
+      <section
+        ref={heroSectionRef}
+        className="relative border-b border-white/[0.07] pt-14 pb-20 lg:pt-24 lg:pb-28 overflow-hidden"
+      >
+        {/* Soft Ambient Lighting Around Hero Only */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[420px] bg-gradient-to-b from-[#8B5CF6]/15 via-[#06B6D4]/5 to-transparent blur-3xl -z-10"
+          className="pointer-events-none absolute top-8 right-[10%] w-[520px] h-[360px] rounded-full bg-gradient-to-tr from-[#8B5CF6]/12 via-[#06B6D4]/6 to-transparent blur-3xl -z-10"
         />
 
         <div className="max-w-[1280px] mx-auto px-4 sm:px-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center mb-12">
-            {/* Hero Left Copy & CTAs */}
-            <motion.div
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease: 'easeOut' }}
-              className="lg:col-span-7 space-y-6"
-            >
-              <div className="inline-flex items-center gap-2 text-xs font-semibold tracking-wider uppercase text-[#06B6D4]">
-                <Zap className="w-3.5 h-3.5 text-[#8B5CF6]" />
-                <span>Rent What You Need. Earn From What You Own.</span>
-              </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-14 items-center mb-14">
+            {/* Hero Left: Staggered Typography & Elegant CTAs */}
+            <div className="lg:col-span-7 space-y-7">
+              <motion.p
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, ease: EASE_OUT_CINEMATIC }}
+                className="text-xs font-semibold tracking-[0.14em] uppercase text-[#06B6D4]"
+              >
+                Rent What You Need · Earn From What You Own
+              </motion.p>
 
-              <h1
-                className="text-4xl sm:text-5xl lg:text-[3.5rem] font-extrabold text-[#F8FAFC] tracking-tight leading-[1.08]"
+              <motion.h1
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  duration: 0.58,
+                  delay: 0.06,
+                  ease: EASE_OUT_CINEMATIC,
+                }}
+                className="text-4xl sm:text-5xl lg:text-[3.65rem] font-extrabold text-[#F8FAFC] tracking-tight leading-[1.06]"
                 style={{ textWrap: 'balance' }}
               >
                 Why Buy It When You Can{' '}
-                <span className="bg-gradient-to-r from-[#8B5CF6] via-[#A78BFA] to-[#06B6D4] bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-[#F8FAFC] via-[#C4B5FD] to-[#8B5CF6] bg-clip-text text-transparent">
                   Borrow It?
                 </span>
-              </h1>
+              </motion.h1>
 
-              <p className="text-base sm:text-lg text-[#94A3B8] leading-relaxed max-w-2xl">
-                Access pro cameras, PS5 consoles, power tools, trekking gear,
-                and 4K projectors from verified neighbors across Indian cities —
-                or list your idle equipment to earn recurring income in Indian
-                Rupees (₹).
-              </p>
+              <motion.p
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  duration: 0.55,
+                  delay: 0.12,
+                  ease: EASE_OUT_CINEMATIC,
+                }}
+                className="text-base sm:text-lg text-[#94A3B8] leading-relaxed max-w-xl"
+              >
+                Rent studio cameras, PlayStation 5 consoles, power tools, and
+                trekking equipment from verified neighbors across Indian cities —
+                or list your idle gear to earn in Indian Rupees (₹).
+              </motion.p>
 
-              {/* Prominent CTAs: Explore Items (Rent an Item) & List Your Item */}
-              <div className="flex flex-wrap items-center gap-4 pt-1">
+              {/* Elegant CTAs */}
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  duration: 0.5,
+                  delay: 0.18,
+                  ease: EASE_OUT_CINEMATIC,
+                }}
+                className="flex flex-wrap items-center gap-3.5 pt-1"
+              >
                 <button
                   type="button"
                   onClick={() => {
@@ -226,10 +267,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                     });
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className="inline-flex items-center gap-2 px-6 py-3.5 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-semibold rounded-xl transition-all bb-glow-button whitespace-nowrap shrink-0 cursor-pointer"
+                  className="group inline-flex items-center gap-2 px-6 py-3.5 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-semibold rounded-xl bb-glow-button whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <span>Explore Items</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <ArrowRight className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-0.5" />
                 </button>
                 <button
                   type="button"
@@ -237,132 +278,160 @@ export const HomePage: React.FC<HomePageProps> = ({
                     onNavigate({ page: 'list-item' });
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className="px-6 py-3.5 bg-[#161E2E] hover:bg-[#1D293B] text-[#F8FAFC] border border-white/[0.12] hover:border-[#8B5CF6]/50 text-sm font-semibold rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer"
+                  className="px-6 py-3.5 bg-[#141C2B] hover:bg-[#1B2538] text-[#F8FAFC] border border-white/[0.09] hover:border-white/[0.18] text-sm font-semibold rounded-xl transition-colors duration-200 whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   List Your Item
                 </button>
-              </div>
+              </motion.div>
 
-              {/* Supported Hubs */}
-              <div className="pt-2 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-[#94A3B8]">
-                <span className="font-semibold text-[#F8FAFC]">
-                  Active Hubs:
+              {/* Quiet Supported Hubs Line */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.55, delay: 0.24 }}
+                className="pt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[#94A3B8]"
+              >
+                <span className="font-medium text-[#F8FAFC]">Active Cities</span>
+                <span aria-hidden="true" className="text-white/20">
+                  ·
                 </span>
                 <span>Bengaluru</span>
-                <span>·</span>
+                <span aria-hidden="true" className="text-white/20">
+                  ·
+                </span>
                 <span>Mumbai</span>
-                <span>·</span>
+                <span aria-hidden="true" className="text-white/20">
+                  ·
+                </span>
                 <span>Delhi NCR</span>
-                <span>·</span>
+                <span aria-hidden="true" className="text-white/20">
+                  ·
+                </span>
                 <span>Hyderabad</span>
-                <span>·</span>
+                <span aria-hidden="true" className="text-white/20">
+                  ·
+                </span>
                 <span>Pune</span>
-                <span>·</span>
+                <span aria-hidden="true" className="text-white/20">
+                  ·
+                </span>
                 <span>Chennai</span>
-              </div>
-            </motion.div>
+              </motion.div>
+            </div>
 
-            {/* Hero Right: Multi-Card Interactive Product Arrangement */}
+            {/* Hero Right: Single Striking Product Composition with Subtle Float & Parallax */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.45, delay: 0.1, ease: 'easeOut' }}
-              className="lg:col-span-5 space-y-4"
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                duration: 0.65,
+                delay: 0.14,
+                ease: EASE_OUT_CINEMATIC,
+              }}
+              style={{ y: heroImageParallaxY }}
+              className="lg:col-span-5"
             >
-              {heroArrangementListings[0] && (
-                <div className="bg-[#161E2E] border border-white/[0.08] rounded-2xl p-4 shadow-2xl space-y-4 relative overflow-hidden">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-[#8B5CF6]">
-                      {heroArrangementListings[0].isDemoData
-                        ? 'Featured Catalog Spotlight'
-                        : 'Community Listing Spotlight'}
-                    </span>
-                    <span className="text-[#94A3B8] font-mono-tabular">
-                      Instant ₹ Quote & QR Handover
-                    </span>
-                  </div>
+              {activeHeroListing && (
+                <div className="bb-animate-float">
+                  <div className="rounded-2xl bg-[#141C2B] border border-white/[0.08] overflow-hidden shadow-[0_24px_60px_rgba(0,0,0,0.55)]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onNavigate({
+                          page: 'details',
+                          itemId: activeHeroListing.id,
+                        });
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className="group block w-full text-left cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#8B5CF6]"
+                    >
+                      <div className="aspect-[4/3] w-full overflow-hidden bg-[#1B2538] relative">
+                        <ProductImage
+                          srcKeyOrUrl={activeHeroListing.imageUrl}
+                          alt={activeHeroListing.title}
+                          className="w-full h-full group-hover:scale-[1.03] transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                        />
+                      </div>
 
-                  {/* Primary Spotlight Product */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onNavigate({
-                        page: 'details',
-                        itemId: heroArrangementListings[0].id,
-                      });
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                    className="group w-full text-left rounded-xl overflow-hidden bg-[#111827] border border-white/[0.08] hover:border-[#8B5CF6]/50 transition-all cursor-pointer"
-                  >
-                    <div className="aspect-[16/10] w-full overflow-hidden relative">
-                      <ProductImage
-                        srcKeyOrUrl={heroArrangementListings[0].imageUrl}
-                        alt={heroArrangementListings[0].title}
-                        className="w-full h-full group-hover:scale-105 transition-transform duration-500"
-                      />
-                      <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
-                        <div className="bg-[#0B0F19]/85 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/[0.1]">
-                          <p className="text-xs font-semibold text-[#F8FAFC] truncate max-w-[24ch]">
-                            {heroArrangementListings[0].title}
+                      <div className="p-5 flex items-end justify-between gap-4 border-t border-white/[0.07]">
+                        <div className="min-w-0 space-y-1">
+                          <p className="text-[11px] font-medium uppercase tracking-wider text-[#8B5CF6]">
+                            {activeHeroListing.category} ·{' '}
+                            {activeHeroListing.city}
                           </p>
-                          <p className="text-[11px] text-[#94A3B8]">
-                            {heroArrangementListings[0].neighborhood},{' '}
-                            {heroArrangementListings[0].city}
+                          <h2 className="text-base font-semibold text-[#F8FAFC] truncate group-hover:text-white transition-colors">
+                            {activeHeroListing.title}
+                          </h2>
+                          <p className="text-xs text-[#94A3B8] font-mono-tabular">
+                            Refundable deposit{' '}
+                            {formatINR(activeHeroListing.refundableDepositINR)}
                           </p>
                         </div>
-                        <div className="bg-[#8B5CF6] text-white px-3 py-1.5 rounded-lg font-mono-tabular text-xs font-bold shrink-0">
-                          {formatINR(heroArrangementListings[0].dailyPriceINR)}
-                          /day
+
+                        <div className="text-right shrink-0">
+                          <p className="text-lg font-bold text-[#F8FAFC] font-mono-tabular">
+                            {formatINR(activeHeroListing.dailyPriceINR)}
+                            <span className="text-xs font-normal text-[#94A3B8]">
+                              /day
+                            </span>
+                          </p>
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-[#06B6D4] mt-0.5">
+                            <span>View item</span>
+                            <ArrowUpRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                          </span>
                         </div>
                       </div>
-                    </div>
-                  </button>
+                    </button>
 
-                  {/* Secondary Mini Arrangement Pair */}
-                  {heroArrangementListings.length > 1 && (
-                    <div className="grid grid-cols-2 gap-3">
-                      {heroArrangementListings.slice(1, 3).map((mini) => (
-                        <button
-                          key={mini.id}
-                          type="button"
-                          onClick={() => {
-                            onNavigate({ page: 'details', itemId: mini.id });
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                          }}
-                          className="group text-left p-2.5 rounded-xl bg-[#111827] border border-white/[0.08] hover:border-[#06B6D4]/50 transition-all flex items-center gap-3 cursor-pointer"
+                    {/* Minimal Composition Switcher */}
+                    {heroArrangementListings.length > 1 && (
+                      <div className="px-5 py-3 bg-[#0F1523] border-t border-white/[0.06] flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-[#94A3B8]">
+                          Featured Spotlight
+                        </span>
+                        <div
+                          role="tablist"
+                          aria-label="Select featured hero product"
+                          className="flex items-center gap-1.5"
                         >
-                          <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-white/[0.08]">
-                            <ProductImage
-                              srcKeyOrUrl={mini.imageUrl}
-                              alt={mini.title}
-                              className="w-full h-full group-hover:scale-110 transition-transform duration-300"
-                            />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-[#F8FAFC] truncate group-hover:text-[#06B6D4] transition-colors">
-                              {mini.title}
-                            </p>
-                            <p className="text-[11px] font-mono-tabular text-[#8B5CF6] font-semibold mt-0.5">
-                              {formatINR(mini.dailyPriceINR)}/day
-                            </p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                          {heroArrangementListings.map((item, idx) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              role="tab"
+                              aria-selected={heroSpotlightIndex === idx}
+                              aria-label={`Spotlight ${idx + 1}: ${item.title}`}
+                              onClick={() => setHeroSpotlightIndex(idx)}
+                              className={`px-2.5 py-1 rounded-md text-[11px] font-mono-tabular transition-colors duration-200 cursor-pointer ${
+                                heroSpotlightIndex === idx
+                                  ? 'bg-[#8B5CF6] text-white font-semibold'
+                                  : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-white/[0.05]'
+                              }`}
+                            >
+                              0{idx + 1}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </motion.div>
           </div>
 
-          {/* Prominent Search Bar */}
+          {/* Smooth Search Bar Interaction */}
           <motion.form
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.18 }}
+            transition={{
+              duration: 0.55,
+              delay: 0.22,
+              ease: EASE_OUT_CINEMATIC,
+            }}
             onSubmit={handleHeroSearch}
             aria-label="Search rental items"
-            className="bg-[#161E2E]/90 backdrop-blur-xl border border-white/[0.08] rounded-2xl p-4 sm:p-5 shadow-2xl"
+            className="bg-[#141C2B]/90 backdrop-blur-xl border border-white/[0.07] focus-within:border-white/[0.16] rounded-2xl p-4 sm:p-5 transition-colors duration-250 shadow-[0_16px_40px_rgba(0,0,0,0.35)]"
           >
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 items-center">
               <div className="md:col-span-5">
@@ -380,7 +449,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     value={heroSearchQuery}
                     onChange={(e) => setHeroSearchQuery(e.target.value)}
                     placeholder="Try Sony A7 IV, PS5, Bosch Drill, Camping Tent..."
-                    className="w-full pl-10 pr-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:bg-[#1D293B] focus:outline-none focus:border-[#8B5CF6] transition-colors"
+                    className="w-full pl-10 pr-3.5 py-2.5 bg-[#0F1523] border border-white/[0.07] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:bg-[#1B2538] focus:outline-none focus:border-white/[0.22] transition-colors duration-200"
                   />
                 </div>
               </div>
@@ -398,7 +467,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   onChange={(e) =>
                     onCityChange(e.target.value as IndianCity | 'All')
                   }
-                  className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:bg-[#1D293B] focus:outline-none focus:border-[#8B5CF6] transition-colors"
+                  className="w-full px-3.5 py-2.5 bg-[#0F1523] border border-white/[0.07] rounded-xl text-sm text-[#F8FAFC] focus:bg-[#1B2538] focus:outline-none focus:border-white/[0.22] transition-colors duration-200"
                 >
                   <option value="All">All Indian Cities</option>
                   {ALL_CITIES.map((city) => (
@@ -422,7 +491,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   onChange={(e) =>
                     setHeroCategory(e.target.value as CategoryName | 'All')
                   }
-                  className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:bg-[#1D293B] focus:outline-none focus:border-[#8B5CF6] transition-colors"
+                  className="w-full px-3.5 py-2.5 bg-[#0F1523] border border-white/[0.07] rounded-xl text-sm text-[#F8FAFC] focus:bg-[#1B2538] focus:outline-none focus:border-white/[0.22] transition-colors duration-200"
                 >
                   <option value="All">All Categories</option>
                   {ALL_CATEGORIES.map((cat) => (
@@ -436,7 +505,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               <div className="md:col-span-2 md:pt-5">
                 <button
                   type="submit"
-                  className="w-full py-2.5 px-4 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-semibold rounded-xl transition-all bb-glow-button whitespace-nowrap shrink-0 cursor-pointer"
+                  className="w-full py-2.5 px-4 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-semibold rounded-xl bb-glow-button whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   Search Gear
                 </button>
@@ -447,12 +516,18 @@ export const HomePage: React.FC<HomePageProps> = ({
       </section>
 
       {/* 2. Popular Categories Section */}
-      <section className="py-16 lg:py-22 border-b border-white/[0.08] bg-[#111827]/75">
+      <section className="py-20 lg:py-24 border-b border-white/[0.07] bg-[#0F1523]/70">
         <div className="max-w-[1280px] mx-auto px-4 sm:px-6">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-60px' }}
+            transition={{ duration: 0.55, ease: EASE_OUT_CINEMATIC }}
+            className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-12"
+          >
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#8B5CF6] mb-1.5">
-                Curated Equipment Verticals
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#8B5CF6] mb-1.5">
+                Equipment Verticals
               </p>
               <h2 className="text-2xl sm:text-3xl font-bold text-[#F8FAFC] tracking-tight">
                 Popular Categories
@@ -472,11 +547,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                 });
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className="text-sm font-semibold text-[#8B5CF6] hover:text-[#A78BFA] whitespace-nowrap shrink-0 self-start sm:self-auto cursor-pointer"
+              className="text-sm font-semibold text-[#8B5CF6] hover:text-[#A78BFA] transition-colors duration-200 whitespace-nowrap shrink-0 self-start sm:self-auto cursor-pointer"
             >
               Browse Full Catalog →
             </button>
-          </div>
+          </motion.div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {CATEGORY_DIRECTORY.map((cat, idx) => {
@@ -496,11 +571,15 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <motion.button
                   key={cat.name}
                   type="button"
-                  initial={{ opacity: 0, y: 12 }}
+                  initial={{ opacity: 0, y: 14 }}
                   whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.28, delay: idx * 0.04 }}
-                  whileHover={{ y: -3 }}
+                  viewport={{ once: true, margin: '-40px' }}
+                  transition={{
+                    duration: 0.5,
+                    delay: idx * 0.035,
+                    ease: EASE_OUT_CINEMATIC,
+                  }}
+                  whileHover={{ y: -2 }}
                   onClick={() => {
                     onNavigate({
                       page: 'browse',
@@ -509,22 +588,22 @@ export const HomePage: React.FC<HomePageProps> = ({
                     });
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className="group text-left p-5 bg-[#161E2E] border border-white/[0.08] hover:border-[#8B5CF6]/50 rounded-xl transition-all flex flex-col justify-between gap-4 cursor-pointer"
+                  className="group text-left p-5 bg-[#141C2B] border border-white/[0.07] hover:border-white/[0.16] rounded-xl transition-colors duration-250 flex flex-col justify-between gap-5 cursor-pointer"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="text-base font-semibold text-[#F8FAFC] group-hover:text-[#8B5CF6] transition-colors">
+                      <h3 className="text-base font-semibold text-[#F8FAFC] group-hover:text-white transition-colors duration-200">
                         {cat.name}
                       </h3>
                       <p className="text-xs text-[#94A3B8] mt-1 leading-relaxed">
                         {cat.summary}
                       </p>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-[#1D293B] border border-white/[0.06] shrink-0 group-hover:border-[#8B5CF6]/40 transition-colors">
+                    <div className="p-2.5 rounded-lg bg-[#1B2538] border border-white/[0.06] shrink-0">
                       {CATEGORY_ICONS[cat.name]}
                     </div>
                   </div>
-                  <div className="pt-3 border-t border-white/[0.08] flex items-center justify-between text-xs text-[#94A3B8]">
+                  <div className="pt-3 border-t border-white/[0.06] flex items-center justify-between text-xs text-[#94A3B8]">
                     <span className="tabular-nums">{countLabel}</span>
                     <span className="font-mono-tabular font-semibold text-[#F8FAFC]">
                       From {formatINR(cat.startingPriceINR)}/day
@@ -538,11 +617,17 @@ export const HomePage: React.FC<HomePageProps> = ({
       </section>
 
       {/* 3. Featured & Nearby Rental Products Section */}
-      <section className="py-16 lg:py-22 border-b border-white/[0.08] bg-[#0B0F19]">
-        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 space-y-6">
-          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+      <section className="py-20 lg:py-24 border-b border-white/[0.07] bg-[#090D16]">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 space-y-8">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-60px' }}
+            transition={{ duration: 0.55, ease: EASE_OUT_CINEMATIC }}
+            className="flex flex-col lg:flex-row lg:items-end justify-between gap-4"
+          >
             <div>
-              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#06B6D4] mb-1.5">
+              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[#06B6D4] mb-1.5">
                 <MapPin className="w-3.5 h-3.5" />
                 <span>
                   {selectedCity === 'All'
@@ -563,12 +648,12 @@ export const HomePage: React.FC<HomePageProps> = ({
             <div
               role="group"
               aria-label="Filter listings by source"
-              className="inline-flex flex-wrap items-center gap-1 p-1 bg-[#161E2E] border border-white/[0.08] rounded-xl self-start"
+              className="inline-flex flex-wrap items-center gap-1 p-1 bg-[#141C2B] border border-white/[0.07] rounded-xl self-start"
             >
               <button
                 type="button"
                 onClick={() => setNearbySourceFilter('all')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors duration-200 cursor-pointer ${
                   nearbySourceFilter === 'all'
                     ? 'bg-[#8B5CF6] text-white'
                     : 'text-[#94A3B8] hover:text-[#F8FAFC]'
@@ -579,7 +664,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               <button
                 type="button"
                 onClick={() => setNearbySourceFilter('community')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors duration-200 cursor-pointer ${
                   nearbySourceFilter === 'community'
                     ? 'bg-[#8B5CF6] text-white'
                     : 'text-[#94A3B8] hover:text-[#F8FAFC]'
@@ -590,7 +675,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               <button
                 type="button"
                 onClick={() => setNearbySourceFilter('sample')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors duration-200 cursor-pointer ${
                   nearbySourceFilter === 'sample'
                     ? 'bg-[#8B5CF6] text-white'
                     : 'text-[#94A3B8] hover:text-[#F8FAFC]'
@@ -599,7 +684,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 Sample Previews ({nearbyCounts.sample})
               </button>
             </div>
-          </div>
+          </motion.div>
 
           {/* Quick City Filter Bar */}
           <div
@@ -610,10 +695,10 @@ export const HomePage: React.FC<HomePageProps> = ({
             <button
               type="button"
               onClick={() => onCityChange('All')}
-              className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
+              className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors duration-200 cursor-pointer ${
                 selectedCity === 'All'
                   ? 'bg-[#8B5CF6] text-white'
-                  : 'bg-[#161E2E] border border-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#1D293B]'
+                  : 'bg-[#141C2B] border border-white/[0.07] text-[#94A3B8] hover:text-[#F8FAFC] hover:border-white/[0.15]'
               }`}
             >
               All Cities
@@ -623,10 +708,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                 key={city}
                 type="button"
                 onClick={() => onCityChange(city)}
-                className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
+                className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors duration-200 cursor-pointer ${
                   selectedCity === city
                     ? 'bg-[#8B5CF6] text-white'
-                    : 'bg-[#161E2E] border border-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#1D293B]'
+                    : 'bg-[#141C2B] border border-white/[0.07] text-[#94A3B8] hover:text-[#F8FAFC] hover:border-white/[0.15]'
                 }`}
               >
                 {city}
@@ -636,7 +721,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
           {/* Honest Catalog Transparency Banner */}
           {nearbySourceFilter !== 'community' && nearbyCounts.sample > 0 && (
-            <div className="p-3.5 rounded-xl bg-[#161E2E] border border-white/[0.08] flex items-start gap-2.5 text-xs text-[#94A3B8]">
+            <div className="p-3.5 rounded-xl bg-[#141C2B] border border-white/[0.07] flex items-start gap-2.5 text-xs text-[#94A3B8]">
               <Info className="w-4 h-4 text-[#06B6D4] shrink-0 mt-0.5" />
               <div>
                 <strong className="text-[#F8FAFC]">
@@ -670,16 +755,16 @@ export const HomePage: React.FC<HomePageProps> = ({
               {[0, 1, 2].map((skeletonIdx) => (
                 <div
                   key={skeletonIdx}
-                  className="bg-[#161E2E] border border-white/[0.08] rounded-xl overflow-hidden animate-pulse"
+                  className="bg-[#141C2B] border border-white/[0.07] rounded-xl overflow-hidden animate-pulse"
                 >
-                  <div className="aspect-[4/3] bg-[#1D293B]" />
+                  <div className="aspect-[4/3] bg-[#1B2538]" />
                   <div className="p-5 space-y-3">
-                    <div className="h-3 w-1/3 bg-[#1D293B] rounded" />
-                    <div className="h-5 w-3/4 bg-[#1D293B] rounded" />
-                    <div className="h-3 w-1/2 bg-[#1D293B] rounded" />
-                    <div className="pt-3 border-t border-white/[0.08] flex justify-between">
-                      <div className="h-6 w-24 bg-[#1D293B] rounded" />
-                      <div className="h-6 w-20 bg-[#1D293B] rounded" />
+                    <div className="h-3 w-1/3 bg-[#1B2538] rounded" />
+                    <div className="h-5 w-3/4 bg-[#1B2538] rounded" />
+                    <div className="h-3 w-1/2 bg-[#1B2538] rounded" />
+                    <div className="pt-3 border-t border-white/[0.06] flex justify-between">
+                      <div className="h-6 w-24 bg-[#1B2538] rounded" />
+                      <div className="h-6 w-20 bg-[#1B2538] rounded" />
                     </div>
                   </div>
                 </div>
@@ -709,7 +794,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               )}
             </div>
           ) : nearbyListings.length === 0 ? (
-            <div className="py-14 px-6 bg-[#161E2E] border border-white/[0.08] rounded-xl max-w-xl mx-auto text-center space-y-4">
+            <div className="py-14 px-6 bg-[#141C2B] border border-white/[0.07] rounded-xl max-w-xl mx-auto text-center space-y-4">
               <h3 className="text-lg font-semibold text-[#F8FAFC]">
                 {nearbySourceFilter === 'community'
                   ? `No user-created community listings in ${
@@ -738,7 +823,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <button
                     type="button"
                     onClick={() => setNearbySourceFilter('all')}
-                    className="px-4 py-2.5 bg-[#1D293B] hover:bg-[#334155] text-[#F8FAFC] border border-white/[0.08] text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    className="px-4 py-2.5 bg-[#1B2538] hover:bg-[#243147] text-[#F8FAFC] border border-white/[0.08] text-xs font-semibold rounded-lg transition-colors cursor-pointer"
                   >
                     Show Sample Previews
                   </button>
@@ -747,7 +832,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <button
                     type="button"
                     onClick={() => onCityChange('All')}
-                    className="px-4 py-2.5 bg-[#1D293B] hover:bg-[#334155] text-[#F8FAFC] border border-white/[0.08] text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    className="px-4 py-2.5 bg-[#1B2538] hover:bg-[#243147] text-[#F8FAFC] border border-white/[0.08] text-xs font-semibold rounded-lg transition-colors cursor-pointer"
                   >
                     Reset to All Cities
                   </button>
@@ -759,10 +844,14 @@ export const HomePage: React.FC<HomePageProps> = ({
               {nearbyListings.slice(0, 6).map((item, idx) => (
                 <motion.div
                   key={item.id}
-                  initial={{ opacity: 0, y: 16 }}
+                  initial={{ opacity: 0, y: 18 }}
                   whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.3, delay: idx * 0.05 }}
+                  viewport={{ once: true, margin: '-40px' }}
+                  transition={{
+                    duration: 0.52,
+                    delay: idx * 0.045,
+                    ease: EASE_OUT_CINEMATIC,
+                  }}
                 >
                   <ProductCard
                     listing={item}
@@ -779,12 +868,18 @@ export const HomePage: React.FC<HomePageProps> = ({
       </section>
 
       {/* 4. Why Choose BorrowBox & Rent-vs-Buy Calculator Section */}
-      <section className="py-16 lg:py-22 border-b border-white/[0.08] bg-[#111827]/80">
-        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 space-y-14">
+      <section className="py-20 lg:py-24 border-b border-white/[0.07] bg-[#0F1523]/75">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 space-y-16">
           {/* Why Choose BorrowBox Pillars */}
-          <div className="space-y-8">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-60px' }}
+            transition={{ duration: 0.55, ease: EASE_OUT_CINEMATIC }}
+            className="space-y-8"
+          >
             <div className="max-w-2xl">
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#8B5CF6] mb-1.5">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#8B5CF6] mb-1.5">
                 Why Choose BorrowBox
               </p>
               <h2 className="text-2xl sm:text-3xl font-bold text-[#F8FAFC] tracking-tight">
@@ -797,9 +892,9 @@ export const HomePage: React.FC<HomePageProps> = ({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="p-6 rounded-xl bg-[#161E2E] border border-white/[0.08] space-y-3">
-                <div className="w-10 h-10 rounded-lg bg-[#8B5CF6]/15 border border-[#8B5CF6]/30 flex items-center justify-center text-[#8B5CF6]">
-                  <TrendingUp className="w-5 h-5" />
+              <div className="p-6 rounded-xl bg-[#141C2B] border border-white/[0.07] space-y-3">
+                <div className="w-9 h-9 rounded-lg bg-[#1B2538] border border-white/[0.08] flex items-center justify-center text-[#8B5CF6]">
+                  <TrendingUp className="w-4 h-4" />
                 </div>
                 <h3 className="text-base font-semibold text-[#F8FAFC]">
                   Save Up to 90% Over Buying New
@@ -811,9 +906,9 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </p>
               </div>
 
-              <div className="p-6 rounded-xl bg-[#161E2E] border border-white/[0.08] space-y-3">
-                <div className="w-10 h-10 rounded-lg bg-[#06B6D4]/15 border border-[#06B6D4]/30 flex items-center justify-center text-[#06B6D4]">
-                  <QrCode className="w-5 h-5" />
+              <div className="p-6 rounded-xl bg-[#141C2B] border border-white/[0.07] space-y-3">
+                <div className="w-9 h-9 rounded-lg bg-[#1B2538] border border-white/[0.08] flex items-center justify-center text-[#06B6D4]">
+                  <QrCode className="w-4 h-4" />
                 </div>
                 <h3 className="text-base font-semibold text-[#F8FAFC]">
                   QR Code & Timestamped Handovers
@@ -824,9 +919,9 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </p>
               </div>
 
-              <div className="p-6 rounded-xl bg-[#161E2E] border border-white/[0.08] space-y-3">
-                <div className="w-10 h-10 rounded-lg bg-[#22C55E]/15 border border-[#22C55E]/30 flex items-center justify-center text-[#22C55E]">
-                  <Lock className="w-5 h-5" />
+              <div className="p-6 rounded-xl bg-[#141C2B] border border-white/[0.07] space-y-3">
+                <div className="w-9 h-9 rounded-lg bg-[#1B2538] border border-white/[0.08] flex items-center justify-center text-[#22C55E]">
+                  <Lock className="w-4 h-4" />
                 </div>
                 <h3 className="text-base font-semibold text-[#F8FAFC]">
                   Protected Security Deposits in ₹
@@ -838,14 +933,20 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </p>
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* Interactive Rent-vs-Buy Calculator */}
           {selectedCalcListing && rentVsBuyResult && (
-            <div className="p-6 sm:p-8 border border-white/[0.08] rounded-2xl bg-[#161E2E] shadow-2xl">
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-60px' }}
+              transition={{ duration: 0.58, ease: EASE_OUT_CINEMATIC }}
+              className="p-6 sm:p-8 border border-white/[0.07] rounded-2xl bg-[#141C2B]"
+            >
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
                 <div className="lg:col-span-6 space-y-4">
-                  <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#06B6D4]">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[#06B6D4]">
                     <Calculator className="w-4 h-4 text-[#8B5CF6]" />
                     <span>Smart Financial Decision Tool</span>
                   </div>
@@ -870,7 +971,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                         id="home-calc-item"
                         value={selectedCalcListing.id}
                         onChange={(e) => setCalcItemId(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
+                        className="w-full px-3.5 py-2.5 bg-[#0F1523] border border-white/[0.07] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-white/[0.2]"
                       >
                         {listings.map((item) => (
                           <option key={item.id} value={item.id}>
@@ -939,9 +1040,9 @@ export const HomePage: React.FC<HomePageProps> = ({
                   </div>
                 </div>
 
-                <div className="lg:col-span-6 p-6 bg-[#111827] border border-white/[0.08] rounded-xl space-y-4">
+                <div className="lg:col-span-6 p-6 bg-[#0F1523] border border-white/[0.07] rounded-xl space-y-4">
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 rounded-xl bg-[#161E2E] border border-white/[0.08]">
+                    <div className="p-4 rounded-xl bg-[#141C2B] border border-white/[0.07]">
                       <p className="text-xs text-[#94A3B8]">
                         Annual Rental Cost ({rentVsBuyResult.plannedDaysPerYear}{' '}
                         days/yr)
@@ -950,7 +1051,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                         {formatINR(rentVsBuyResult.estimatedRentalCostINR)}
                       </p>
                     </div>
-                    <div className="p-4 rounded-xl bg-[#161E2E] border border-white/[0.08]">
+                    <div className="p-4 rounded-xl bg-[#141C2B] border border-white/[0.07]">
                       <p className="text-xs text-[#94A3B8]">
                         Retail Purchase Price
                       </p>
@@ -960,7 +1061,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="p-4 rounded-xl bg-[#141C2B] border border-white/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <p className="text-xs font-semibold text-[#F8FAFC]">
                         Recommendation:{' '}
@@ -983,22 +1084,28 @@ export const HomePage: React.FC<HomePageProps> = ({
                         });
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
-                      className="px-4 py-2 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold rounded-lg shrink-0 cursor-pointer"
+                      className="px-4 py-2 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold rounded-lg bb-glow-button shrink-0 cursor-pointer"
                     >
                       Inspect Item
                     </button>
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
 
           {/* Personalized Recommendations */}
           {personalizedRecs.length > 0 && (
-            <div className="space-y-5">
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-60px' }}
+              transition={{ duration: 0.55, ease: EASE_OUT_CINEMATIC }}
+              className="space-y-5"
+            >
               <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-[#06B6D4] mb-1">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#06B6D4] mb-1">
                     Tailored For Your City & Interests
                   </p>
                   <h3 className="text-xl font-bold text-[#F8FAFC]">
@@ -1021,7 +1128,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   />
                 ))}
               </div>
-            </div>
+            </motion.div>
           )}
         </div>
       </section>
@@ -1029,12 +1136,18 @@ export const HomePage: React.FC<HomePageProps> = ({
       {/* 5. How BorrowBox Works Section */}
       <section
         id="how-it-works"
-        className="py-16 lg:py-22 border-b border-white/[0.08] bg-[#0B0F19]"
+        className="py-20 lg:py-24 border-b border-white/[0.07] bg-[#090D16]"
       >
         <div className="max-w-[1280px] mx-auto px-4 sm:px-6">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-60px' }}
+            transition={{ duration: 0.55, ease: EASE_OUT_CINEMATIC }}
+            className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12"
+          >
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#8B5CF6] mb-1.5">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#8B5CF6] mb-1.5">
                 Simple 3-Step Workflow
               </p>
               <h2 className="text-2xl sm:text-3xl font-bold text-[#F8FAFC] tracking-tight">
@@ -1051,14 +1164,14 @@ export const HomePage: React.FC<HomePageProps> = ({
             <div
               role="tablist"
               aria-label="How It Works Perspective"
-              className="inline-flex items-center gap-1 p-1 bg-[#161E2E] border border-white/[0.08] rounded-xl self-start"
+              className="inline-flex items-center gap-1 p-1 bg-[#141C2B] border border-white/[0.07] rounded-xl self-start"
             >
               <button
                 type="button"
                 role="tab"
                 aria-selected={howItWorksTab === 'borrower'}
                 onClick={() => setHowItWorksTab('borrower')}
-                className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors duration-200 whitespace-nowrap shrink-0 cursor-pointer ${
                   howItWorksTab === 'borrower'
                     ? 'bg-[#8B5CF6] text-white'
                     : 'text-[#94A3B8] hover:text-[#F8FAFC]'
@@ -1071,7 +1184,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 role="tab"
                 aria-selected={howItWorksTab === 'owner'}
                 onClick={() => setHowItWorksTab('owner')}
-                className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors duration-200 whitespace-nowrap shrink-0 cursor-pointer ${
                   howItWorksTab === 'owner'
                     ? 'bg-[#8B5CF6] text-white'
                     : 'text-[#94A3B8] hover:text-[#F8FAFC]'
@@ -1080,11 +1193,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                 For Item Owners
               </button>
             </div>
-          </div>
+          </motion.div>
 
           {howItWorksTab === 'borrower' ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="p-6 border border-white/[0.08] rounded-xl bg-[#161E2E] space-y-2.5">
+              <div className="p-6 border border-white/[0.07] rounded-xl bg-[#141C2B] space-y-2.5">
                 <p className="text-xs font-mono-tabular font-semibold text-[#8B5CF6]">
                   01. Find Gear Nearby
                 </p>
@@ -1097,7 +1210,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   refundable deposit terms.
                 </p>
               </div>
-              <div className="p-6 border border-white/[0.08] rounded-xl bg-[#161E2E] space-y-2.5">
+              <div className="p-6 border border-white/[0.07] rounded-xl bg-[#141C2B] space-y-2.5">
                 <p className="text-xs font-mono-tabular font-semibold text-[#06B6D4]">
                   02. Reserve Dates & Verify
                 </p>
@@ -1110,7 +1223,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   and submit a rental request.
                 </p>
               </div>
-              <div className="p-6 border border-white/[0.08] rounded-xl bg-[#161E2E] space-y-2.5">
+              <div className="p-6 border border-white/[0.07] rounded-xl bg-[#141C2B] space-y-2.5">
                 <p className="text-xs font-mono-tabular font-semibold text-[#22C55E]">
                   03. Pick Up, Use & Return
                 </p>
@@ -1126,7 +1239,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="p-6 border border-white/[0.08] rounded-xl bg-[#161E2E] space-y-2.5">
+              <div className="p-6 border border-white/[0.07] rounded-xl bg-[#141C2B] space-y-2.5">
                 <p className="text-xs font-mono-tabular font-semibold text-[#8B5CF6]">
                   01. List for Free
                 </p>
@@ -1139,7 +1252,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   deposit, minimum rental days, and usage rules.
                 </p>
               </div>
-              <div className="p-6 border border-white/[0.08] rounded-xl bg-[#161E2E] space-y-2.5">
+              <div className="p-6 border border-white/[0.07] rounded-xl bg-[#141C2B] space-y-2.5">
                 <p className="text-xs font-mono-tabular font-semibold text-[#06B6D4]">
                   02. Review Rental Requests
                 </p>
@@ -1152,7 +1265,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   locality via private booking chat.
                 </p>
               </div>
-              <div className="p-6 border border-white/[0.08] rounded-xl bg-[#161E2E] space-y-2.5">
+              <div className="p-6 border border-white/[0.07] rounded-xl bg-[#141C2B] space-y-2.5">
                 <p className="text-xs font-mono-tabular font-semibold text-[#22C55E]">
                   03. Earn From Unused Gear
                 </p>
@@ -1171,10 +1284,16 @@ export const HomePage: React.FC<HomePageProps> = ({
       </section>
 
       {/* 6. Trust and Safety + Verified Review Architecture */}
-      <section className="py-16 lg:py-22 border-b border-white/[0.08] bg-[#111827]/75">
+      <section className="py-20 lg:py-24 border-b border-white/[0.07] bg-[#0F1523]/70">
         <div className="max-w-[1280px] mx-auto px-4 sm:px-6 space-y-12">
-          <div className="max-w-2xl">
-            <div className="flex items-center gap-2 text-[#06B6D4] text-xs font-semibold uppercase tracking-wider mb-2">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-60px' }}
+            transition={{ duration: 0.55, ease: EASE_OUT_CINEMATIC }}
+            className="max-w-2xl"
+          >
+            <div className="flex items-center gap-2 text-[#06B6D4] text-xs font-semibold uppercase tracking-[0.12em] mb-2">
               <ShieldCheck className="w-4 h-4 text-[#8B5CF6]" />
               <span>Neighborhood Trust & Safety</span>
             </div>
@@ -1185,11 +1304,11 @@ export const HomePage: React.FC<HomePageProps> = ({
               Sharing high-value equipment requires honest verification status,
               clear deposit terms, and structured handover checklists.
             </p>
-          </div>
+          </motion.div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="p-5 border border-white/[0.08] bg-[#161E2E] rounded-xl space-y-2">
-              <CheckCircle2 className="w-5 h-5 text-[#8B5CF6]" />
+            <div className="p-5 border border-white/[0.07] bg-[#141C2B] rounded-xl space-y-2">
+              <CheckCircle2 className="w-4 h-4 text-[#8B5CF6]" />
               <h3 className="text-sm font-semibold text-[#F8FAFC]">
                 In-Person ID Check at Handover
               </h3>
@@ -1198,8 +1317,8 @@ export const HomePage: React.FC<HomePageProps> = ({
                 person during pickup alongside the booking QR verification code.
               </p>
             </div>
-            <div className="p-5 border border-white/[0.08] bg-[#161E2E] rounded-xl space-y-2">
-              <CheckCircle2 className="w-5 h-5 text-[#06B6D4]" />
+            <div className="p-5 border border-white/[0.07] bg-[#141C2B] rounded-xl space-y-2">
+              <CheckCircle2 className="w-4 h-4 text-[#06B6D4]" />
               <h3 className="text-sm font-semibold text-[#F8FAFC]">
                 Refundable Security Deposits
               </h3>
@@ -1208,8 +1327,8 @@ export const HomePage: React.FC<HomePageProps> = ({
                 protect against accidental damage or missing accessories.
               </p>
             </div>
-            <div className="p-5 border border-white/[0.08] bg-[#161E2E] rounded-xl space-y-2">
-              <CheckCircle2 className="w-5 h-5 text-[#22C55E]" />
+            <div className="p-5 border border-white/[0.07] bg-[#141C2B] rounded-xl space-y-2">
+              <CheckCircle2 className="w-4 h-4 text-[#22C55E]" />
               <h3 className="text-sm font-semibold text-[#F8FAFC]">
                 Accessory & Condition Checklist
               </h3>
@@ -1218,8 +1337,8 @@ export const HomePage: React.FC<HomePageProps> = ({
                 notes so both parties can test the device at pickup and return.
               </p>
             </div>
-            <div className="p-5 border border-white/[0.08] bg-[#161E2E] rounded-xl space-y-2">
-              <CheckCircle2 className="w-5 h-5 text-[#8B5CF6]" />
+            <div className="p-5 border border-white/[0.07] bg-[#141C2B] rounded-xl space-y-2">
+              <CheckCircle2 className="w-4 h-4 text-[#8B5CF6]" />
               <h3 className="text-sm font-semibold text-[#F8FAFC]">
                 100% Verified Rental Reviews
               </h3>
@@ -1234,14 +1353,20 @@ export const HomePage: React.FC<HomePageProps> = ({
       </section>
 
       {/* 7. Final Call-to-Action Section */}
-      <section className="py-16 lg:py-24 bg-[#0B0F19]">
+      <section className="py-20 lg:py-26 bg-[#090D16]">
         <div className="max-w-[1280px] mx-auto px-4 sm:px-6">
-          <div className="relative overflow-hidden rounded-2xl bg-[#161E2E] border border-white/[0.08] p-8 sm:p-12 lg:p-16 text-center space-y-6">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-60px' }}
+            transition={{ duration: 0.58, ease: EASE_OUT_CINEMATIC }}
+            className="relative overflow-hidden rounded-2xl bg-[#141C2B] border border-white/[0.07] p-8 sm:p-12 lg:p-16 text-center space-y-6"
+          >
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[520px] h-[260px] bg-[#8B5CF6]/20 blur-[100px]"
+              className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[480px] h-[220px] bg-[#8B5CF6]/12 blur-[100px]"
             />
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#06B6D4] relative z-10">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#06B6D4] relative z-10">
               Start Sharing Across India Today
             </p>
             <h2
@@ -1262,7 +1387,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   onNavigate({ page: 'browse' });
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="px-6 py-3.5 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-semibold rounded-xl transition-all bb-glow-button cursor-pointer"
+                className="px-6 py-3.5 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-sm font-semibold rounded-xl bb-glow-button cursor-pointer"
               >
                 Explore Items
               </button>
@@ -1272,12 +1397,12 @@ export const HomePage: React.FC<HomePageProps> = ({
                   onNavigate({ page: 'list-item' });
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="px-6 py-3.5 bg-[#1D293B] hover:bg-[#334155] text-[#F8FAFC] border border-white/[0.1] text-sm font-semibold rounded-xl transition-colors cursor-pointer"
+                className="px-6 py-3.5 bg-[#1B2538] hover:bg-[#243147] text-[#F8FAFC] border border-white/[0.09] text-sm font-semibold rounded-xl transition-colors duration-200 cursor-pointer"
               >
                 List Your Item
               </button>
             </div>
-          </div>
+          </motion.div>
         </div>
       </section>
     </div>

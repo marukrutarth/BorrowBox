@@ -26,8 +26,8 @@ export const Footer: React.FC<FooterProps> = ({
   };
 
   return (
-    <footer className="bg-[#0B0F19] border-t border-white/[0.08] text-[#94A3B8] relative z-10">
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-14 lg:py-18">
+    <footer className="bg-[#090D16] border-t border-white/[0.07] text-[#94A3B8] relative z-10">
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-16 lg:py-20">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
           {/* Brand Column */}
           <div className="md:col-span-1 space-y-4">
