@@ -65,16 +65,34 @@ export interface ServerEmailDeliveryLog {
   ticketId: string;
   ticketNumber: string;
   eventType: 'TICKET_OPENED' | 'TICKET_CLOSED';
+  fromEmail: string;
+  replyToEmail: string;
   recipientEmail: string;
   recipientName: string;
   subject: string;
   textBody: string;
   htmlBody: string;
   status: 'sent' | 'failed';
-  provider: 'resend' | 'sendgrid' | 'smtp_webhook' | 'borrowbox_transactional_relay';
+  provider: 'resend';
+  providerMessageId?: string;
   sentAtISO: string;
   errorMessage?: string;
   retryCount: number;
+}
+
+export interface ServerAdminAuditLog {
+  id: string;
+  adminId: string;
+  adminEmail: string;
+  adminRole: string;
+  action: string;
+  targetType: 'support_ticket';
+  targetId: string;
+  targetLabel: string;
+  previousValue: string;
+  newValue: string;
+  isOverride: boolean;
+  createdAtISO: string;
 }
 
 export interface ServerSupportNotification {
@@ -139,6 +157,7 @@ interface PersistedSupportStore {
   historyByTicket: Record<string, ServerSupportHistoryEvent[]>;
   emailLogs: Record<string, ServerEmailDeliveryLog>;
   notifications: ServerSupportNotification[];
+  auditLogs: ServerAdminAuditLog[];
 }
 
 const STORE_FILE_PATH = path.join(process.cwd(), '.support-tickets-state.json');
@@ -159,6 +178,7 @@ function loadPersistedStore(): PersistedSupportStore {
         notifications: Array.isArray(parsed.notifications)
           ? parsed.notifications
           : [],
+        auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
       };
     }
   } catch {
@@ -170,6 +190,7 @@ function loadPersistedStore(): PersistedSupportStore {
     historyByTicket: {},
     emailLogs: {},
     notifications: [],
+    auditLogs: [],
   };
 }
 
@@ -427,6 +448,20 @@ export function buildTicketClosedEmailPayload(params: {
   return { subject, textBody, htmlBody };
 }
 
+export function resolveFormattedSenderEmail(): string {
+  const rawFrom = (
+    process.env.SUPPORT_FROM_EMAIL || 'BorrowBox <onboarding@resend.dev>'
+  ).trim();
+  if (rawFrom.includes('<') && rawFrom.includes('>')) {
+    return rawFrom;
+  }
+  return `BorrowBox Support <${rawFrom}>`;
+}
+
+export function resolveReplyToEmail(): string {
+  return (process.env.SUPPORT_REPLY_TO_EMAIL || '').trim();
+}
+
 async function dispatchTransactionalEmail(params: {
   recipientEmail: string;
   recipientName: string;
@@ -435,140 +470,125 @@ async function dispatchTransactionalEmail(params: {
   htmlBody: string;
 }): Promise<{
   status: 'sent' | 'failed';
-  provider: 'resend' | 'sendgrid' | 'smtp_webhook' | 'borrowbox_transactional_relay';
+  provider: 'resend';
+  fromEmail: string;
+  replyToEmail: string;
+  providerMessageId?: string;
   errorMessage?: string;
 }> {
-  const fromEmail = process.env.SUPPORT_FROM_EMAIL || 'support@borrowbox.in';
+  const fromEmail = resolveFormattedSenderEmail();
+  const replyToEmail = resolveReplyToEmail();
   const resendKey = (process.env.RESEND_API_KEY || '').trim();
-  const sendgridKey = (process.env.SENDGRID_API_KEY || '').trim();
-  const smtpWebhookUrl = (process.env.SMTP_WEBHOOK_URL || '').trim();
 
-  if (!params.recipientEmail || !params.recipientEmail.includes('@')) {
+  if (
+    !params.recipientEmail ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(params.recipientEmail.trim())
+  ) {
     return {
       status: 'failed',
-      provider: 'borrowbox_transactional_relay',
+      provider: 'resend',
+      fromEmail,
+      replyToEmail,
       errorMessage: 'Invalid customer recipient email address.',
     };
   }
 
-  // 1. Resend API provider if configured
-  if (resendKey && resendKey.length > 8) {
-    try {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: `BorrowBox Support <${fromEmail}>`,
-          to: [params.recipientEmail],
-          subject: params.subject,
-          text: params.textBody,
-          html: params.htmlBody,
-        }),
-      });
-      if (!response.ok) {
-        const errText = await response.text();
-        return {
-          status: 'failed',
-          provider: 'resend',
-          errorMessage: `Resend HTTP ${response.status}: ${errText.slice(0, 180)}`,
-        };
-      }
-      return { status: 'sent', provider: 'resend' };
-    } catch (error) {
+  if (!resendKey || resendKey.length <= 8) {
+    return {
+      status: 'failed',
+      provider: 'resend',
+      fromEmail,
+      replyToEmail,
+      errorMessage:
+        'RESEND_API_KEY is not configured in server environment variables.',
+    };
+  }
+
+  try {
+    const payload: Record<string, unknown> = {
+      from: fromEmail,
+      to: [params.recipientEmail.trim()],
+      subject: params.subject,
+      text: params.textBody,
+      html: params.htmlBody,
+    };
+    if (replyToEmail) {
+      payload.reply_to = replyToEmail;
+    }
+
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responseText = await response.text();
+    if (!response.ok) {
       return {
         status: 'failed',
         provider: 'resend',
-        errorMessage:
-          error instanceof Error ? error.message : 'Resend request failed',
+        fromEmail,
+        replyToEmail,
+        errorMessage: `Resend HTTP ${response.status}: ${responseText.slice(0, 240)}`,
       };
     }
-  }
 
-  // 2. SendGrid API provider if configured
-  if (sendgridKey && sendgridKey.length > 8) {
+    let parsedId: string | undefined;
     try {
-      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${sendgridKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          personalizations: [
-            {
-              to: [{ email: params.recipientEmail, name: params.recipientName }],
-              subject: params.subject,
-            },
-          ],
-          from: { email: fromEmail, name: 'BorrowBox Support' },
-          content: [
-            { type: 'text/plain', value: params.textBody },
-            { type: 'text/html', value: params.htmlBody },
-          ],
-        }),
-      });
-      if (!response.ok) {
-        const errText = await response.text();
-        return {
-          status: 'failed',
-          provider: 'sendgrid',
-          errorMessage: `SendGrid HTTP ${response.status}: ${errText.slice(0, 180)}`,
-        };
-      }
-      return { status: 'sent', provider: 'sendgrid' };
-    } catch (error) {
-      return {
-        status: 'failed',
-        provider: 'sendgrid',
-        errorMessage:
-          error instanceof Error ? error.message : 'SendGrid request failed',
-      };
+      const parsed = JSON.parse(responseText) as { id?: string };
+      parsedId = parsed.id;
+    } catch {
+      // Ignore non-JSON body
     }
-  }
 
-  // 3. Custom SMTP Webhook if configured
-  if (smtpWebhookUrl && smtpWebhookUrl.startsWith('http')) {
-    try {
-      const response = await fetch(smtpWebhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: fromEmail,
-          to: params.recipientEmail,
-          subject: params.subject,
-          text: params.textBody,
-          html: params.htmlBody,
-        }),
-      });
-      if (!response.ok) {
-        return {
-          status: 'failed',
-          provider: 'smtp_webhook',
-          errorMessage: `SMTP Webhook HTTP ${response.status}`,
-        };
-      }
-      return { status: 'sent', provider: 'smtp_webhook' };
-    } catch (error) {
-      return {
-        status: 'failed',
-        provider: 'smtp_webhook',
-        errorMessage:
-          error instanceof Error ? error.message : 'SMTP webhook failed',
-      };
-    }
+    return {
+      status: 'sent',
+      provider: 'resend',
+      fromEmail,
+      replyToEmail,
+      providerMessageId: parsedId,
+    };
+  } catch (error) {
+    return {
+      status: 'failed',
+      provider: 'resend',
+      fromEmail,
+      replyToEmail,
+      errorMessage:
+        error instanceof Error ? error.message : 'Resend API request failed',
+    };
   }
-
-  // 4. Built-in BorrowBox Transactional Relay (persisted outbox + structured audit log when external SMTP keys are not yet set)
-  return {
-    status: 'sent',
-    provider: 'borrowbox_transactional_relay',
-  };
 }
 
 export function registerSupportRoutes(app: Express): void {
+  // 0. Backend Configuration & Provider Verification Endpoint (Never exposes secret keys)
+  app.get('/api/support/config-status', (_req: Request, res: Response) => {
+    const resendKey = (process.env.RESEND_API_KEY || '').trim();
+    const geminiKey = (process.env.GEMINI_API_KEY || '').trim();
+    const fromEmail = resolveFormattedSenderEmail();
+    const replyToEmail = resolveReplyToEmail();
+    res.json({
+      ok: true,
+      emailProvider: 'resend',
+      onlyResendConfigured: true,
+      envConfigured: {
+        RESEND_API_KEY: Boolean(resendKey && resendKey.length > 8),
+        SUPPORT_FROM_EMAIL: Boolean(process.env.SUPPORT_FROM_EMAIL),
+        SUPPORT_REPLY_TO_EMAIL: Boolean(process.env.SUPPORT_REPLY_TO_EMAIL),
+        GEMINI_API_KEY: Boolean(
+          geminiKey && geminiKey.length > 10 && geminiKey !== 'MY_GEMINI_API_KEY'
+        ),
+      },
+      senderConfig: {
+        fromEmail,
+        replyToEmail,
+      },
+    });
+  });
+
   // 1. Get synchronized server support state (filtered by role so customers never see internal notes or other users' tickets)
   app.get('/api/support/state', (req: Request, res: Response) => {
     const viewerUid = String(req.query.uid || '').trim();
@@ -583,6 +603,7 @@ export function registerSupportRoutes(app: Express): void {
         messagesByTicket: supportStore.messagesByTicket,
         historyByTicket: supportStore.historyByTicket,
         emailLogs: Object.values(supportStore.emailLogs),
+        auditLogs: supportStore.auditLogs,
         notifications: supportStore.notifications.filter(
           (n) =>
             n.recipientUid === viewerUid ||
@@ -843,6 +864,24 @@ export function registerSupportRoutes(app: Express): void {
       historyList.unshift(claimEvent);
       supportStore.historyByTicket[cleanTicketId] = historyList;
 
+      const auditLog: ServerAdminAuditLog = {
+        id: `AUD-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        adminId: String(staffUid).trim(),
+        adminEmail: String(staffEmail).trim(),
+        adminRole: String(staffRole).trim(),
+        action: 'Claimed Support Ticket',
+        targetType: 'support_ticket',
+        targetId: cleanTicketId,
+        targetLabel: `${
+          supportStore.tickets[cleanTicketId]?.ticketNumber || cleanTicketId
+        }: ${supportStore.tickets[cleanTicketId]?.subject || 'Support Ticket'}`,
+        previousValue: 'Unclaimed (open)',
+        newValue: `${staffName} (in_progress)`,
+        isOverride: false,
+        createdAtISO: claimedAtISO,
+      };
+      supportStore.auditLogs.unshift(auditLog);
+
       const customerUid = supportStore.tickets[cleanTicketId]?.userId;
       if (customerUid) {
         supportStore.notifications.unshift({
@@ -872,6 +911,7 @@ export function registerSupportRoutes(app: Express): void {
         claimedAtISO,
         status: 'in_progress',
         historyEvent: claimEvent,
+        auditLog,
       });
     } finally {
       activeClaimMutex.delete(cleanTicketId);
@@ -1241,11 +1281,49 @@ export function registerSupportRoutes(app: Express): void {
       historyList.unshift(historyEvent);
       supportStore.historyByTicket[ticketId] = historyList;
 
+      const isCrossStaffAdminOverride =
+        isOverrideOperation ||
+        Boolean(effectiveAssignedTo && effectiveAssignedTo !== String(actorUid));
+
+      const auditActionLabel =
+        operation === 'reassign'
+          ? 'Reassigned Support Ticket (Admin Override)'
+          : operation === 'release_claim'
+          ? 'Released Ticket Claim (Admin Override)'
+          : operation === 'reopen'
+          ? 'Reopened Support Ticket (Admin Override)'
+          : operation === 'priority_change'
+          ? `Changed Ticket Priority to ${String(newVal || newPriority || '').toUpperCase()}${
+              isCrossStaffAdminOverride ? ' (Admin Override)' : ''
+            }`
+          : `Updated Ticket Status to ${String(newVal || newStatus || '').toUpperCase()}${
+              isCrossStaffAdminOverride ? ' (Admin Override)' : ''
+            }`;
+
+      const auditLog: ServerAdminAuditLog = {
+        id: `AUD-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        adminId: String(actorUid),
+        adminEmail: String(actorEmail),
+        adminRole: String(actorRole),
+        action: auditActionLabel,
+        targetType: 'support_ticket',
+        targetId: ticketId,
+        targetLabel: `${stored?.ticketNumber || ticketId}: ${
+          stored?.subject || 'Support Ticket'
+        }`,
+        previousValue: previousVal,
+        newValue: newVal,
+        isOverride: isCrossStaffAdminOverride,
+        createdAtISO: nowISO,
+      };
+      supportStore.auditLogs.unshift(auditLog);
+
       savePersistedStore();
       res.json({
         ok: true,
         ticket: stored,
         historyEvent,
+        auditLog,
       });
     }
   );
@@ -1330,6 +1408,8 @@ export function registerSupportRoutes(app: Express): void {
       ticketNumber: cleanTicketNumber,
       eventType:
         eventType === 'TICKET_CLOSED' ? 'TICKET_CLOSED' : 'TICKET_OPENED',
+      fromEmail: dispatchResult.fromEmail,
+      replyToEmail: dispatchResult.replyToEmail,
       recipientEmail: String(customerEmail).trim(),
       recipientName: String(customerName).trim(),
       subject: emailPayload.subject,
@@ -1337,6 +1417,7 @@ export function registerSupportRoutes(app: Express): void {
       htmlBody: emailPayload.htmlBody,
       status: dispatchResult.status,
       provider: dispatchResult.provider,
+      providerMessageId: dispatchResult.providerMessageId,
       sentAtISO: nowISO,
       errorMessage: dispatchResult.errorMessage,
       retryCount: existingLog ? existingLog.retryCount + 1 : 0,
@@ -1364,10 +1445,14 @@ export function registerSupportRoutes(app: Express): void {
       action: dispatchResult.status === 'sent' ? 'email_sent' : 'email_failed',
       actorId: 'system_mailer',
       actorName: 'BorrowBox Email Service',
-      actorEmail: process.env.SUPPORT_FROM_EMAIL || 'support@borrowbox.in',
+      actorEmail: dispatchResult.fromEmail,
       actorRole: 'system',
       previousValue: eventType,
-      newValue: `${dispatchResult.status} (${dispatchResult.provider})`,
+      newValue: `${dispatchResult.status} (${dispatchResult.provider}${
+        dispatchResult.providerMessageId
+          ? `:${dispatchResult.providerMessageId}`
+          : ''
+      })`,
       summary:
         dispatchResult.status === 'sent'
           ? `Automated ${

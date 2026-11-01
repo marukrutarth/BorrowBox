@@ -49,9 +49,27 @@ service cloud.firestore {
       );
     }
 
+    function isOverrideAdmin() {
+      return isSignedIn() && request.auth.token.email_verified == true && (
+        isSuperAdmin() ||
+        request.auth.token.email == 'marginoferror1626@gmail.com' ||
+        (
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.status == 'active' &&
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role in ['super_admin', 'admin']
+        ) ||
+        (
+          request.auth.token.email != null &&
+          exists(/databases/$(database)/documents/admins/$(request.auth.token.email)) &&
+          get(/databases/$(database)/documents/admins/$(request.auth.token.email)).data.status == 'active' &&
+          get(/databases/$(database)/documents/admins/$(request.auth.token.email)).data.role in ['super_admin', 'admin']
+        )
+      );
+    }
+
     function isAdmin() {
       return isSignedIn() && (
-        isSuperAdmin() ||
+        isOverrideAdmin() ||
         (
           exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
           get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.status == 'active'
@@ -1135,33 +1153,82 @@ service cloud.firestore {
 
     // 17. Collection Rules: Complete Support Ticket Management System (/supportTickets/{ticketId})
     match /supportTickets/{ticketId} {
+      // Customer ownership restriction: customers can only read/list their own tickets; staff/admins can read all
       allow get, list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      // Customer ticket creation: must be open, unclaimed, normal/urgent priority, and never contain internal staff notes
       allow create: if isSignedIn()
         && isValidId(ticketId)
         && (request.resource.data.userId == request.auth.uid || isAdmin())
         && request.resource.data.status == 'open'
         && (request.resource.data.priority == 'normal' || request.resource.data.priority == 'urgent')
-        && (!('assignedTo' in request.resource.data) || request.resource.data.assignedTo == null || request.resource.data.assignedTo == '');
-      allow update: if isAdmin()
-        || (
-          isSignedIn()
-          && resource.data.userId == request.auth.uid
-          && request.resource.data.userId == resource.data.userId
-          && request.resource.data.ticketNumber == resource.data.ticketNumber
-          && request.resource.data.assignedTo == resource.data.assignedTo
+        && (!('assignedTo' in request.resource.data) || request.resource.data.assignedTo == null || request.resource.data.assignedTo == '')
+        && (!('internalNotes' in request.resource.data) || request.resource.data.internalNotes == '');
+
+      // Ticket updates partitioned into 4 strict authority tiers:
+      // (A) Administrator Override (Super Admin / Level 2 Admin): can reassign, release claims, reopen, or override ownership
+      // (B) Staff Claiming Unclaimed Ticket: authorised staff can claim only if currently unclaimed (assignedTo == null/''), setting assignedTo = request.auth.uid and status = 'in_progress'
+      // (C) Assigned Staff Working on Claimed Ticket: regular staff can only modify tickets where resource.data.assignedTo == request.auth.uid and cannot reassign ownership
+      // (D) Customer Reply Status Transition: customer can only transition their own waiting_for_user ticket back to in_progress
+      allow update: if isValidId(ticketId)
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.ticketNumber == resource.data.ticketNumber
+        && (request.resource.data.priority == 'normal' || request.resource.data.priority == 'urgent')
+        && (request.resource.data.status in ['open', 'in_progress', 'waiting_for_user', 'resolved', 'closed'])
+        && (request.resource.data.status != 'closed' || (request.resource.data.resolutionSummary is string && request.resource.data.resolutionSummary.size() >= 5))
+        && (!('internalNotes' in request.resource.data) || request.resource.data.internalNotes == '')
+        && (
+          // Tier A: Administrator Override (Super Admin / Level 2 Admin)
+          isOverrideAdmin()
+          ||
+          // Tier B: Atomic Staff Claim on Unclaimed Ticket (prevents simultaneous claiming)
+          (
+            isAdmin()
+            && (!('assignedTo' in resource.data) || resource.data.assignedTo == null || resource.data.assignedTo == '')
+            && request.resource.data.assignedTo == request.auth.uid
+            && request.resource.data.status == 'in_progress'
+          )
+          ||
+          // Tier C: Assigned Support Staff modifying their own claimed ticket
+          (
+            isAdmin()
+            && resource.data.assignedTo == request.auth.uid
+            && request.resource.data.assignedTo == request.auth.uid
+          )
+          ||
+          // Tier D: Customer replying to waiting_for_user ticket
+          (
+            isSignedIn()
+            && resource.data.userId == request.auth.uid
+            && resource.data.status == 'waiting_for_user'
+            && request.resource.data.status == 'in_progress'
+            && request.resource.data.assignedTo == resource.data.assignedTo
+            && request.resource.data.priority == resource.data.priority
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'updatedAtISO'])
+          )
         );
+
       allow delete: if isSuperAdmin();
 
       // Ticket Conversation & Internal Notes (/supportTickets/{ticketId}/messages/{messageId})
       match /messages/{messageId} {
-        // Customers can read non-internal messages on their own tickets; staff can read all messages
+        // Customers can ONLY read non-internal messages on their own tickets; staff/admins can read all messages
         allow get, list: if isAdmin()
           || (
             isSignedIn()
             && resource.data.isInternal != true
             && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid
           );
-        allow create: if isAdmin()
+
+        // Staff can only post replies or internal notes if they claimed the ticket (or have Admin Override);
+        // Customers can only post non-internal customer messages on their own ticket
+        allow create: if (
+            isOverrideAdmin()
+            || (
+              isAdmin()
+              && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.assignedTo == request.auth.uid
+            )
+          )
           || (
             isSignedIn()
             && request.resource.data.senderId == request.auth.uid
@@ -1169,14 +1236,29 @@ service cloud.firestore {
             && request.resource.data.isInternal == false
             && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid
           );
+
         allow update, delete: if false;
+      }
+
+      // Dedicated Staff-Only Internal Notes Subcollection (/supportTickets/{ticketId}/privateNotes/{noteId})
+      // Strictly inaccessible to customers
+      match /privateNotes/{noteId} {
+        allow get, list: if isAdmin();
+        allow create, update: if isOverrideAdmin()
+          || (
+            isAdmin()
+            && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.assignedTo == request.auth.uid
+          );
+        allow delete: if isSuperAdmin();
       }
 
       // Immutable Ticket Activity & Claim/Override History (/supportTickets/{ticketId}/history/{eventId})
       match /history/{eventId} {
+        // Customers can read history on their own ticket except internal_note_added events
         allow get, list: if isAdmin()
           || (
             isSignedIn()
+            && resource.data.action != 'internal_note_added'
             && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid
           );
         allow create: if isSignedIn() && request.resource.data.actorId == request.auth.uid;

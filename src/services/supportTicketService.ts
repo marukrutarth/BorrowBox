@@ -613,13 +613,35 @@ export async function postSupportTicketReplyOrNote(params: {
         createdAt: serverTimestamp(),
       }
     );
-    batch.update(doc(db, 'supportTickets', params.ticket.id), {
-      status: updatedTicket.status,
-      firstResponseAtISO: updatedTicket.firstResponseAtISO || null,
-      internalNotes: updatedTicket.internalNotes,
-      updatedAtISO: nowISO,
-      updatedAt: serverTimestamp(),
-    });
+    if (params.senderRole === 'customer') {
+      if (params.ticket.status === 'waiting_for_user') {
+        batch.update(doc(db, 'supportTickets', params.ticket.id), {
+          status: 'in_progress',
+          updatedAtISO: nowISO,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } else {
+      batch.update(doc(db, 'supportTickets', params.ticket.id), {
+        status: updatedTicket.status,
+        firstResponseAtISO: updatedTicket.firstResponseAtISO || null,
+        internalNotes: '',
+        updatedAtISO: nowISO,
+        updatedAt: serverTimestamp(),
+      });
+      if (updatedTicket.internalNotes) {
+        batch.set(
+          doc(db, 'supportTickets', params.ticket.id, 'privateNotes', 'scratchpad'),
+          {
+            ticketId: params.ticket.id,
+            internalNotes: updatedTicket.internalNotes,
+            updatedBy: params.senderEmail,
+            updatedAtISO: nowISO,
+            updatedAt: serverTimestamp(),
+          }
+        );
+      }
+    }
     await batch.commit();
   } catch {
     // Non-fatal if `/supportTickets` collection rules are pending manual deploy
@@ -807,10 +829,23 @@ export async function updateSupportTicketWorkflowOrOverride(params: {
       doc(db, 'supportTickets', params.ticket.id),
       {
         ...updatedTicket,
+        internalNotes: '',
         updatedAt: serverTimestamp(),
       },
       { merge: true }
     );
+    if (updatedTicket.internalNotes) {
+      batch.set(
+        doc(db, 'supportTickets', params.ticket.id, 'privateNotes', 'scratchpad'),
+        {
+          ticketId: params.ticket.id,
+          internalNotes: updatedTicket.internalNotes,
+          updatedBy: params.actor.email,
+          updatedAtISO: nowISO,
+          updatedAt: serverTimestamp(),
+        }
+      );
+    }
     batch.set(
       doc(db, 'supportTickets', params.ticket.id, 'history', historyEvent.id),
       {

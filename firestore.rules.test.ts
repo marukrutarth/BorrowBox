@@ -181,7 +181,7 @@ function evaluateAdminCreate(
   return 'ALLOWED';
 }
 
-test('Firestore rules file enforces all 8 hardened security pillars plus Admin RBAC & immutable audit logs in syntax', () => {
+test('Firestore rules file enforces all 8 hardened security pillars plus Admin RBAC, Support Ticket Ownership/Override & immutable audit logs in syntax', () => {
   assert.ok(
     rulesSource.includes("rules_version = '2';"),
     'Must use rules_version 2'
@@ -203,8 +203,16 @@ test('Firestore rules file enforces all 8 hardened security pillars plus Admin R
     'Must enforce email_verified == true on email-based admin checks'
   );
   assert.ok(
-    rulesSource.includes('function isSuperAdmin()'),
-    'Must enforce separate Super Admin authority check'
+    rulesSource.includes('function isSuperAdmin()') &&
+      rulesSource.includes('function isOverrideAdmin()'),
+    'Must enforce separate Super Admin and Override Admin authority checks'
+  );
+  assert.ok(
+    rulesSource.includes('match /supportTickets/{ticketId}') &&
+      rulesSource.includes('resource.data.isInternal != true') &&
+      rulesSource.includes('match /privateNotes/{noteId}') &&
+      rulesSource.includes('request.resource.data.resolutionSummary.size() >= 5'),
+    'Must enforce customer internal-note exclusion, staff ownership/override tiers, and resolution summary on ticket closure'
   );
   assert.ok(
     rulesSource.includes('match /audit_logs/{logId}') &&

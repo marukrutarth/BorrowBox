@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   buildTicketClosedEmailPayload,
   buildTicketOpenedEmailPayload,
+  resolveFormattedSenderEmail,
+  resolveReplyToEmail,
   sanitizeTicketForCustomer,
   validateTicketClaimAttempt,
   validateTicketModificationAuthority,
@@ -136,3 +138,14 @@ test('Mandatory Customer Email Payloads: Ticket Opened & Ticket Closed subjects 
     )
   );
 });
+
+test('Resend Sender & Reply-To Normalization: preserves RFC 5322 formatted SUPPORT_FROM_EMAIL without nested angle brackets', () => {
+  const formatted = resolveFormattedSenderEmail();
+  assert.ok(formatted.includes('<') && formatted.includes('>'));
+  assert.equal((formatted.match(/</g) || []).length, 1);
+  assert.equal((formatted.match(/>/g) || []).length, 1);
+
+  const replyTo = resolveReplyToEmail();
+  assert.equal(typeof replyTo, 'string');
+});
+
