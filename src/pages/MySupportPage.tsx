@@ -84,11 +84,11 @@ interface AttachmentUploadEntry {
 function getStatusBadgeStyle(status: SupportTicketRecord['status']): string {
   switch (status) {
     case 'open':
-      return 'bg-amber-500/15 text-amber-300 border-amber-500/30';
+      return 'bg-blue-500/15 text-blue-300 border-blue-500/30';
     case 'in_progress':
-      return 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30';
-    case 'waiting_for_user':
       return 'bg-purple-500/15 text-purple-300 border-purple-500/30';
+    case 'waiting_for_user':
+      return 'bg-amber-500/15 text-amber-300 border-amber-500/30';
     case 'resolved':
       return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
     case 'closed':
@@ -364,13 +364,15 @@ export const MySupportPage: React.FC<MySupportPageProps> = ({
   const activeTickets = useMemo(
     () =>
       tickets.filter((t) =>
-        ['open', 'in_progress', 'waiting_for_user'].includes(t.status)
+        ['open', 'in_progress', 'waiting_for_user', 'resolved'].includes(
+          t.status
+        )
       ),
     [tickets]
   );
 
   const resolvedTickets = useMemo(
-    () => tickets.filter((t) => ['resolved', 'closed'].includes(t.status)),
+    () => tickets.filter((t) => t.status === 'closed'),
     [tickets]
   );
 

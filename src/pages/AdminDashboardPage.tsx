@@ -1666,7 +1666,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   )}
                   <button
                     type="button"
-                    onClick={() => setActiveSection(section.id)}
+                    data-testid={`admin-sidebar-${section.id}`}
+                    onClick={() => {
+                      setActiveSection(section.id);
+                      if (section.id === 'support') {
+                        setSelectedSupportTicketId(null);
+                      }
+                    }}
                     className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-all shrink-0 lg:shrink cursor-pointer ${
                       isActive
                         ? 'bg-[#8B5CF6] text-white shadow-md shadow-[#8B5CF6]/20'
@@ -2784,7 +2790,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   currentAdmin={effectiveAdmin}
                   tickets={supportTickets}
                   admins={admins}
+                  users={combinedUsers}
                   selectedTicketIdFromParent={selectedSupportTicketId}
+                  onClearSelectedTicket={() => setSelectedSupportTicketId(null)}
                   onTicketUpdated={(updatedTicket, auditLog) => {
                     setSupportTickets((prev) => {
                       const exists = prev.some((t) => t.id === updatedTicket.id);

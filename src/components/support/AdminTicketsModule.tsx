@@ -1,61 +1,66 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertCircle,
-  AlertTriangle,
-  Bell,
-  Check,
+  Archive,
+  ArrowLeft,
+  ArrowRightLeft,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Download,
-  ExternalLink,
   FileText,
-  Image as ImageIcon,
+  History,
   Inbox,
+  LifeBuoy,
   Lock,
-  Maximize2,
   MessageSquare,
   Paperclip,
   RefreshCw,
   RotateCcw,
   Search,
   Send,
-  ShieldAlert,
+  ShieldCheck,
   Sparkles,
-  Unlock,
+  Tag,
   UserCheck,
-  UserPlus,
+  Users,
   X,
 } from 'lucide-react';
 import {
   AdminAuditLogRecord,
+  AdminManagedUserRecord,
   AdminRegistryRecord,
-  AppNotificationItem,
   SupportAttachmentItem,
   SupportTicketHistoryEntry,
   SupportTicketMessageRecord,
   SupportTicketRecord,
   SupportTicketStatus,
 } from '../../types/marketplace';
+import { hasAdminPermission, ROLE_DEFINITIONS } from '../../utils/adminRbac';
 import {
-  MAX_ATTACHMENTS_PER_TICKET,
   canAdminOverrideSupportTicket,
-  canStaffModifyTicket,
   claimSupportTicketAtomic,
-  isImageAttachment,
   isPdfAttachment,
-  markSupportNotificationRead,
   postSupportTicketReplyOrNote,
-  subscribeToSupportNotifications,
   subscribeToTicketConversation,
   updateSupportTicketWorkflowOrOverride,
   uploadSupportAttachment,
 } from '../../services/supportTicketService';
+import {
+  ADMIN_TICKET_STATUS_CONFIG,
+  buildTicketProblemSummary,
+  filterTicketsBySearchQuery,
+  partitionSupportTickets,
+  validateCloseTicketResolution,
+} from '../../utils/supportTicketSummary';
 
 interface AdminTicketsModuleProps {
   currentAdmin: AdminRegistryRecord;
   tickets: SupportTicketRecord[];
   admins: AdminRegistryRecord[];
+  users?: AdminManagedUserRecord[];
   selectedTicketIdFromParent?: string | null;
+  onClearSelectedTicket?: () => void;
   onTicketUpdated: (
     updatedTicket: SupportTicketRecord,
     auditLog?: AdminAuditLogRecord
@@ -63,329 +68,186 @@ interface AdminTicketsModuleProps {
   onNotify: (message: string, tone?: 'success' | 'error' | 'info') => void;
 }
 
-type PrimaryTicketFilter = 'all' | 'unclaimed' | 'my_tickets' | 'resolved';
-
-interface AttachmentUploadEntry {
-  localId: string;
+interface PendingAttachmentUpload {
+  id: string;
   file: File;
-  name: string;
-  sizeBytes: number;
-  status: 'uploading' | 'completed' | 'failed';
+  previewUrl: string;
   progress: number;
-  error?: string;
+  status: 'uploading' | 'completed' | 'error';
+  errorMessage?: string;
   uploadedItem?: SupportAttachmentItem;
 }
 
-function getStatusBadgeStyle(status: SupportTicketStatus): string {
-  switch (status) {
-    case 'open':
-      return 'bg-[#F59E0B]/15 text-[#F59E0B] border-[#F59E0B]/30';
-    case 'in_progress':
-      return 'bg-[#06B6D4]/15 text-[#06B6D4] border-[#06B6D4]/30';
-    case 'waiting_for_user':
-      return 'bg-[#8B5CF6]/15 text-[#8B5CF6] border-[#8B5CF6]/30';
-    case 'resolved':
-      return 'bg-[#22C55E]/15 text-[#22C55E] border-[#22C55E]/30';
-    case 'closed':
-      return 'bg-white/[0.06] text-[#94A3B8] border-white/[0.12]';
-    default:
-      return 'bg-white/[0.06] text-[#94A3B8] border-white/[0.12]';
-  }
-}
+const CLOSED_TICKETS_PER_PAGE = 10;
 
-function formatStatusLabel(status: SupportTicketStatus): string {
-  switch (status) {
-    case 'open':
-      return 'OPEN';
-    case 'in_progress':
-      return 'IN PROGRESS';
-    case 'waiting_for_user':
-      return 'WAITING FOR USER';
-    case 'resolved':
-      return 'RESOLVED';
-    case 'closed':
-      return 'CLOSED';
-    default:
-      return String(status).toUpperCase();
-  }
-}
-
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 KB';
-  if (bytes >= 1024 * 1024) {
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-  }
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+function formatShortDate(iso?: string | null): string {
+  if (!iso) return '—';
+  return iso.slice(0, 16).replace('T', ' ');
 }
 
 export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
   currentAdmin,
   tickets,
   admins,
+  users = [],
   selectedTicketIdFromParent = null,
+  onClearSelectedTicket,
   onTicketUpdated,
   onNotify,
 }) => {
-  // Primary filter & search state (Strictly 4 primary filters + 1 simple search field)
-  const [primaryFilter, setPrimaryFilter] =
-    useState<PrimaryTicketFilter>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(
-    selectedTicketIdFromParent || tickets[0]?.id || null
-  );
-
-  // Two Distinct Panels: Active Tickets vs Ticket Log
-  const [adminPanelTab, setAdminPanelTab] = useState<
-    'active_tickets' | 'ticket_log'
+  // Dashboard Top Navigation Tab: 'active_tickets' vs 'closed_tickets'
+  const [dashboardTab, setDashboardTab] = useState<
+    'active_tickets' | 'closed_tickets'
   >('active_tickets');
-  const [logSearchQuery, setLogSearchQuery] = useState('');
-  const [logCategoryFilter, setLogCategoryFilter] = useState<string>('all');
-  const [logStaffFilter, setLogStaffFilter] = useState<string>('all');
-  const [logPage, setLogPage] = useState(1);
-  const LOG_PAGE_SIZE = 10;
 
-  // Real-time staff support notifications
-  const [staffNotifications, setStaffNotifications] = useState<
-    AppNotificationItem[]
-  >([]);
+  // Single Unified Search Input (Customer Name or Ticket ID)
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Selected Ticket Thread & History
+  // Closed Tickets Pagination
+  const [closedPage, setClosedPage] = useState(1);
+
+  // Selected Ticket ID for Individual Ticket Workspace (null = show Main Ticket Dashboard only)
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(
+    selectedTicketIdFromParent || null
+  );
+  // Track which tab the admin opened the ticket from so "Back to ..." returns accurately
+  const [openedFromTab, setOpenedFromTab] = useState<
+    'active_tickets' | 'closed_tickets'
+  >('active_tickets');
+
+  useEffect(() => {
+    if (selectedTicketIdFromParent) {
+      setSelectedTicketId(selectedTicketIdFromParent);
+      const target = tickets.find((t) => t.id === selectedTicketIdFromParent);
+      if (target) {
+        const targetTab =
+          target.status === 'closed' ? 'closed_tickets' : 'active_tickets';
+        setDashboardTab(targetTab);
+        setOpenedFromTab(targetTab);
+      }
+    }
+  }, [selectedTicketIdFromParent, tickets]);
+
+  // Selected Ticket Conversation & Audit History
   const [messages, setMessages] = useState<SupportTicketMessageRecord[]>([]);
   const [history, setHistory] = useState<SupportTicketHistoryEntry[]>([]);
-  const [loadingThread, setLoadingThread] = useState(false);
+  const [isLoadingThread, setIsLoadingThread] = useState(false);
 
-  // Workspace Action States
-  const [claimingTicketId, setClaimingTicketId] = useState<string | null>(null);
-  const [updatingStatus, setUpdatingStatus] = useState(false);
-
-  // Composer State (Public Reply vs Internal Note)
-  const [composerMode, setComposerMode] = useState<'reply' | 'internal_note'>(
-    'reply'
-  );
-  const [composerText, setComposerText] = useState('');
-  const [replyUploadEntries, setReplyUploadEntries] = useState<
-    AttachmentUploadEntry[]
+  // Composer State (1. Reply to Customer | 2. Internal Staff Note)
+  const [composerMode, setComposerMode] = useState<
+    'customer_reply' | 'internal_note'
+  >('customer_reply');
+  const [replyText, setReplyText] = useState('');
+  const [pendingUploads, setPendingUploads] = useState<
+    PendingAttachmentUpload[]
   >([]);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [sendingMessage, setSendingMessage] = useState(false);
+  const [composerError, setComposerError] = useState<string | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<{
+    url: string;
+    name: string;
+  } | null>(null);
 
-  // Resolution Summary Draft
-  const [resolutionSummaryDraft, setResolutionSummaryDraft] = useState('');
+  // Action Loading & Error States
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [isSendingReply, setIsSendingReply] = useState(false);
+  const [isUpdatingWorkflow, setIsUpdatingWorkflow] = useState(false);
 
-  // Admin Override Reassign Target State
-  const [reassignStaffId, setReassignStaffId] = useState('');
+  // Close Ticket Confirmation Modal State
+  const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
+  const [closeResolutionDraft, setCloseResolutionDraft] = useState('');
+  const [closeModalError, setCloseModalError] = useState<string | null>(null);
 
-  // Lightbox Modal State for Image Attachments
-  const [lightboxAttachment, setLightboxAttachment] =
-    useState<SupportAttachmentItem | null>(null);
+  // Reopen Ticket Confirmation Modal State
+  const [isReopenModalOpen, setIsReopenModalOpen] = useState(false);
+  const [reopenReasonDraft, setReopenReasonDraft] = useState('');
 
-  const hasAdminOverride = useMemo(
-    () => canAdminOverrideSupportTicket(currentAdmin),
-    [currentAdmin]
-  );
+  // Change Assignment Controls (for authorised Super Admin / Admin override)
+  const [isReassignOpen, setIsReassignOpen] = useState(false);
+  const [reassignTargetUid, setReassignTargetUid] = useState('');
+  const [reassignNote, setReassignNote] = useState('');
 
-  const activeSupportAdmins = useMemo(
-    () => admins.filter((a) => a.status === 'active'),
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const threadEndRef = useRef<HTMLDivElement | null>(null);
+
+  const canManageSupport = hasAdminPermission(currentAdmin, 'support.manage');
+  const hasAdminOverride = canAdminOverrideSupportTicket(currentAdmin);
+
+  const supportCapableAdmins = useMemo(
+    () =>
+      admins.filter(
+        (adm) =>
+          adm.status === 'active' &&
+          (adm.role === 'super_admin' ||
+            adm.role === 'admin' ||
+            adm.role === 'support_admin' ||
+            hasAdminPermission(adm, 'support.manage'))
+      ),
     [admins]
   );
 
-  // 4 Compact Statistics at the top
-  const stats = useMemo(() => {
-    const total = tickets.length;
-    const unclaimed = tickets.filter(
-      (t) =>
-        !t.assignedTo && !['resolved', 'closed'].includes(t.status)
-    ).length;
-    const myTickets = tickets.filter(
-      (t) =>
-        t.assignedTo === currentAdmin.uid ||
-        (!t.assignedTo &&
-          t.assignedToEmail &&
-          t.assignedToEmail.toLowerCase() === currentAdmin.email.toLowerCase())
-    ).length;
-    const resolved = tickets.filter((t) =>
-      ['resolved', 'closed'].includes(t.status)
-    ).length;
-
-    return { total, unclaimed, myTickets, resolved };
-  }, [tickets, currentAdmin]);
-
-  // Closed Tickets List for Ticket Log panel
-  const closedTicketsList = useMemo(() => {
-    return tickets.filter((t) => t.status === 'closed');
+  // Partition all tickets into Active vs Closed
+  const { activeTickets, closedTickets } = useMemo(() => {
+    const sorted = [...tickets].sort((a, b) => {
+      const aTime = a.updatedAtISO || a.createdAtISO;
+      const bTime = b.updatedAtISO || b.createdAtISO;
+      return bTime.localeCompare(aTime);
+    });
+    return partitionSupportTickets(sorted);
   }, [tickets]);
 
+  // Filtered Active & Closed lists based on unified Search Bar
+  const filteredActiveTickets = useMemo(
+    () => filterTicketsBySearchQuery(activeTickets, searchQuery),
+    [activeTickets, searchQuery]
+  );
+
   const filteredClosedTickets = useMemo(() => {
-    const q = logSearchQuery.trim().toLowerCase();
-    return closedTicketsList
-      .filter((t) => {
-        if (logCategoryFilter !== 'all' && t.category !== logCategoryFilter) {
-          return false;
-        }
-        if (
-          logStaffFilter !== 'all' &&
-          t.assignedTo !== logStaffFilter &&
-          t.assignedStaffName !== logStaffFilter &&
-          t.assignedToEmail !== logStaffFilter
-        ) {
-          return false;
-        }
-        if (!q) return true;
-        const ticketRef = (t.ticketNumber || t.id || '').toLowerCase();
-        const customerName = (t.userName || '').toLowerCase();
-        const customerEmail = (t.userEmail || '').toLowerCase();
-        const subject = (t.subject || '').toLowerCase();
-
-        return (
-          ticketRef.includes(q) ||
-          t.id.toLowerCase().includes(q) ||
-          customerName.includes(q) ||
-          customerEmail.includes(q) ||
-          subject.includes(q)
-        );
-      })
-      .sort((a, b) => {
-        const timeA = a.closedAtISO || a.updatedAtISO || a.createdAtISO;
-        const timeB = b.closedAtISO || b.updatedAtISO || b.createdAtISO;
-        return timeB.localeCompare(timeA); // Most recently closed first
-      });
-  }, [closedTicketsList, logSearchQuery, logCategoryFilter, logStaffFilter]);
-
-  const totalLogPages =
-    Math.ceil(filteredClosedTickets.length / LOG_PAGE_SIZE) || 1;
-  const paginatedClosedTickets = useMemo(() => {
-    const start = (logPage - 1) * LOG_PAGE_SIZE;
-    return filteredClosedTickets.slice(start, start + LOG_PAGE_SIZE);
-  }, [filteredClosedTickets, logPage]);
-
-  // Filtered tickets based on the 4 primary filters & simple search field (excluding closed)
-  const filteredTickets = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return tickets.filter((t) => {
-      if (t.status === 'closed') return false;
-
-      // 1. Primary Filter
-      if (primaryFilter === 'unclaimed') {
-        if (t.assignedTo || t.status === 'resolved') {
-          return false;
-        }
-      } else if (primaryFilter === 'my_tickets') {
-        const isMine =
-          t.assignedTo === currentAdmin.uid ||
-          (!t.assignedTo &&
-            t.assignedToEmail &&
-            t.assignedToEmail.toLowerCase() ===
-              currentAdmin.email.toLowerCase());
-        if (!isMine) return false;
-      } else if (primaryFilter === 'resolved') {
-        if (t.status !== 'resolved') return false;
-      }
-
-      // 2. Simple Search (Ticket ID, Customer name, Customer email, Subject)
-      if (!q) return true;
-      const ticketRef = (t.ticketNumber || t.id || '').toLowerCase();
-      const customerName = (t.userName || '').toLowerCase();
-      const customerEmail = (t.userEmail || '').toLowerCase();
-      const subject = (t.subject || '').toLowerCase();
-
-      return (
-        ticketRef.includes(q) ||
-        t.id.toLowerCase().includes(q) ||
-        customerName.includes(q) ||
-        customerEmail.includes(q) ||
-        subject.includes(q)
-      );
+    const matches = filterTicketsBySearchQuery(closedTickets, searchQuery);
+    return [...matches].sort((a, b) => {
+      const aTime = a.closedAtISO || a.updatedAtISO || a.createdAtISO;
+      const bTime = b.closedAtISO || b.updatedAtISO || b.createdAtISO;
+      return bTime.localeCompare(aTime);
     });
-  }, [tickets, primaryFilter, searchQuery, currentAdmin]);
+  }, [closedTickets, searchQuery]);
 
+  // Reset pagination when search changes
+  useEffect(() => {
+    setClosedPage(1);
+  }, [searchQuery, dashboardTab]);
+
+  const totalClosedPages = Math.max(
+    1,
+    Math.ceil(filteredClosedTickets.length / CLOSED_TICKETS_PER_PAGE)
+  );
+
+  const paginatedClosedTickets = useMemo(() => {
+    const startIndex = (closedPage - 1) * CLOSED_TICKETS_PER_PAGE;
+    return filteredClosedTickets.slice(
+      startIndex,
+      startIndex + CLOSED_TICKETS_PER_PAGE
+    );
+  }, [filteredClosedTickets, closedPage]);
+
+  // Currently opened ticket (or null when viewing Dashboard)
   const selectedTicket = useMemo(
     () => tickets.find((t) => t.id === selectedTicketId) || null,
     [tickets, selectedTicketId]
   );
 
-  useEffect(() => {
-    if (selectedTicketIdFromParent) {
-      setPrimaryFilter('all');
-      setSelectedTicketId(selectedTicketIdFromParent);
-    }
-  }, [selectedTicketIdFromParent]);
-
-  useEffect(() => {
-    if (!currentAdmin?.uid) {
-      setStaffNotifications([]);
-      return;
-    }
-    const unsub = subscribeToSupportNotifications(
-      { uid: currentAdmin.uid, role: 'staff' },
-      (liveNotifs) => {
-        setStaffNotifications(liveNotifs);
-      }
+  // Customer account profile from users registry if available
+  const selectedCustomerAccount = useMemo(() => {
+    if (!selectedTicket) return null;
+    return (
+      users.find(
+        (u) =>
+          u.uid === selectedTicket.userId ||
+          (selectedTicket.userEmail &&
+            u.email.toLowerCase() === selectedTicket.userEmail.toLowerCase())
+      ) || null
     );
-    return () => unsub();
-  }, [currentAdmin?.uid]);
+  }, [selectedTicket, users]);
 
-  const handleOpenStaffNotification = async (notif: AppNotificationItem) => {
-    if (currentAdmin?.uid && !notif.read) {
-      setStaffNotifications((prev) =>
-        prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
-      );
-      await markSupportNotificationRead({
-        notificationId: notif.id,
-        recipientUid: currentAdmin.uid,
-        role: 'staff',
-      });
-    }
-    const targetId = notif.ticketId || notif.ticketNumber;
-    if (targetId) {
-      setPrimaryFilter('all');
-      const match = tickets.find(
-        (t) => t.id === targetId || t.ticketNumber === targetId
-      );
-      setSelectedTicketId(match ? match.id : targetId);
-    }
-  };
-
-  const handleMarkSingleStaffNotificationRead = async (
-    e: React.MouseEvent,
-    notif: AppNotificationItem
-  ) => {
-    e.stopPropagation();
-    if (!currentAdmin?.uid || notif.read) return;
-    setStaffNotifications((prev) =>
-      prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
-    );
-    await markSupportNotificationRead({
-      notificationId: notif.id,
-      recipientUid: currentAdmin.uid,
-      role: 'staff',
-    });
-  };
-
-  const handleMarkAllStaffNotificationsRead = async () => {
-    if (!currentAdmin?.uid) return;
-    setStaffNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    await markSupportNotificationRead({
-      recipientUid: currentAdmin.uid,
-      role: 'staff',
-    });
-  };
-
-  useEffect(() => {
-    if (!selectedTicket && filteredTickets.length > 0) {
-      setSelectedTicketId(filteredTickets[0].id);
-    }
-  }, [filteredTickets, selectedTicket]);
-
-  useEffect(() => {
-    if (selectedTicket) {
-      setResolutionSummaryDraft(selectedTicket.resolutionSummary || '');
-      setReassignStaffId(selectedTicket.assignedTo || '');
-      setReplyUploadEntries([]);
-      setUploadError(null);
-    }
-  }, [selectedTicket?.id]);
-
-  // Real-time subscription to selected ticket's conversation & history
+  // Subscribe to real-time conversation & history ONLY when a ticket is open in the workspace
   useEffect(() => {
     if (!selectedTicket) {
       setMessages([]);
@@ -393,239 +255,127 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
       return;
     }
 
-    setLoadingThread(true);
-    const unsub = subscribeToTicketConversation(
+    setIsLoadingThread(true);
+    setComposerError(null);
+    setReassignTargetUid(selectedTicket.assignedTo || '');
+    setCloseResolutionDraft(selectedTicket.resolutionSummary || '');
+
+    const unsubscribe = subscribeToTicketConversation(
       {
         ticket: selectedTicket,
         viewerUid: currentAdmin.uid,
         viewerRole: hasAdminOverride ? 'admin' : 'staff',
       },
-      (res) => {
-        setMessages(res.messages);
-        setHistory(res.history);
-        if (res.ticketSnapshot) {
-          onTicketUpdated({
-            ...selectedTicket,
-            ...res.ticketSnapshot,
-          });
-        }
-        setLoadingThread(false);
+      ({ messages: nextMessages, history: nextHistory }) => {
+        setMessages(nextMessages);
+        setHistory(nextHistory);
+        setIsLoadingThread(false);
       }
     );
 
     return () => {
-      unsub();
+      unsubscribe();
     };
-  }, [selectedTicket?.id, currentAdmin.uid, hasAdminOverride]);
+  }, [
+    selectedTicket?.id,
+    selectedTicket?.updatedAtISO,
+    currentAdmin.uid,
+    hasAdminOverride,
+  ]);
 
-  const canModifySelectedTicket = useMemo(() => {
-    if (!selectedTicket) return false;
-    return canStaffModifyTicket(currentAdmin, selectedTicket);
-  }, [currentAdmin, selectedTicket]);
+  // Deterministic Problem Summary Card derived from real messages & history
+  const problemSummary = useMemo(() => {
+    if (!selectedTicket) return null;
+    return buildTicketProblemSummary(selectedTicket, messages, history);
+  }, [selectedTicket, messages, history]);
 
-  const isSelectedClaimedByMe = useMemo(() => {
-    if (!selectedTicket) return false;
-    return Boolean(
-      selectedTicket.assignedTo &&
-        selectedTicket.assignedTo === currentAdmin.uid
+  // Closing staff member name derived from history or assigned staff
+  const closedByStaffDisplayName = useMemo(() => {
+    if (!selectedTicket) return '';
+    const closedEvt = history.find((h) => h.action === 'closed');
+    return (
+      closedEvt?.actorName ||
+      selectedTicket.assignedStaffName ||
+      selectedTicket.assignedToEmail ||
+      'Support Team'
     );
-  }, [selectedTicket, currentAdmin.uid]);
+  }, [selectedTicket, history]);
 
-  const isSelectedUnclaimed = useMemo(() => {
-    if (!selectedTicket) return false;
-    return !selectedTicket.assignedTo;
-  }, [selectedTicket]);
+  // Ownership & Modification Authority for the selected ticket
+  const isUnclaimed = !selectedTicket?.assignedTo;
+  const isClaimedByCurrentStaff =
+    Boolean(selectedTicket?.assignedTo) &&
+    (selectedTicket?.assignedTo === currentAdmin.uid ||
+      (Boolean(selectedTicket?.assignedToEmail) &&
+        selectedTicket?.assignedToEmail?.toLowerCase() ===
+          currentAdmin.email.toLowerCase()));
+  const canModifySelectedTicket =
+    canManageSupport &&
+    Boolean(selectedTicket) &&
+    !isUnclaimed &&
+    (isClaimedByCurrentStaff || hasAdminOverride);
 
-  // Atomic Claim Handler
-  const handleClaimTicket = async (ticketToClaim: SupportTicketRecord) => {
-    setClaimingTicketId(ticketToClaim.id);
+  // Navigation Handlers
+  const handleOpenTicketWorkspace = (
+    ticket: SupportTicketRecord,
+    sourceTab: 'active_tickets' | 'closed_tickets'
+  ) => {
+    setOpenedFromTab(sourceTab);
+    setSelectedTicketId(ticket.id);
+    setIsCloseModalOpen(false);
+    setIsReopenModalOpen(false);
+    setIsReassignOpen(false);
+    setComposerError(null);
+  };
+
+  const handleBackToDashboard = (
+    targetTab?: 'active_tickets' | 'closed_tickets'
+  ) => {
+    const destination = targetTab || openedFromTab;
+    setDashboardTab(destination);
+    setSelectedTicketId(null);
+    setIsCloseModalOpen(false);
+    setIsReopenModalOpen(false);
+    setIsReassignOpen(false);
+    onClearSelectedTicket?.();
+  };
+
+  // Claim Ticket Handler
+  const handleClaimTicket = async (ticket: SupportTicketRecord) => {
+    if (!canManageSupport || isClaiming) return;
+    setIsClaiming(true);
     try {
       const result = await claimSupportTicketAtomic({
-        ticket: ticketToClaim,
+        ticket,
         staff: currentAdmin,
       });
+
+      if (result.historyEvent) {
+        setHistory((prev) => [result.historyEvent, ...prev]);
+      }
+
       onTicketUpdated(result.updatedTicket, result.auditLog);
-      setSelectedTicketId(ticketToClaim.id);
-      setHistory((prev) => [result.historyEvent, ...prev]);
       onNotify(
-        `Ticket ${
-          ticketToClaim.ticketNumber || ticketToClaim.id
-        } claimed by you and moved to In Progress.`,
+        `Ticket ${ticket.ticketNumber || ticket.id} claimed by ${currentAdmin.name}.`,
         'success'
       );
     } catch (err) {
-      onNotify(
-        err instanceof Error
-          ? err.message
-          : 'Could not claim ticket. Another staff member may have claimed it.',
-        'error'
-      );
+      const msg =
+        err instanceof Error ? err.message : 'Could not claim ticket.';
+      onNotify(msg, 'error');
     } finally {
-      setClaimingTicketId(null);
+      setIsClaiming(false);
     }
   };
 
-  // Status Update Handler (In Progress, Waiting for User, Resolved, Closed)
-  const handleStatusChange = async (nextStatus: SupportTicketStatus) => {
+  // File Upload Handlers
+  const startUploadForFile = async (uploadId: string, file: File) => {
     if (!selectedTicket) return;
-
-    if (nextStatus === 'closed') {
-      const cleanSummary = resolutionSummaryDraft.trim();
-      if (cleanSummary.length < 5) {
-        onNotify(
-          'A clear Resolution Summary (at least 5 characters) is required before closing a ticket.',
-          'error'
-        );
-        return;
-      }
-    }
-
-    setUpdatingStatus(true);
-    try {
-      const result = await updateSupportTicketWorkflowOrOverride({
-        ticket: selectedTicket,
-        actor: currentAdmin,
-        operation: 'status_change',
-        newStatus: nextStatus,
-        resolutionSummary: resolutionSummaryDraft.trim(),
-      });
-      onTicketUpdated(result.updatedTicket, result.auditLog);
-      if (result.historyEvent) {
-        setHistory((prev) => [result.historyEvent, ...prev]);
-      }
-
-      if (nextStatus === 'closed') {
-        onNotify(
-          `Ticket ${
-            selectedTicket.ticketNumber || selectedTicket.id
-          } closed and Resolution Summary notification sent to ${
-            selectedTicket.userName
-          } inside BorrowBox.`,
-          'success'
-        );
-      } else {
-        onNotify(
-          `Ticket status updated to ${formatStatusLabel(nextStatus)}.`,
-          'success'
-        );
-      }
-    } catch (err) {
-      onNotify(
-        err instanceof Error ? err.message : 'Failed to update ticket status.',
-        'error'
-      );
-    } finally {
-      setUpdatingStatus(false);
-    }
-  };
-
-  // Admin Override: Reassign Ticket
-  const handleAdminReassign = async () => {
-    if (!selectedTicket || !hasAdminOverride || !reassignStaffId) return;
-    const targetAdmin =
-      activeSupportAdmins.find((a) => a.uid === reassignStaffId) ||
-      activeSupportAdmins.find((a) => a.email === reassignStaffId);
-
-    if (!targetAdmin) {
-      onNotify('Select a valid support staff member to reassign.', 'error');
-      return;
-    }
-
-    setUpdatingStatus(true);
-    try {
-      const result = await updateSupportTicketWorkflowOrOverride({
-        ticket: selectedTicket,
-        actor: currentAdmin,
-        operation: 'reassign',
-        newAssignedTo: targetAdmin.uid,
-        newAssignedStaffName: targetAdmin.name,
-        newAssignedToEmail: targetAdmin.email,
-      });
-      onTicketUpdated(result.updatedTicket, result.auditLog);
-      if (result.historyEvent) {
-        setHistory((prev) => [result.historyEvent, ...prev]);
-      }
-      onNotify(
-        `Ticket reassigned to ${targetAdmin.name} (${targetAdmin.email}).`,
-        'success'
-      );
-    } catch (err) {
-      onNotify(
-        err instanceof Error ? err.message : 'Failed to reassign ticket.',
-        'error'
-      );
-    } finally {
-      setUpdatingStatus(false);
-    }
-  };
-
-  // Admin Override: Release Claim back to Unclaimed Queue
-  const handleAdminReleaseClaim = async () => {
-    if (!selectedTicket || !hasAdminOverride) return;
-    setUpdatingStatus(true);
-    try {
-      const result = await updateSupportTicketWorkflowOrOverride({
-        ticket: selectedTicket,
-        actor: currentAdmin,
-        operation: 'release_claim',
-      });
-      onTicketUpdated(result.updatedTicket, result.auditLog);
-      if (result.historyEvent) {
-        setHistory((prev) => [result.historyEvent, ...prev]);
-      }
-      onNotify(
-        `Claim released. Ticket ${
-          selectedTicket.ticketNumber || selectedTicket.id
-        } returned to Unclaimed queue.`,
-        'info'
-      );
-    } catch (err) {
-      onNotify(
-        err instanceof Error ? err.message : 'Failed to release claim.',
-        'error'
-      );
-    } finally {
-      setUpdatingStatus(false);
-    }
-  };
-
-  // Admin Override: Reopen Resolved/Closed Ticket
-  const handleAdminReopen = async () => {
-    if (!selectedTicket || !hasAdminOverride) return;
-    setUpdatingStatus(true);
-    try {
-      const result = await updateSupportTicketWorkflowOrOverride({
-        ticket: selectedTicket,
-        actor: currentAdmin,
-        operation: 'reopen',
-      });
-      onTicketUpdated(result.updatedTicket, result.auditLog);
-      if (result.historyEvent) {
-        setHistory((prev) => [result.historyEvent, ...prev]);
-      }
-      onNotify(
-        `Ticket ${
-          selectedTicket.ticketNumber || selectedTicket.id
-        } reopened by Admin Override.`,
-        'success'
-      );
-    } catch (err) {
-      onNotify(
-        err instanceof Error ? err.message : 'Failed to reopen ticket.',
-        'error'
-      );
-    } finally {
-      setUpdatingStatus(false);
-    }
-  };
-
-  // Attachment Upload Helpers with Progress, Error State, Retry, and Removal
-  const executeAttachmentUpload = async (localId: string, file: File) => {
-    setReplyUploadEntries((prev) =>
-      prev.map((entry) =>
-        entry.localId === localId
-          ? { ...entry, status: 'uploading', progress: 5, error: undefined }
-          : entry
+    setPendingUploads((prev) =>
+      prev.map((u) =>
+        u.id === uploadId
+          ? { ...u, status: 'uploading', progress: 5, errorMessage: undefined }
+          : u
       )
     );
 
@@ -634,1514 +384,1862 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
         file,
         currentAdmin.uid,
         (pct) => {
-          setReplyUploadEntries((prev) =>
-            prev.map((entry) =>
-              entry.localId === localId
-                ? {
-                    ...entry,
-                    status: 'uploading',
-                    progress: Math.max(entry.progress, pct),
-                  }
-                : entry
-            )
+          setPendingUploads((prev) =>
+            prev.map((u) => (u.id === uploadId ? { ...u, progress: pct } : u))
           );
         }
       );
 
-      setReplyUploadEntries((prev) =>
-        prev.map((entry) =>
-          entry.localId === localId
+      setPendingUploads((prev) =>
+        prev.map((u) =>
+          u.id === uploadId
             ? {
-                ...entry,
+                ...u,
                 status: 'completed',
                 progress: 100,
                 uploadedItem: uploaded,
-                error: undefined,
               }
-            : entry
+            : u
         )
       );
     } catch (err) {
-      const errorMessage =
+      const errMsg =
         err instanceof Error
           ? err.message
-          : 'Upload failed. Click Retry or remove the file.';
-      setReplyUploadEntries((prev) =>
-        prev.map((entry) =>
-          entry.localId === localId
-            ? {
-                ...entry,
-                status: 'failed',
-                progress: 0,
-                error: errorMessage,
-              }
-            : entry
+          : `Failed to upload "${file.name}".`;
+      setPendingUploads((prev) =>
+        prev.map((u) =>
+          u.id === uploadId
+            ? { ...u, status: 'error', progress: 0, errorMessage: errMsg }
+            : u
         )
       );
+      onNotify(errMsg, 'error');
     }
   };
 
-  const handleSelectReplyFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = e.target.files;
-    if (!fileList || fileList.length === 0) return;
-    setUploadError(null);
+  const handleAttachmentFileSelect = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !selectedTicket) return;
 
-    const incomingFiles: File[] = Array.from(fileList);
-    const remainingSlots =
-      MAX_ATTACHMENTS_PER_TICKET - replyUploadEntries.length;
-
-    if (remainingSlots <= 0) {
-      setUploadError(
-        `Maximum ${MAX_ATTACHMENTS_PER_TICKET} attachments allowed per message.`
-      );
-      e.target.value = '';
+    const currentCount = pendingUploads.length;
+    if (currentCount + files.length > 5) {
+      onNotify('Maximum 5 attachments allowed per message.', 'error');
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
-    if (incomingFiles.length > remainingSlots) {
-      setUploadError(
-        `Only ${remainingSlots} more file(s) can be added (max ${MAX_ATTACHMENTS_PER_TICKET} attachments).`
-      );
-    }
-
-    const filesToQueue = incomingFiles.slice(0, remainingSlots);
-    const newEntries: AttachmentUploadEntry[] = filesToQueue.map(
-      (file, index) => ({
-        localId: `ADM-UP-${Date.now()}-${index}-${Math.random()
-          .toString(36)
-          .slice(2, 6)}`,
+    const newEntries: PendingAttachmentUpload[] = Array.from(files).map(
+      (file) => ({
+        id: `UP-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         file,
-        name: file.name,
-        sizeBytes: file.size,
-        status: 'uploading',
+        previewUrl: file.type.startsWith('image/')
+          ? URL.createObjectURL(file)
+          : '',
         progress: 0,
+        status: 'uploading',
       })
     );
 
-    setReplyUploadEntries((prev) => [...prev, ...newEntries]);
-    e.target.value = '';
+    setPendingUploads((prev) => [...prev, ...newEntries]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
 
-    for (const item of newEntries) {
-      void executeAttachmentUpload(item.localId, item.file);
-    }
-  };
-
-  const handleRetryAttachment = (localId: string) => {
-    const targetEntry = replyUploadEntries.find(
-      (item) => item.localId === localId
-    );
-    if (!targetEntry) return;
-    void executeAttachmentUpload(targetEntry.localId, targetEntry.file);
-  };
-
-  const handleRemoveAttachment = (localId: string) => {
-    setReplyUploadEntries((prev) =>
-      prev.filter((item) => item.localId !== localId)
+    await Promise.all(
+      newEntries.map((entry) => startUploadForFile(entry.id, entry.file))
     );
   };
 
-  const hasPendingUploads = replyUploadEntries.some(
-    (item) => item.status === 'uploading'
+  const handleRemovePendingUpload = (uploadId: string) => {
+    setPendingUploads((prev) => {
+      const target = prev.find((u) => u.id === uploadId);
+      if (target?.previewUrl) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return prev.filter((u) => u.id !== uploadId);
+    });
+  };
+
+  const isUploadingAttachment = pendingUploads.some(
+    (u) => u.status === 'uploading'
   );
-  const hasFailedUploads = replyUploadEntries.some(
-    (item) => item.status === 'failed'
+  const completedAttachments = useMemo(
+    () =>
+      pendingUploads
+        .filter((u) => u.status === 'completed' && u.uploadedItem)
+        .map((u) => u.uploadedItem!),
+    [pendingUploads]
   );
 
-  // Send Staff Reply or Add Internal Note
-  const handleSendComposerMessage = async (e: React.FormEvent) => {
+  // Send Reply or Internal Staff Note
+  const handleSendMessageOrNote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTicket) return;
-    setUploadError(null);
+    if (!selectedTicket || isSendingReply) return;
 
-    if (hasPendingUploads) {
-      setUploadError('Please wait for attachment uploads to complete first.');
+    const isInternal = composerMode === 'internal_note';
+    if (!replyText.trim() && completedAttachments.length === 0) {
+      setComposerError(
+        isInternal
+          ? 'Please enter an internal staff note before submitting.'
+          : 'Please enter a reply message or attach a file before sending.'
+      );
       return;
     }
 
-    if (hasFailedUploads) {
-      setUploadError('Please retry or remove failed attachments before sending.');
-      return;
-    }
-
-    const completedAttachments = replyUploadEntries
-      .filter((item) => item.status === 'completed' && item.uploadedItem)
-      .map((item) => item.uploadedItem!);
-
-    const cleanText = composerText.trim();
-    if (!cleanText && completedAttachments.length === 0) return;
-
-    setSendingMessage(true);
+    setComposerError(null);
+    setIsSendingReply(true);
     try {
-      const isInternalNote = composerMode === 'internal_note';
-      const result = await postSupportTicketReplyOrNote({
+      const res = await postSupportTicketReplyOrNote({
         ticket: selectedTicket,
         senderId: currentAdmin.uid,
         senderName: currentAdmin.name,
         senderEmail: currentAdmin.email,
         senderRole: hasAdminOverride ? 'admin' : 'staff',
         actorAdminRole: currentAdmin.role,
-        message:
-          cleanText || `Attached ${completedAttachments.length} file(s)`,
+        message: replyText,
+        isInternal,
         attachments: completedAttachments,
-        isInternal: isInternalNote,
       });
 
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === result.messageRecord.id)) return prev;
-        return [...prev, result.messageRecord];
+      if (res.messageRecord) {
+        setMessages((prev) =>
+          prev.some((m) => m.id === res.messageRecord.id)
+            ? prev
+            : [...prev, res.messageRecord]
+        );
+      }
+      if (res.historyEvent) {
+        setHistory((prev) =>
+          prev.some((h) => h.id === res.historyEvent.id)
+            ? prev
+            : [res.historyEvent, ...prev]
+        );
+      }
+
+      setReplyText('');
+      pendingUploads.forEach((u) => {
+        if (u.previewUrl) URL.revokeObjectURL(u.previewUrl);
       });
-      setHistory((prev) => [result.historyEvent, ...prev]);
-      onTicketUpdated(result.updatedTicket);
-      setComposerText('');
-      setReplyUploadEntries([]);
+      setPendingUploads([]);
+      onTicketUpdated(res.updatedTicket);
       onNotify(
-        isInternalNote
-          ? 'Private internal staff note saved.'
+        isInternal
+          ? 'Internal staff note saved to ticket.'
           : `Reply sent to ${selectedTicket.userName}.`,
         'success'
       );
     } catch (err) {
-      onNotify(
-        err instanceof Error ? err.message : 'Failed to post message.',
-        'error'
-      );
+      const errMsg =
+        err instanceof Error ? err.message : 'Could not send message.';
+      setComposerError(errMsg);
+      onNotify(errMsg, 'error');
     } finally {
-      setSendingMessage(false);
+      setIsSendingReply(false);
     }
   };
 
-  const renderAttachmentPreviewList = (
-    attachments: SupportAttachmentItem[],
-    contextKey: string
-  ) => {
-    if (!attachments || attachments.length === 0) return null;
-    return (
-      <div className="mt-2 space-y-2">
-        <div className="flex flex-wrap gap-2">
-          {attachments.map((att) => {
-            const isImg = isImageAttachment(att);
-            const isPdf = isPdfAttachment(att);
-            const openUrl = att.url || att.downloadUrl || '';
-            const dlUrl = openUrl.includes('?')
-              ? `${openUrl}&download=1`
-              : `${openUrl}?download=1`;
+  // Status Update Handler (In Progress, Waiting for User, Mark Resolved)
+  const handleQuickStatusChange = async (newStatus: SupportTicketStatus) => {
+    if (!selectedTicket || isUpdatingWorkflow) return;
+    if (newStatus === 'closed') {
+      // Closing always requires the confirmation modal
+      setCloseResolutionDraft(selectedTicket.resolutionSummary || '');
+      setCloseModalError(null);
+      setIsCloseModalOpen(true);
+      return;
+    }
 
-            if (isImg) {
-              return (
-                <div
-                  key={`${contextKey}-${att.id}`}
-                  className="group relative rounded-xl overflow-hidden border border-white/[0.12] bg-[#0B0F19] max-w-[200px]"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setLightboxAttachment(att)}
-                    className="block w-full text-left cursor-pointer focus:outline-none"
-                    title={`Click to view larger: ${att.name}`}
-                  >
-                    <img
-                      src={openUrl}
-                      alt={att.name}
-                      className="w-full h-28 object-cover group-hover:scale-[1.02] transition-transform"
-                    />
-                    <div className="px-2 py-1 flex items-center justify-between gap-1.5 text-[10px] text-[#F8FAFC] bg-[#111827]">
-                      <span className="truncate font-medium">{att.name}</span>
-                      <Maximize2 className="w-3 h-3 text-[#06B6D4] shrink-0" />
-                    </div>
-                  </button>
-                </div>
-              );
-            }
+    setIsUpdatingWorkflow(true);
+    try {
+      const res = await updateSupportTicketWorkflowOrOverride({
+        ticket: selectedTicket,
+        actor: currentAdmin,
+        operation: 'status_change',
+        newStatus,
+        resolutionSummary: selectedTicket.resolutionSummary,
+      });
 
-            return (
-              <div
-                key={`${contextKey}-${att.id}`}
-                className="flex items-center justify-between gap-2.5 px-2.5 py-1.5 rounded-xl bg-[#0B0F19] border border-white/[0.12] text-[11px] text-[#F8FAFC] min-w-[210px]"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <FileText className="w-3.5 h-3.5 text-[#06B6D4] shrink-0" />
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">{att.name}</div>
-                    <div className="text-[10px] text-[#94A3B8]">
-                      {isPdf ? 'PDF' : 'File'} · {formatBytes(att.sizeBytes)}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <a
-                    href={openUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#06B6D4]/15 hover:bg-[#06B6D4]/25 border border-[#06B6D4]/30 text-[10px] font-semibold text-[#06B6D4]"
-                  >
-                    <ExternalLink className="w-2.5 h-2.5" />
-                    <span>Open</span>
-                  </a>
-                  <a
-                    href={dlUrl}
-                    download={att.name}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#161E2E] hover:bg-[#1D293B] border border-white/[0.1] text-[10px] font-medium text-[#F8FAFC]"
-                  >
-                    <Download className="w-2.5 h-2.5" />
-                    <span>Download</span>
-                  </a>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
+      if (res.historyEvent) {
+        setHistory((prev) => [res.historyEvent, ...prev]);
+      }
+
+      onTicketUpdated(res.updatedTicket, res.auditLog);
+      onNotify(
+        `Ticket ${selectedTicket.ticketNumber || selectedTicket.id} marked as ${
+          ADMIN_TICKET_STATUS_CONFIG[newStatus].label
+        }.`,
+        'success'
+      );
+    } catch (err) {
+      const errMsg =
+        err instanceof Error ? err.message : 'Failed to update ticket status.';
+      onNotify(errMsg, 'error');
+    } finally {
+      setIsUpdatingWorkflow(false);
+    }
   };
 
-  return (
-    <div className="space-y-6">
-      {/* ====================================================================
-          1. FOUR COMPACT STATISTICS
-         ==================================================================== */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-[#161E2E] border border-white/[0.08]">
-          <div className="flex items-center justify-between text-xs text-[#94A3B8]">
-            <span>Total Tickets</span>
-            <Inbox className="w-4 h-4 text-[#8B5CF6]" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-[#F8FAFC] mt-1.5">
-            {stats.total}
-          </div>
-          <div className="text-[11px] text-[#94A3B8] mt-0.5">
-            All customer support requests
-          </div>
-        </div>
+  // Confirm Close Ticket Modal Handler
+  const handleConfirmCloseTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTicket || isUpdatingWorkflow) return;
 
-        <div className="p-4 rounded-xl bg-[#161E2E] border border-white/[0.08]">
-          <div className="flex items-center justify-between text-xs text-[#94A3B8]">
-            <span>Unclaimed</span>
-            <Clock className="w-4 h-4 text-[#F59E0B]" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-[#F59E0B] mt-1.5">
-            {stats.unclaimed}
-          </div>
-          <div className="text-[11px] text-[#94A3B8] mt-0.5">
-            Awaiting staff ownership claim
-          </div>
-        </div>
+    const validation = validateCloseTicketResolution(closeResolutionDraft);
+    if (!validation.valid) {
+      setCloseModalError(
+        validation.error || 'Please enter an official resolution summary.'
+      );
+      return;
+    }
 
-        <div className="p-4 rounded-xl bg-[#161E2E] border border-white/[0.08]">
-          <div className="flex items-center justify-between text-xs text-[#94A3B8]">
-            <span>My Tickets</span>
-            <UserCheck className="w-4 h-4 text-[#06B6D4]" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-[#06B6D4] mt-1.5">
-            {stats.myTickets}
-          </div>
-          <div className="text-[11px] text-[#94A3B8] mt-0.5">
-            Claimed by {currentAdmin.name}
-          </div>
-        </div>
+    setCloseModalError(null);
+    setIsUpdatingWorkflow(true);
+    try {
+      const res = await updateSupportTicketWorkflowOrOverride({
+        ticket: selectedTicket,
+        actor: currentAdmin,
+        operation: 'status_change',
+        newStatus: 'closed',
+        resolutionSummary: validation.trimmed,
+      });
 
-        <div className="p-4 rounded-xl bg-[#161E2E] border border-white/[0.08]">
-          <div className="flex items-center justify-between text-xs text-[#94A3B8]">
-            <span>Resolved</span>
-            <CheckCircle2 className="w-4 h-4 text-[#22C55E]" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-[#22C55E] mt-1.5">
-            {stats.resolved}
-          </div>
-          <div className="text-[11px] text-[#94A3B8] mt-0.5">
-            Resolved & closed tickets
-          </div>
-        </div>
-      </div>
+      if (res.historyEvent) {
+        setHistory((prev) => [res.historyEvent, ...prev]);
+      }
 
-      {/* ====================================================================
-          TWO DISTINCT PANELS: ACTIVE TICKETS VS TICKET LOG
-         ==================================================================== */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-[#161E2E] border border-white/[0.08]">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setAdminPanelTab('active_tickets')}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-              adminPanelTab === 'active_tickets'
-                ? 'bg-[#8B5CF6] text-white'
-                : 'bg-[#111827] text-[#94A3B8] hover:text-[#F8FAFC] border border-white/[0.07]'
-            }`}
+      const closedTicketNumber =
+        selectedTicket.ticketNumber || selectedTicket.id;
+
+      // Update parent ticket state
+      onTicketUpdated(res.updatedTicket, res.auditLog);
+
+      // Close modal and return administrator to the Active Tickets dashboard
+      setIsCloseModalOpen(false);
+      setCloseResolutionDraft('');
+      setDashboardTab('active_tickets');
+      setSelectedTicketId(null);
+      onClearSelectedTicket?.();
+
+      onNotify(
+        `Ticket ${closedTicketNumber} closed and moved to Closed Tickets.`,
+        'success'
+      );
+    } catch (err) {
+      const errMsg =
+        err instanceof Error ? err.message : 'Failed to close ticket.';
+      setCloseModalError(errMsg);
+      onNotify(errMsg, 'error');
+    } finally {
+      setIsUpdatingWorkflow(false);
+    }
+  };
+
+  // Confirm Reopen Ticket Modal Handler
+  const handleConfirmReopenTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTicket || isUpdatingWorkflow) return;
+
+    setIsUpdatingWorkflow(true);
+    try {
+      const res = await updateSupportTicketWorkflowOrOverride({
+        ticket: selectedTicket,
+        actor: currentAdmin,
+        operation: 'reopen',
+        newStatus: 'in_progress',
+        internalNotes: reopenReasonDraft.trim()
+          ? `${
+              selectedTicket.internalNotes
+                ? `${selectedTicket.internalNotes}\n`
+                : ''
+            }[Reopened by ${currentAdmin.name}]: ${reopenReasonDraft.trim()}`
+          : selectedTicket.internalNotes,
+      });
+
+      if (res.historyEvent) {
+        setHistory((prev) => [res.historyEvent, ...prev]);
+      }
+
+      onTicketUpdated(res.updatedTicket, res.auditLog);
+      setIsReopenModalOpen(false);
+      setReopenReasonDraft('');
+      setDashboardTab('active_tickets');
+      setOpenedFromTab('active_tickets');
+      onNotify(
+        `Ticket ${
+          selectedTicket.ticketNumber || selectedTicket.id
+        } reopened and moved back to Active Tickets.`,
+        'success'
+      );
+    } catch (err) {
+      const errMsg =
+        err instanceof Error ? err.message : 'Failed to reopen ticket.';
+      onNotify(errMsg, 'error');
+    } finally {
+      setIsUpdatingWorkflow(false);
+    }
+  };
+
+  // Change Assignment Handler
+  const handleReassignTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTicket || !hasAdminOverride || isUpdatingWorkflow) return;
+
+    const targetAdmin = admins.find((a) => a.uid === reassignTargetUid);
+    if (!targetAdmin) {
+      onNotify('Select a valid support staff member to assign.', 'error');
+      return;
+    }
+
+    setIsUpdatingWorkflow(true);
+    try {
+      const res = await updateSupportTicketWorkflowOrOverride({
+        ticket: selectedTicket,
+        actor: currentAdmin,
+        operation: 'reassign',
+        newAssignedTo: targetAdmin.uid,
+        newAssignedStaffName: targetAdmin.name,
+        newAssignedToEmail: targetAdmin.email,
+      });
+
+      if (res.historyEvent) {
+        setHistory((prev) => [res.historyEvent, ...prev]);
+      }
+
+      setReassignNote('');
+      setIsReassignOpen(false);
+      onTicketUpdated(res.updatedTicket, res.auditLog);
+      onNotify(`Ticket assigned to ${targetAdmin.name}.`, 'success');
+    } catch (err) {
+      const errMsg =
+        err instanceof Error ? err.message : 'Failed to change assignment.';
+      onNotify(errMsg, 'error');
+    } finally {
+      setIsUpdatingWorkflow(false);
+    }
+  };
+
+  // ============================================================================
+  // RENDER VIEW 1: MAIN TICKET DASHBOARD (when no individual ticket is opened)
+  // ============================================================================
+  if (!selectedTicket) {
+    const displayedTickets =
+      dashboardTab === 'active_tickets'
+        ? filteredActiveTickets
+        : paginatedClosedTickets;
+
+    return (
+      <div
+        data-testid="admin-tickets-dashboard"
+        className="space-y-5 text-[#F8FAFC]"
+      >
+        {/* Top Navigation Bar + Unified Search */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-[#161E2E] border border-white/[0.08] flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* Two Clear Horizontal Tabs with Counts */}
+          <div
+            role="tablist"
+            aria-label="Ticket Dashboard Tabs"
+            className="inline-flex items-center p-1 rounded-xl bg-[#0B0F19] border border-white/[0.08] self-start"
           >
-            <Inbox className="w-4 h-4" />
-            <span>
-              Active Tickets Panel ({tickets.filter((t) => t.status !== 'closed').length})
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setAdminPanelTab('ticket_log')}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-              adminPanelTab === 'ticket_log'
-                ? 'bg-[#8B5CF6] text-white'
-                : 'bg-[#111827] text-[#94A3B8] hover:text-[#F8FAFC] border border-white/[0.07]'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>
-              Ticket Log (Historical Archive · {closedTicketsList.length})
-            </span>
-          </button>
-        </div>
-
-        <div className="text-xs text-[#94A3B8] font-mono">
-          {adminPanelTab === 'active_tickets'
-            ? 'Active queue for open, in-progress, waiting, & resolved tickets'
-            : 'Immutable archive of all closed support tickets & resolution summaries'}
-        </div>
-      </div>
-
-      {adminPanelTab === 'ticket_log' ? (
-        <div className="space-y-6">
-          {/* Ticket Log Search & Filters */}
-          <div className="p-4 rounded-2xl bg-[#161E2E] border border-white/[0.08] flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-[#94A3B8] absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="search"
-                value={logSearchQuery}
-                onChange={(e) => setLogSearchQuery(e.target.value)}
-                placeholder="Search closed tickets by ID, customer name, email, subject..."
-                className="w-full pl-9 pr-4 py-2 bg-[#111827] border border-white/[0.08] rounded-xl text-xs text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={logCategoryFilter}
-                onChange={(e) => setLogCategoryFilter(e.target.value)}
-                className="px-3 py-2 bg-[#111827] border border-white/[0.08] rounded-xl text-xs text-[#F8FAFC]"
+            <button
+              type="button"
+              role="tab"
+              aria-selected={dashboardTab === 'active_tickets'}
+              data-testid="admin-tab-active-tickets"
+              onClick={() => setDashboardTab('active_tickets')}
+              className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                dashboardTab === 'active_tickets'
+                  ? 'bg-[#8B5CF6] text-white shadow-md shadow-[#8B5CF6]/25'
+                  : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+              }`}
+            >
+              <Inbox className="w-3.5 h-3.5" />
+              <span>Active Tickets</span>
+              <span
+                className={`px-2 py-0.5 rounded-md text-[11px] font-mono font-bold ${
+                  dashboardTab === 'active_tickets'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-[#161E2E] text-[#06B6D4]'
+                }`}
               >
-                <option value="all">All Categories</option>
-                <option value="Booking & Handover">Booking & Handover</option>
-                <option value="Payment & Deposit">Payment & Deposit</option>
-                <option value="Item Condition & Damage">Item Condition & Damage</option>
-                <option value="Account & Verification">Account & Verification</option>
-                <option value="Safety & Trust">Safety & Trust</option>
-                <option value="General Enquiry">General Enquiry</option>
-              </select>
-
-              <select
-                value={logStaffFilter}
-                onChange={(e) => setLogStaffFilter(e.target.value)}
-                className="px-3 py-2 bg-[#111827] border border-white/[0.08] rounded-xl text-xs text-[#F8FAFC]"
-              >
-                <option value="all">All Staff Closers</option>
-                {admins.map((adm) => (
-                  <option key={adm.id} value={adm.uid}>
-                    {adm.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Ticket Log Table */}
-          <div className="rounded-2xl bg-[#161E2E] border border-white/[0.08] overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-white/[0.08] bg-[#111827] text-[11px] font-semibold uppercase tracking-wider text-[#94A3B8]">
-                    <th className="py-3.5 px-4">Ticket ID</th>
-                    <th className="py-3.5 px-4">Customer</th>
-                    <th className="py-3.5 px-4">Subject</th>
-                    <th className="py-3.5 px-4">Category</th>
-                    <th className="py-3.5 px-4">Closed By Staff</th>
-                    <th className="py-3.5 px-4">Closure Date</th>
-                    <th className="py-3.5 px-4">Resolution Summary</th>
-                    <th className="py-3.5 px-4 text-right">Archive View</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/[0.06] text-xs">
-                  {paginatedClosedTickets.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="py-12 text-center text-[#94A3B8]">
-                        No closed tickets found in the Ticket Log matching your search or filters.
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedClosedTickets.map((t) => (
-                      <tr
-                        key={t.id}
-                        onClick={() => setSelectedTicketId(t.id)}
-                        className={`transition-colors cursor-pointer ${
-                          selectedTicket?.id === t.id ? 'bg-[#8B5CF6]/10' : 'hover:bg-white/[0.02]'
-                        }`}
-                      >
-                        <td className="py-3.5 px-4 font-mono font-bold text-[#06B6D4] whitespace-nowrap">
-                          {t.ticketNumber || t.id}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <div className="font-semibold text-[#F8FAFC]">{t.userName}</div>
-                          <div className="font-mono text-[11px] text-[#94A3B8]">{t.userEmail}</div>
-                        </td>
-                        <td className="py-3.5 px-4 max-w-[220px]">
-                          <div className="font-semibold text-[#F8FAFC] truncate">{t.subject}</div>
-                        </td>
-                        <td className="py-3.5 px-4 text-[#94A3B8] whitespace-nowrap">
-                          {t.category || 'General Enquiry'}
-                        </td>
-                        <td className="py-3.5 px-4 whitespace-nowrap">
-                          <div className="font-semibold text-[#F8FAFC]">
-                            {t.assignedStaffName || t.assignedToEmail || 'Support Staff'}
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4 font-mono text-[11px] text-[#94A3B8] whitespace-nowrap">
-                          {(t.closedAtISO || t.updatedAtISO || '').slice(0, 16).replace('T', ' ')}
-                        </td>
-                        <td className="py-3.5 px-4 max-w-[240px]">
-                          <div className="text-[11px] text-[#22C55E] italic truncate">
-                            &ldquo;{t.resolutionSummary || 'Resolved and closed'}&rdquo;
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedTicketId(t.id)}
-                            className="px-3 py-1.5 rounded-lg bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-medium text-[#F8FAFC] cursor-pointer"
-                          >
-                            Open Archive &rarr;
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination Controls */}
-            {totalLogPages > 1 && (
-              <div className="flex items-center justify-between p-4 bg-[#111827] border-t border-white/[0.08] text-xs">
-                <span className="text-[#94A3B8]">
-                  Showing page {logPage} of {totalLogPages} ({filteredClosedTickets.length} closed tickets)
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={logPage <= 1}
-                    onClick={() => setLogPage((p) => Math.max(1, p - 1))}
-                    className="px-3 py-1 rounded bg-[#161E2E] hover:bg-[#1D293B] disabled:opacity-40 text-[#F8FAFC] cursor-pointer"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    disabled={logPage >= totalLogPages}
-                    onClick={() => setLogPage((p) => Math.min(totalLogPages, p + 1))}
-                    className="px-3 py-1 rounded bg-[#161E2E] hover:bg-[#1D293B] disabled:opacity-40 text-[#F8FAFC] cursor-pointer"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Selected Closed Ticket Workspace Inspection Modal / Section */}
-          {selectedTicket && selectedTicket.status === 'closed' && (
-            <div className="p-6 rounded-2xl bg-[#161E2E] border border-[#22C55E]/30 space-y-5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs font-bold text-[#22C55E]">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>
-                    Closed Ticket Historical Archive Workspace · {selectedTicket.ticketNumber || selectedTicket.id}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedTicketId(null)}
-                  className="p-1 rounded hover:bg-white/10 text-[#94A3B8] cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs bg-[#111827] p-4 rounded-xl border border-white/[0.07]">
-                <div>
-                  <span className="text-[#94A3B8]">Customer:</span>
-                  <div className="font-semibold text-[#F8FAFC]">
-                    {selectedTicket.userName} ({selectedTicket.userEmail})
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[#94A3B8]">Category:</span>
-                  <div className="font-semibold text-[#F8FAFC]">
-                    {selectedTicket.category || 'General'}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[#94A3B8]">Closed By:</span>
-                  <div className="font-semibold text-[#F8FAFC]">
-                    {selectedTicket.assignedStaffName || selectedTicket.assignedToEmail || 'Admin'}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[#94A3B8]">Closure Timestamp:</span>
-                  <div className="font-mono text-[#22C55E]">
-                    {selectedTicket.closedAtISO || selectedTicket.updatedAtISO}
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 rounded-xl bg-[#111827] border border-emerald-500/30 space-y-2">
-                <div className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                  Official Resolution Summary
-                </div>
-                <p className="text-xs text-[#F8FAFC] leading-relaxed italic">
-                  &ldquo;{selectedTicket.resolutionSummary || 'None provided'}&rdquo;
-                </p>
-              </div>
-
-              {/* Complete Conversation & Attachments preserved in Ticket Log */}
-              <div className="space-y-3">
-                <div className="text-xs font-bold uppercase tracking-wider text-[#94A3B8]">
-                  Complete Conversation & Attachments Archive
-                </div>
-                <div className="space-y-2.5 max-h-72 overflow-y-auto">
-                  {messages.map((m) => (
-                    <div
-                      key={m.id}
-                      className="p-3 rounded-xl bg-[#111827] border border-white/[0.07] space-y-1 text-xs"
-                    >
-                      <div className="flex items-center justify-between text-[10px] font-mono text-[#94A3B8]">
-                        <span className="font-bold text-[#06B6D4]">
-                          {m.senderName} ({m.senderRole})
-                        </span>
-                        <span>{m.createdAtISO.slice(0, 16).replace('T', ' ')}</span>
-                      </div>
-                      <p className="text-[#F8FAFC]">{m.message}</p>
-                      {renderAttachmentPreviewList(m.attachments || [], m.id)}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {hasAdminOverride && (
-                <div className="pt-2 flex justify-end">
-                  <button
-                    type="button"
-                    disabled={updatingStatus}
-                    onClick={() => void handleAdminReopen()}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold cursor-pointer"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    <span>Reopen Closed Ticket via Admin Override</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      ) : (
-        <>
-      {staffNotifications.length > 0 && (
-        <div
-          data-testid="staff-support-notifications"
-          className="p-4 rounded-2xl bg-[#161E2E] border border-white/[0.08] space-y-3"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Bell className="w-4 h-4 text-[#06B6D4]" />
-              <span className="text-xs font-bold uppercase tracking-wider text-[#F8FAFC]">
-                Support Staff Notifications
+                {activeTickets.length}
               </span>
-              {staffNotifications.filter((n) => !n.read).length > 0 && (
-                <span
-                  data-testid="staff-unread-notif-count"
-                  className="px-2 py-0.5 rounded bg-[#8B5CF6] text-white text-[10px] font-bold font-mono"
-                >
-                  {staffNotifications.filter((n) => !n.read).length} Unread
-                </span>
-              )}
-            </div>
-            {staffNotifications.some((n) => !n.read) && (
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              aria-selected={dashboardTab === 'closed_tickets'}
+              data-testid="admin-tab-closed-tickets"
+              onClick={() => setDashboardTab('closed_tickets')}
+              className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                dashboardTab === 'closed_tickets'
+                  ? 'bg-[#8B5CF6] text-white shadow-md shadow-[#8B5CF6]/25'
+                  : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+              }`}
+            >
+              <Archive className="w-3.5 h-3.5" />
+              <span>Closed Tickets</span>
+              <span
+                className={`px-2 py-0.5 rounded-md text-[11px] font-mono font-bold ${
+                  dashboardTab === 'closed_tickets'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-[#161E2E] text-[#94A3B8]'
+                }`}
+              >
+                {closedTickets.length}
+              </span>
+            </button>
+          </div>
+
+          {/* Single Clean Dynamic Search Bar */}
+          <div className="relative w-full md:w-80 lg:w-96">
+            <Search className="w-4 h-4 text-[#94A3B8] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              data-testid="admin-tickets-search-input"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by Customer name or Ticket ID..."
+              className="w-full bg-[#0B0F19] border border-white/[0.08] rounded-xl pl-10 pr-9 py-2.5 text-xs text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6] transition-colors"
+            />
+            {searchQuery.trim() && (
               <button
                 type="button"
-                onClick={() => void handleMarkAllStaffNotificationsRead()}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-[11px] font-medium text-[#F8FAFC] cursor-pointer"
+                aria-label="Clear ticket search"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-[#94A3B8] hover:text-[#F8FAFC] cursor-pointer"
               >
-                <Check className="w-3 h-3 text-[#22C55E]" />
-                <span>Mark all read</span>
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-48 overflow-y-auto pr-1">
-            {staffNotifications.slice(0, 6).map((notif) => (
-              <div
-                key={notif.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => void handleOpenStaffNotification(notif)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    void handleOpenStaffNotification(notif);
-                  }
-                }}
-                className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 ${
-                  notif.read
-                    ? 'bg-[#111827]/70 border-white/[0.07] text-[#94A3B8] hover:bg-[#111827]'
-                    : 'bg-[#8B5CF6]/10 border-[#8B5CF6]/40 text-[#F8FAFC] hover:bg-[#8B5CF6]/15'
-                }`}
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      {!notif.read && (
-                        <span className="w-2 h-2 rounded-full bg-[#06B6D4] shrink-0" />
-                      )}
-                      <span className="text-xs font-bold truncate">
-                        {notif.title}
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-mono text-[#94A3B8] shrink-0">
-                      {notif.timestampISO.slice(0, 16).replace('T', ' ')}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-[#94A3B8] line-clamp-2">
-                    {notif.body}
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/[0.05] text-[10px]">
-                  <span className="font-mono text-[#06B6D4] font-semibold">
-                    Open {notif.ticketNumber || notif.ticketId} &rarr;
-                  </span>
-                  {!notif.read ? (
-                    <button
-                      type="button"
-                      onClick={(e) =>
-                        void handleMarkSingleStaffNotificationRead(e, notif)
-                      }
-                      className="px-2 py-0.5 rounded bg-[#161E2E] hover:bg-[#1D293B] border border-white/[0.08] text-[#F8FAFC] cursor-pointer"
-                    >
-                      Mark Read
-                    </button>
-                  ) : (
-                    <span className="text-[#64748B]">Read</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ====================================================================
-          2. PRIMARY FILTERS (4) & SIMPLE SEARCH FIELD
-         ==================================================================== */}
-      <div className="p-4 rounded-2xl bg-[#161E2E] border border-white/[0.08] flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {(
-            [
-              { id: 'all', label: `All Tickets (${stats.total})` },
-              { id: 'unclaimed', label: `Unclaimed (${stats.unclaimed})` },
-              { id: 'my_tickets', label: `My Tickets (${stats.myTickets})` },
-              { id: 'resolved', label: `Resolved (${stats.resolved})` },
-            ] as { id: PrimaryTicketFilter; label: string }[]
-          ).map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => setPrimaryFilter(f.id)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                primaryFilter === f.id
-                  ? 'bg-[#8B5CF6] text-white'
-                  : 'bg-[#111827] text-[#94A3B8] hover:text-[#F8FAFC] border border-white/[0.07]'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
         </div>
 
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-[#94A3B8] absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by Ticket ID, customer name, email, or subject..."
-            className="w-full pl-9 pr-4 py-2 bg-[#111827] border border-white/[0.08] rounded-xl text-xs text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
-          />
-        </div>
-      </div>
-
-      {/* ====================================================================
-          3. CLEAN TICKET TABLE (8 Columns — Priority Removed)
-         ==================================================================== */}
-      <div className="rounded-2xl bg-[#161E2E] border border-white/[0.08] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-white/[0.08] bg-[#111827] text-[11px] font-semibold uppercase tracking-wider text-[#94A3B8]">
-                <th className="py-3.5 px-4">Ticket ID</th>
-                <th className="py-3.5 px-4">Customer</th>
-                <th className="py-3.5 px-4">Subject</th>
-                <th className="py-3.5 px-4">Category</th>
-                <th className="py-3.5 px-4">Assigned Staff</th>
-                <th className="py-3.5 px-4">Created Date</th>
-                <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/[0.06] text-xs">
-              {filteredTickets.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="py-8 text-center text-[#94A3B8]"
-                  >
-                    No support tickets match the selected filter or search query.
-                  </td>
-                </tr>
-              ) : (
-                filteredTickets.map((t) => {
-                  const isSelected = selectedTicket?.id === t.id;
-                  const isUnclaimed = !t.assignedTo;
-                  const isClaimedByMe = t.assignedTo === currentAdmin.uid;
-
-                  return (
-                    <tr
-                      key={t.id}
-                      onClick={() => setSelectedTicketId(t.id)}
-                      className={`transition-colors cursor-pointer ${
-                        isSelected
-                          ? 'bg-[#8B5CF6]/10'
-                          : 'hover:bg-white/[0.02]'
-                      }`}
-                    >
-                      <td className="py-3.5 px-4 font-mono font-bold text-[#06B6D4] whitespace-nowrap">
-                        {t.ticketNumber || t.id}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="font-semibold text-[#F8FAFC]">
-                          {t.userName}
-                        </div>
-                        <div className="font-mono text-[11px] text-[#94A3B8]">
-                          {t.userEmail}
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 max-w-[240px]">
-                        <div className="font-semibold text-[#F8FAFC] truncate">
-                          {t.subject}
-                        </div>
-                        {t.bookingId && (
-                          <div className="font-mono text-[10px] text-[#94A3B8]">
-                            Booking: {t.bookingId}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 text-[#94A3B8] whitespace-nowrap">
-                        {t.category || 'General Enquiry'}
-                      </td>
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        {isUnclaimed ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/25 text-[11px] font-medium">
-                            Unclaimed
-                          </span>
-                        ) : (
-                          <div>
-                            <div className="font-semibold text-[#F8FAFC] flex items-center gap-1">
-                              <span>
-                                {t.assignedStaffName || t.assignedToEmail}
-                              </span>
-                              {isClaimedByMe && (
-                                <span className="px-1.5 py-0.2 rounded bg-[#06B6D4]/20 text-[#06B6D4] text-[9px] font-mono">
-                                  YOU
-                                </span>
-                              )}
-                            </div>
-                            <div className="font-mono text-[10px] text-[#94A3B8]">
-                              {t.assignedToEmail}
-                            </div>
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 font-mono text-[11px] text-[#94A3B8] whitespace-nowrap">
-                        {t.createdAtISO.slice(0, 10)}
-                      </td>
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${getStatusBadgeStyle(
-                            t.status
-                          )}`}
-                        >
-                          {formatStatusLabel(t.status)}
-                        </span>
-                      </td>
-                      <td
-                        className="py-3.5 px-4 text-right whitespace-nowrap"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {isUnclaimed &&
-                        !['resolved', 'closed'].includes(t.status) ? (
-                          <button
-                            type="button"
-                            disabled={claimingTicketId === t.id}
-                            onClick={() => void handleClaimTicket(t)}
-                            className="px-3 py-1.5 rounded-lg bg-[#8B5CF6] hover:bg-[#7C3AED] disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
-                          >
-                            {claimingTicketId === t.id
-                              ? 'Claiming...'
-                              : 'Claim Ticket'}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedTicketId(t.id)}
-                            className="px-3 py-1.5 rounded-lg bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-medium text-[#F8FAFC] cursor-pointer"
-                          >
-                            {isSelected ? 'Viewing' : 'Open Workspace'}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* ====================================================================
-          4. TWO-COLUMN TICKET WORKSPACE (Left: Conversation & Notes | Right: Metadata, Claiming & Admin Override)
-         ==================================================================== */}
-      {selectedTicket && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* LEFT COLUMN (7 cols): Customer Request, Conversation Thread, Reply / Internal Note Composer */}
-          <div className="lg:col-span-7 rounded-2xl bg-[#161E2E] border border-white/[0.08] overflow-hidden flex flex-col">
-            {/* Workspace Header */}
-            <div className="p-5 bg-[#111827] border-b border-white/[0.08] space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-[#06B6D4] bg-[#06B6D4]/10 border border-[#06B6D4]/30 px-2.5 py-1 rounded-lg">
-                    {selectedTicket.ticketNumber || selectedTicket.id}
-                  </span>
-                  <span
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${getStatusBadgeStyle(
-                      selectedTicket.status
-                    )}`}
-                  >
-                    {formatStatusLabel(selectedTicket.status)}
-                  </span>
-                </div>
-                <span className="text-[11px] font-mono text-[#94A3B8]">
-                  In-App Website Ticket · Opened{' '}
-                  {selectedTicket.createdAtISO.slice(0, 10)}
-                </span>
-              </div>
-
-              <h2 className="text-base font-bold text-[#F8FAFC]">
-                {selectedTicket.subject}
-              </h2>
+        {/* Ticket List Table Container */}
+        <div className="rounded-2xl bg-[#161E2E] border border-white/[0.08] overflow-hidden shadow-xl">
+          {/* Panel Subheader */}
+          <div className="px-5 py-3.5 bg-[#111827] border-b border-white/[0.08] flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-[#F8FAFC]">
+                {dashboardTab === 'active_tickets'
+                  ? 'Active Support Queue'
+                  : 'Historical Closed Tickets'}
+              </span>
+              <span className="text-[11px] text-[#94A3B8]">
+                {dashboardTab === 'active_tickets'
+                  ? '— Click any row to open its dedicated ticket workspace'
+                  : '— Click any row to inspect the preserved conversation & resolution'}
+              </span>
             </div>
+            <span className="text-[11px] font-mono text-[#94A3B8]">
+              {dashboardTab === 'active_tickets'
+                ? `Showing ${filteredActiveTickets.length} of ${activeTickets.length} active`
+                : `Showing ${paginatedClosedTickets.length} of ${filteredClosedTickets.length} closed`}
+            </span>
+          </div>
 
-            {/* Ownership Lock Banner if Unclaimed or Claimed by Another Staff Member */}
-            {!canModifySelectedTicket && (
-              <div className="px-5 py-3 bg-[#F59E0B]/10 border-b border-[#F59E0B]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                <div className="flex items-center gap-2 text-[#F59E0B]">
-                  <Lock className="w-4 h-4 shrink-0" />
-                  <span>
-                    {isSelectedUnclaimed
-                      ? 'This ticket is currently Unclaimed. Claim this ticket to reply to the customer or update its status.'
-                      : `This ticket is claimed by ${
-                          selectedTicket.assignedStaffName ||
-                          selectedTicket.assignedToEmail
-                        }. Regular support staff cannot modify tickets owned by another staff member.`}
-                  </span>
-                </div>
-                {isSelectedUnclaimed && (
+          {displayedTickets.length === 0 ? (
+            <div className="p-12 text-center space-y-2">
+              <LifeBuoy className="w-8 h-8 text-[#94A3B8] mx-auto opacity-60" />
+              <div className="text-sm font-semibold text-[#F8FAFC]">
+                {searchQuery.trim()
+                  ? `No ${
+                      dashboardTab === 'active_tickets' ? 'active' : 'closed'
+                    } tickets match "${searchQuery}"`
+                  : dashboardTab === 'active_tickets'
+                  ? 'No Active Support Tickets'
+                  : 'No Closed Support Tickets Yet'}
+              </div>
+              <p className="text-xs text-[#94A3B8] max-w-md mx-auto">
+                {searchQuery.trim()
+                  ? 'Try searching with a different customer name or ticket ID.'
+                  : dashboardTab === 'active_tickets'
+                  ? 'All customer support requests have been resolved and closed.'
+                  : 'Tickets closed with an official resolution summary will be archived here.'}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-white/[0.08] bg-[#111827]/60 text-[11px] font-semibold uppercase tracking-wider text-[#94A3B8]">
+                    <th className="py-3.5 px-4 whitespace-nowrap">Ticket ID</th>
+                    <th className="py-3.5 px-4 whitespace-nowrap">Customer</th>
+                    <th className="py-3.5 px-4">Subject</th>
+                    <th className="py-3.5 px-4 whitespace-nowrap">Category</th>
+                    <th className="py-3.5 px-4 whitespace-nowrap">
+                      Assigned Staff
+                    </th>
+                    <th className="py-3.5 px-4 whitespace-nowrap">
+                      Creation Date
+                    </th>
+                    <th className="py-3.5 px-4 whitespace-nowrap">
+                      {dashboardTab === 'active_tickets'
+                        ? 'Last Activity'
+                        : 'Closure Date'}
+                    </th>
+                    <th className="py-3.5 px-4 text-right whitespace-nowrap">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.06] text-xs">
+                  {displayedTickets.map((t) => {
+                    const statusPresentation =
+                      ADMIN_TICKET_STATUS_CONFIG[t.status] ||
+                      ADMIN_TICKET_STATUS_CONFIG.open;
+                    const assignedName =
+                      t.assignedStaffName ||
+                      t.assignedToEmail ||
+                      (t.assignedTo ? 'Assigned Staff' : null);
+
+                    return (
+                      <tr
+                        key={t.id}
+                        data-testid={`admin-ticket-row-${t.id}`}
+                        onClick={() =>
+                          handleOpenTicketWorkspace(t, dashboardTab)
+                        }
+                        className="group hover:bg-white/[0.04] transition-colors cursor-pointer"
+                      >
+                        {/* Ticket ID */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <span className="font-mono font-semibold text-[#06B6D4] group-hover:underline">
+                            {t.ticketNumber || t.id}
+                          </span>
+                        </td>
+
+                        {/* Customer Name */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div className="font-semibold text-[#F8FAFC]">
+                            {t.userName}
+                          </div>
+                          <div className="text-[11px] font-mono text-[#94A3B8]">
+                            {t.userEmail}
+                          </div>
+                        </td>
+
+                        {/* Subject */}
+                        <td className="py-3.5 px-4 max-w-xs">
+                          <div className="font-medium text-[#F8FAFC] truncate">
+                            {t.subject}
+                          </div>
+                          {t.status === 'closed' && t.resolutionSummary && (
+                            <div className="text-[11px] text-[#94A3B8] truncate mt-0.5">
+                              Resolution: {t.resolutionSummary}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Category */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-[#111827] text-[#CBD5E1] border border-white/[0.07]">
+                            {t.category || 'General Enquiry'}
+                          </span>
+                        </td>
+
+                        {/* Assigned Staff Member */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {assignedName ? (
+                            <span className="inline-flex items-center gap-1.5 text-[#F8FAFC] font-medium">
+                              <UserCheck className="w-3.5 h-3.5 text-[#06B6D4]" />
+                              <span>{assignedName}</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 text-amber-300 font-medium">
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>Unassigned</span>
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Creation Date */}
+                        <td className="py-3.5 px-4 font-mono text-[11px] text-[#94A3B8] whitespace-nowrap">
+                          {formatShortDate(t.createdAtISO)}
+                        </td>
+
+                        {/* Last Activity or Closure Date */}
+                        <td className="py-3.5 px-4 font-mono text-[11px] text-[#94A3B8] whitespace-nowrap">
+                          {dashboardTab === 'active_tickets'
+                            ? formatShortDate(t.updatedAtISO || t.createdAtISO)
+                            : formatShortDate(t.closedAtISO || t.updatedAtISO)}
+                        </td>
+
+                        {/* Current Status at Far Right */}
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <div className="inline-flex items-center justify-end gap-2.5">
+                            <span
+                              data-testid={`admin-ticket-status-${t.id}`}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border ${statusPresentation.badgeClass}`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${statusPresentation.dotClass}`}
+                              />
+                              <span>{statusPresentation.label}</span>
+                            </span>
+                            <button
+                              type="button"
+                              data-testid={`admin-open-ticket-btn-${t.id}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenTicketWorkspace(t, dashboardTab);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-[#111827] group-hover:bg-[#8B5CF6] border border-white/[0.08] group-hover:border-[#8B5CF6] text-[11px] font-semibold text-[#CBD5E1] group-hover:text-white transition-colors cursor-pointer"
+                            >
+                              Open
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Pagination for Closed Tickets */}
+          {dashboardTab === 'closed_tickets' &&
+            filteredClosedTickets.length > CLOSED_TICKETS_PER_PAGE && (
+              <div className="px-5 py-3.5 bg-[#111827] border-t border-white/[0.08] flex items-center justify-between text-xs">
+                <span className="text-[#94A3B8] font-mono">
+                  Page {closedPage} of {totalClosedPages} (
+                  {filteredClosedTickets.length} closed tickets)
+                </span>
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    disabled={claimingTicketId === selectedTicket.id}
-                    onClick={() => void handleClaimTicket(selectedTicket)}
-                    className="px-3.5 py-1.5 rounded-lg bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold shrink-0 cursor-pointer"
+                    disabled={closedPage <= 1}
+                    onClick={() => setClosedPage((p) => Math.max(1, p - 1))}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#161E2E] hover:bg-[#1D293B] disabled:opacity-40 border border-white/[0.08] text-xs font-medium text-[#F8FAFC] cursor-pointer"
                   >
-                    {claimingTicketId === selectedTicket.id
-                      ? 'Claiming...'
-                      : 'Claim Ticket Now'}
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Previous</span>
                   </button>
-                )}
+                  <button
+                    type="button"
+                    disabled={closedPage >= totalClosedPages}
+                    onClick={() =>
+                      setClosedPage((p) => Math.min(totalClosedPages, p + 1))
+                    }
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#161E2E] hover:bg-[#1D293B] disabled:opacity-40 border border-white/[0.08] text-xs font-medium text-[#F8FAFC] cursor-pointer"
+                  >
+                    <span>Next</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             )}
+        </div>
+      </div>
+    );
+  }
 
-            {/* Conversation & Internal Notes Feed */}
-            <div className="p-5 space-y-3.5 max-h-[460px] overflow-y-auto flex-1">
-              {loadingThread && messages.length === 0 ? (
-                <div className="py-8 text-center text-xs text-[#94A3B8]">
-                  Loading ticket conversation and staff notes...
-                </div>
-              ) : (
-                messages.map((m) => {
-                  const isCustomer = m.senderRole === 'customer';
-                  const isInternal = Boolean(m.isInternal);
+  // ============================================================================
+  // RENDER VIEW 2: INDIVIDUAL TICKET WORKSPACE (shown ONLY when a ticket is open)
+  // ============================================================================
+  const selectedStatusPresentation =
+    ADMIN_TICKET_STATUS_CONFIG[selectedTicket.status] ||
+    ADMIN_TICKET_STATUS_CONFIG.open;
+  const isClosedTicket = selectedTicket.status === 'closed';
+  const assignedStaffLabel =
+    selectedTicket.assignedStaffName ||
+    selectedTicket.assignedToEmail ||
+    (selectedTicket.assignedTo ? 'Assigned Staff' : 'Unassigned');
 
-                  return (
-                    <div
-                      key={m.id}
-                      className={`rounded-xl p-4 space-y-2 border ${
-                        isInternal
-                          ? 'bg-[#F59E0B]/10 border-[#F59E0B]/35 text-[#F8FAFC]'
-                          : isCustomer
-                          ? 'bg-[#111827] border-white/[0.08] text-[#F8FAFC]'
-                          : 'bg-[#8B5CF6]/15 border-[#8B5CF6]/35 text-[#F8FAFC]'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2 text-[11px]">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`font-bold ${
-                              isInternal
-                                ? 'text-[#F59E0B]'
-                                : isCustomer
-                                ? 'text-[#06B6D4]'
-                                : 'text-purple-300'
-                            }`}
-                          >
-                            {m.senderName}
-                          </span>
-                          <span className="px-1.5 py-0.5 rounded bg-black/30 text-[10px] font-mono uppercase text-[#94A3B8]">
-                            {isInternal
-                              ? 'PRIVATE INTERNAL STAFF NOTE (HIDDEN FROM CUSTOMER)'
-                              : isCustomer
-                              ? 'CUSTOMER'
-                              : `SUPPORT (${m.senderRole.toUpperCase()})`}
-                          </span>
-                        </div>
-                        <span className="font-mono text-[#94A3B8]">
-                          {m.createdAtISO.slice(0, 16).replace('T', ' ')}
-                        </span>
-                      </div>
+  return (
+    <div
+      data-testid="admin-ticket-workspace"
+      className="space-y-5 text-[#F8FAFC]"
+    >
+      {/* WORKSPACE TOP BAR */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-[#161E2E] border border-white/[0.08] flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-lg">
+        <div className="flex flex-wrap items-center gap-3 min-w-0">
+          <button
+            type="button"
+            data-testid="admin-back-to-tickets-btn"
+            onClick={() =>
+              handleBackToDashboard(
+                isClosedTicket ? 'closed_tickets' : 'active_tickets'
+              )
+            }
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-semibold text-[#F8FAFC] transition-colors cursor-pointer shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4 text-[#8B5CF6]" />
+            <span>
+              {isClosedTicket && openedFromTab === 'closed_tickets'
+                ? 'Back to Closed Tickets'
+                : 'Back to Active Tickets'}
+            </span>
+          </button>
 
-                      <p className="text-xs leading-relaxed whitespace-pre-wrap">
-                        {m.message}
-                      </p>
+          <div className="h-5 w-px bg-white/[0.08] hidden sm:block" />
 
-                      {renderAttachmentPreviewList(m.attachments || [], m.id)}
-                    </div>
-                  );
-                })
-              )}
-            </div>
+          <span
+            data-testid="admin-workspace-ticket-id"
+            className="font-mono text-xs font-bold px-2.5 py-1 rounded-lg bg-[#111827] text-[#06B6D4] border border-white/[0.08] shrink-0"
+          >
+            {selectedTicket.ticketNumber || selectedTicket.id}
+          </span>
 
-            {/* Reply / Internal Note Composer */}
-            <form
-              onSubmit={handleSendComposerMessage}
-              className="p-4 bg-[#111827] border-t border-white/[0.08] space-y-3"
+          <h2
+            data-testid="admin-workspace-subject"
+            className="text-sm sm:text-base font-bold text-[#F8FAFC] truncate max-w-xl"
+          >
+            {selectedTicket.subject}
+          </h2>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#111827] border border-white/[0.08] text-xs">
+            <span className="text-[#94A3B8]">Assigned:</span>
+            <span
+              data-testid="admin-workspace-assigned-staff"
+              className="font-semibold text-[#F8FAFC]"
             >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setComposerMode('reply')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
-                      composerMode === 'reply'
-                        ? 'bg-[#8B5CF6] text-white'
-                        : 'bg-[#161E2E] text-[#94A3B8] hover:text-[#F8FAFC]'
-                    }`}
-                  >
-                    <MessageSquare className="w-3.5 h-3.5 inline mr-1.5" />
-                    Reply to Customer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setComposerMode('internal_note')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
-                      composerMode === 'internal_note'
-                        ? 'bg-[#F59E0B] text-slate-950'
-                        : 'bg-[#161E2E] text-[#94A3B8] hover:text-[#F8FAFC]'
-                    }`}
-                  >
-                    <Lock className="w-3.5 h-3.5 inline mr-1.5" />
-                    Internal Staff Note (Private)
-                  </button>
-                </div>
+              {assignedStaffLabel}
+            </span>
+          </div>
 
-                {composerMode === 'reply' && (
-                  <span className="text-[11px] text-[#94A3B8]">
-                    Visible in customer&apos;s My Support conversation
+          <span
+            data-testid="admin-workspace-status-badge"
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border ${selectedStatusPresentation.badgeClass}`}
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${selectedStatusPresentation.dotClass}`}
+            />
+            <span>{selectedStatusPresentation.label}</span>
+          </span>
+        </div>
+      </div>
+
+      {/* TWO-COLUMN RESPONSIVE WORKSPACE (Left ~65% Conversation | Right ~35% Summary + Controls) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* ====================================================================
+            LEFT PANEL (Approx. 65% width -> 8 of 12 cols on lg):
+            CUSTOMER CONVERSATION & COMPOSER
+           ==================================================================== */}
+        <div
+          data-testid="admin-workspace-conversation-panel"
+          className="lg:col-span-8 rounded-2xl bg-[#161E2E] border border-white/[0.08] flex flex-col overflow-hidden shadow-xl"
+        >
+          {/* Conversation Panel Header */}
+          <div className="px-5 py-4 bg-[#111827] border-b border-white/[0.08] flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <MessageSquare className="w-4 h-4 text-[#8B5CF6]" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#F8FAFC]">
+                Customer Conversation Thread
+              </h3>
+            </div>
+            <span className="text-[11px] font-mono text-[#94A3B8]">
+              {messages.length} {messages.length === 1 ? 'entry' : 'entries'}
+            </span>
+          </div>
+
+          {/* Closed Ticket Resolution Banner (if ticket is closed) */}
+          {isClosedTicket && (
+            <div
+              data-testid="admin-closed-resolution-banner"
+              className="mx-5 mt-5 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-1.5"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Official Resolution Summary (Ticket Closed)</span>
+                </span>
+                <span className="text-[11px] font-mono text-[#94A3B8]">
+                  Closed by {closedByStaffDisplayName} ·{' '}
+                  {formatShortDate(
+                    selectedTicket.closedAtISO || selectedTicket.updatedAtISO
+                  )}
+                </span>
+              </div>
+              <p className="text-xs text-[#F8FAFC] leading-relaxed whitespace-pre-wrap">
+                {selectedTicket.resolutionSummary ||
+                  'Closed after support resolution.'}
+              </p>
+            </div>
+          )}
+
+          {/* Chronological Conversation Thread */}
+          <div className="p-5 space-y-4 max-h-[600px] overflow-y-auto">
+            {isLoadingThread && messages.length === 0 ? (
+              <div className="py-12 text-center text-xs text-[#94A3B8] flex items-center justify-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin text-[#8B5CF6]" />
+                <span>Loading conversation history...</span>
+              </div>
+            ) : messages.length === 0 ? (
+              /* Fallback to original complaint description if messages array is empty */
+              <div className="p-4 rounded-xl bg-[#111827] border border-white/[0.08] space-y-2">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-[#F8FAFC]">
+                    {selectedTicket.userName} (Customer · Original Complaint)
                   </span>
+                  <span className="font-mono text-[#94A3B8]">
+                    {formatShortDate(selectedTicket.createdAtISO)}
+                  </span>
+                </div>
+                <p className="text-xs text-[#E2E8F0] leading-relaxed whitespace-pre-wrap">
+                  {selectedTicket.description}
+                </p>
+              </div>
+            ) : (
+              messages.map((msg, idx) => {
+                const isCustomer = msg.senderRole === 'customer';
+                const isInternalNote = Boolean(msg.isInternal);
+                const msgAttachments = msg.attachments || [];
+
+                return (
+                  <div
+                    key={msg.id}
+                    data-testid={`admin-thread-msg-${msg.id}`}
+                    className={`p-4 rounded-xl border transition-all ${
+                      isInternalNote
+                        ? 'bg-amber-500/10 border-amber-500/35'
+                        : isCustomer
+                        ? 'bg-[#111827] border-white/[0.08] mr-0 sm:mr-8'
+                        : 'bg-[#8B5CF6]/10 border-[#8B5CF6]/30 ml-0 sm:ml-8'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-[#F8FAFC]">
+                          {msg.senderName}
+                        </span>
+                        {isInternalNote ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            <Lock className="w-2.5 h-2.5" />
+                            <span>Internal Staff Note (Staff Only)</span>
+                          </span>
+                        ) : isCustomer ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                            {idx === 0
+                              ? 'Customer · Original Complaint'
+                              : 'Customer Reply'}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-[#8B5CF6]/20 text-[#C4B5FD] border border-[#8B5CF6]/35">
+                            Support Reply
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] font-mono text-[#94A3B8]">
+                        {formatShortDate(msg.createdAtISO)}
+                      </span>
+                    </div>
+
+                    {msg.message && (
+                      <p className="text-xs text-[#F8FAFC] leading-relaxed whitespace-pre-wrap">
+                        {msg.message}
+                      </p>
+                    )}
+
+                    {/* Message Attachments (Images & PDFs) */}
+                    {msgAttachments.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-white/[0.07] grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {msgAttachments.map((att) => {
+                          const isPdf = isPdfAttachment(att);
+                          const displayName = att.name || 'Attachment';
+                          return (
+                            <div
+                              key={att.id}
+                              className="p-2.5 rounded-lg bg-[#0B0F19]/80 border border-white/[0.08] flex items-center justify-between gap-2.5"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                {!isPdf && att.url ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setLightboxImage({
+                                        url: att.url,
+                                        name: displayName,
+                                      })
+                                    }
+                                    className="w-11 h-11 rounded-md overflow-hidden border border-white/[0.1] shrink-0 cursor-pointer"
+                                  >
+                                    <img
+                                      src={att.url}
+                                      alt={displayName}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </button>
+                                ) : (
+                                  <div className="w-11 h-11 rounded-md bg-[#161E2E] border border-white/[0.08] flex items-center justify-center text-[#06B6D4] shrink-0">
+                                    <FileText className="w-5 h-5" />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <div className="text-xs font-medium text-[#F8FAFC] truncate">
+                                    {displayName}
+                                  </div>
+                                  <div className="text-[10px] font-mono text-[#94A3B8]">
+                                    {isPdf ? 'PDF Document' : 'Image Attachment'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {!isPdf && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setLightboxImage({
+                                        url: att.url,
+                                        name: displayName,
+                                      })
+                                    }
+                                    className="px-2 py-1 rounded bg-[#161E2E] hover:bg-[#1D293B] text-[10px] font-semibold text-[#06B6D4] cursor-pointer"
+                                  >
+                                    Preview
+                                  </button>
+                                )}
+                                <a
+                                  href={att.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  download={displayName}
+                                  className="p-1.5 rounded bg-[#161E2E] hover:bg-[#1D293B] text-[#CBD5E1] hover:text-white"
+                                  title="Open / Download"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                </a>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+            <div ref={threadEndRef} />
+          </div>
+
+          {/* BOTTOM COMPOSER (Active Tickets) OR READ-ONLY ARCHIVE FOOTER (Closed Tickets) */}
+          <div className="p-5 bg-[#111827] border-t border-white/[0.08]">
+            {isClosedTicket ? (
+              <div className="p-4 rounded-xl bg-[#161E2E] border border-white/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 text-xs text-[#94A3B8]">
+                  <Lock className="w-4 h-4 text-[#94A3B8] shrink-0" />
+                  <span>
+                    This ticket is closed and archived in read-only mode. Reopen
+                    the ticket if additional conversation is required.
+                  </span>
+                </div>
+                {canManageSupport && (
+                  <button
+                    type="button"
+                    data-testid="admin-reopen-ticket-btn"
+                    onClick={() => {
+                      setReopenReasonDraft('');
+                      setIsReopenModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold cursor-pointer shrink-0"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Reopen Ticket</span>
+                  </button>
                 )}
               </div>
-
-              {uploadError && (
-                <div className="p-2.5 rounded-xl bg-[#EF4444]/15 border border-[#EF4444]/30 text-xs text-rose-200 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{uploadError}</span>
+            ) : isUnclaimed ? (
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="text-xs font-bold text-amber-300">
+                    Ticket Must Be Claimed Before Replying
+                  </div>
+                  <p className="text-[11px] text-[#CBD5E1]">
+                    Claim this ticket to take ownership and reply to{' '}
+                    {selectedTicket.userName} or record internal staff notes.
+                  </p>
                 </div>
-              )}
-
-              <textarea
-                rows={3}
-                disabled={!canModifySelectedTicket}
-                value={composerText}
-                onChange={(e) => setComposerText(e.target.value)}
-                placeholder={
-                  !canModifySelectedTicket
-                    ? 'Claim this ticket first to post a reply or internal note...'
-                    : composerMode === 'internal_note'
-                    ? 'Write a private internal note for support staff and admins (never visible to the customer)...'
-                    : `Write a public reply to ${selectedTicket.userName}...`
-                }
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#161E2E] border border-white/[0.08] text-xs text-[#F8FAFC] placeholder:text-[#94A3B8] disabled:opacity-50 focus:outline-none focus:border-[#8B5CF6]"
-              />
-
-              {replyUploadEntries.length > 0 && (
-                <div className="space-y-2">
-                  {replyUploadEntries.map((entry) => (
-                    <div
-                      key={entry.localId}
-                      className={`p-2.5 rounded-xl border text-xs flex flex-col gap-1.5 ${
-                        entry.status === 'failed'
-                          ? 'bg-[#EF4444]/10 border-[#EF4444]/30 text-rose-200'
-                          : entry.status === 'completed'
-                          ? 'bg-[#22C55E]/10 border-[#22C55E]/25 text-[#F8FAFC]'
-                          : 'bg-[#161E2E] border-white/[0.1] text-[#F8FAFC]'
+                {canManageSupport && (
+                  <button
+                    type="button"
+                    disabled={isClaiming}
+                    onClick={() => void handleClaimTicket(selectedTicket)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] disabled:opacity-50 text-white text-xs font-semibold cursor-pointer shrink-0"
+                  >
+                    <UserCheck className="w-4 h-4" />
+                    <span>{isClaiming ? 'Claiming...' : 'Claim Ticket'}</span>
+                  </button>
+                )}
+              </div>
+            ) : !canModifySelectedTicket ? (
+              <div className="p-4 rounded-xl bg-[#161E2E] border border-white/[0.08] text-xs text-[#94A3B8]">
+                This ticket is currently assigned to{' '}
+                <strong className="text-[#F8FAFC]">{assignedStaffLabel}</strong>
+                . Only the assigned staff member or an overriding administrator
+                can post replies.
+              </div>
+            ) : (
+              <form onSubmit={handleSendMessageOrNote} className="space-y-3">
+                {/* Two Clearly Separated Composer Options */}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="inline-flex items-center p-1 rounded-xl bg-[#0B0F19] border border-white/[0.08]">
+                    <button
+                      type="button"
+                      data-testid="admin-composer-mode-reply"
+                      onClick={() => {
+                        setComposerMode('customer_reply');
+                        setComposerError(null);
+                      }}
+                      className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        composerMode === 'customer_reply'
+                          ? 'bg-[#8B5CF6] text-white'
+                          : 'text-[#94A3B8] hover:text-[#F8FAFC]'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          {entry.file.type.startsWith('image/') ? (
-                            <ImageIcon className="w-4 h-4 text-[#06B6D4] shrink-0" />
-                          ) : (
-                            <FileText className="w-4 h-4 text-[#06B6D4] shrink-0" />
-                          )}
-                          <span className="font-medium truncate">
-                            {entry.name}
-                          </span>
-                          <span className="text-[11px] font-mono text-[#94A3B8] shrink-0">
-                            ({formatBytes(entry.sizeBytes)})
-                          </span>
-                        </div>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>1. Reply to Customer</span>
+                    </button>
 
-                        <div className="flex items-center gap-2 shrink-0">
-                          {entry.status === 'uploading' && (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-[#06B6D4]">
-                              <RefreshCw className="w-3 h-3 animate-spin" />
-                              <span>Uploading {entry.progress}%</span>
-                            </span>
-                          )}
-                          {entry.status === 'completed' && (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#22C55E]">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Completed (100%)</span>
-                            </span>
-                          )}
-                          {entry.status === 'failed' && (
-                            <>
-                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#EF4444]">
-                                <AlertCircle className="w-3.5 h-3.5" />
-                                <span>Failed</span>
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleRetryAttachment(entry.localId)
-                                }
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#EF4444]/20 hover:bg-[#EF4444]/30 border border-[#EF4444]/40 text-[11px] font-semibold text-rose-200 cursor-pointer"
-                              >
-                                <RotateCcw className="w-3 h-3" />
-                                <span>Retry</span>
-                              </button>
-                            </>
-                          )}
+                    <button
+                      type="button"
+                      data-testid="admin-composer-mode-note"
+                      onClick={() => {
+                        setComposerMode('internal_note');
+                        setComposerError(null);
+                      }}
+                      className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        composerMode === 'internal_note'
+                          ? 'bg-amber-500 text-[#0B0F19]'
+                          : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                      }`}
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>2. Internal Staff Note</span>
+                    </button>
+                  </div>
+
+                  <span className="text-[11px] text-[#94A3B8]">
+                    {composerMode === 'internal_note'
+                      ? 'Visible only to authorised staff & admins'
+                      : `Visible to customer (${selectedTicket.userName})`}
+                  </span>
+                </div>
+
+                {/* Error Alert if submission fails */}
+                {composerError && (
+                  <div className="p-3 rounded-xl bg-[#EF4444]/15 border border-[#EF4444]/30 text-xs text-[#EF4444] flex items-center justify-between">
+                    <span>{composerError}</span>
+                    <button
+                      type="button"
+                      onClick={() => setComposerError(null)}
+                      className="p-0.5 hover:opacity-80 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Textarea */}
+                <textarea
+                  rows={4}
+                  data-testid="admin-composer-textarea"
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder={
+                    composerMode === 'internal_note'
+                      ? 'Write an internal staff note (hidden from the customer)...'
+                      : `Write a response to ${selectedTicket.userName}...`
+                  }
+                  className={`w-full rounded-xl p-3.5 text-xs text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none border transition-colors ${
+                    composerMode === 'internal_note'
+                      ? 'bg-amber-500/[0.06] border-amber-500/35 focus:border-amber-400'
+                      : 'bg-[#0B0F19] border-white/[0.08] focus:border-[#8B5CF6]'
+                  }`}
+                />
+
+                {/* Pending Attachment Previews */}
+                {pendingUploads.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {pendingUploads.map((item) => (
+                      <div
+                        key={item.id}
+                        className="px-3 py-1.5 rounded-lg bg-[#0B0F19] border border-white/[0.08] flex items-center gap-2 text-xs"
+                      >
+                        <Paperclip className="w-3.5 h-3.5 text-[#06B6D4]" />
+                        <span className="truncate max-w-[160px] text-[#F8FAFC]">
+                          {item.file.name}
+                        </span>
+                        {item.status === 'uploading' && (
+                          <span className="font-mono text-[10px] text-[#06B6D4]">
+                            {item.progress}%
+                          </span>
+                        )}
+                        {item.status === 'error' && (
                           <button
                             type="button"
                             onClick={() =>
-                              handleRemoveAttachment(entry.localId)
+                              void startUploadForFile(item.id, item.file)
                             }
-                            className="p-1 rounded hover:bg-white/10 text-[#94A3B8] hover:text-white cursor-pointer"
-                            title="Remove attachment"
+                            className="text-[10px] font-semibold text-amber-400 underline cursor-pointer"
                           >
-                            <X className="w-3.5 h-3.5" />
+                            Retry
                           </button>
-                        </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePendingUpload(item.id)}
+                          className="text-[#94A3B8] hover:text-[#EF4444] cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
                       </div>
+                    ))}
+                  </div>
+                )}
 
-                      {entry.status === 'uploading' && (
-                        <div className="w-full h-1.5 rounded-full bg-[#0B0F19] overflow-hidden">
-                          <div
-                            className="h-full bg-[#06B6D4] transition-all duration-200"
-                            style={{ width: `${Math.max(5, entry.progress)}%` }}
-                          />
-                        </div>
-                      )}
+                {/* Composer Bottom Action Row */}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,application/pdf"
+                      multiple
+                      onChange={handleAttachmentFileSelect}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isSendingReply || isUploadingAttachment}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-[#161E2E] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-medium text-[#CBD5E1] transition-colors cursor-pointer"
+                    >
+                      <Paperclip className="w-3.5 h-3.5 text-[#06B6D4]" />
+                      <span>Attach Image / PDF</span>
+                    </button>
+                  </div>
 
-                      {entry.status === 'failed' && entry.error && (
-                        <p className="text-[11px] text-rose-300">
-                          {entry.error}
-                        </p>
-                      )}
+                  <button
+                    type="submit"
+                    data-testid="admin-composer-submit-btn"
+                    disabled={isSendingReply || isUploadingAttachment}
+                    className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer disabled:opacity-50 ${
+                      composerMode === 'internal_note'
+                        ? 'bg-amber-500 hover:bg-amber-400 text-[#0B0F19]'
+                        : 'bg-[#8B5CF6] hover:bg-[#7C3AED] text-white shadow-lg shadow-[#8B5CF6]/25'
+                    }`}
+                  >
+                    {isSendingReply ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Sending...</span>
+                      </>
+                    ) : composerMode === 'internal_note' ? (
+                      <>
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>Save Internal Staff Note</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Send Reply to Customer</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+
+        {/* ====================================================================
+            RIGHT PANEL (Approx. 35% width -> 4 of 12 cols on lg):
+            CUSTOMER INFO, TICKET INFO, PROBLEM SUMMARY CARD & TICKET CONTROLS
+           ==================================================================== */}
+        <div
+          data-testid="admin-workspace-summary-panel"
+          className="lg:col-span-4 space-y-5"
+        >
+          {/* 1. TICKET CONTROLS CARD */}
+          <div className="p-5 rounded-2xl bg-[#161E2E] border border-white/[0.08] space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#F8FAFC] flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-[#8B5CF6]" />
+                <span>Ticket Controls</span>
+              </h3>
+              <span className="text-[11px] font-mono text-[#94A3B8]">
+                {ROLE_DEFINITIONS[currentAdmin.role]?.label || currentAdmin.role}
+              </span>
+            </div>
+
+            {!canManageSupport ? (
+              <p className="text-xs text-[#94A3B8]">
+                Your account has read-only support permissions.
+              </p>
+            ) : isClosedTicket ? (
+              <div className="space-y-3">
+                <div className="p-3 rounded-xl bg-[#111827] border border-white/[0.06] text-xs text-[#94A3B8]">
+                  Closed on{' '}
+                  <span className="font-mono text-[#F8FAFC]">
+                    {formatShortDate(
+                      selectedTicket.closedAtISO || selectedTicket.updatedAtISO
+                    )}
+                  </span>{' '}
+                  by{' '}
+                  <span className="font-semibold text-[#F8FAFC]">
+                    {closedByStaffDisplayName}
+                  </span>
+                  .
+                </div>
+                <button
+                  type="button"
+                  data-testid="admin-control-reopen-btn"
+                  onClick={() => {
+                    setReopenReasonDraft('');
+                    setIsReopenModalOpen(true);
+                  }}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Reopen Ticket</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Claim Ticket Button (when unclaimed) */}
+                {isUnclaimed && (
+                  <button
+                    type="button"
+                    data-testid="admin-control-claim-btn"
+                    disabled={isClaiming}
+                    onClick={() => void handleClaimTicket(selectedTicket)}
+                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] disabled:opacity-50 text-white text-xs font-semibold shadow-md shadow-[#8B5CF6]/20 transition-all cursor-pointer"
+                  >
+                    <UserCheck className="w-4 h-4" />
+                    <span>
+                      {isClaiming ? 'Claiming Ticket...' : 'Claim Ticket'}
+                    </span>
+                  </button>
+                )}
+
+                {/* Status Workflow Buttons */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-2">
+                  <button
+                    type="button"
+                    data-testid="admin-control-status-in_progress"
+                    disabled={
+                      !canModifySelectedTicket ||
+                      isUpdatingWorkflow ||
+                      selectedTicket.status === 'in_progress'
+                    }
+                    onClick={() => void handleQuickStatusChange('in_progress')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer disabled:opacity-45 ${
+                      selectedTicket.status === 'in_progress'
+                        ? 'bg-[#8B5CF6]/20 text-[#C4B5FD] border-[#8B5CF6]/50'
+                        : 'bg-[#111827] hover:bg-[#1D293B] text-[#F8FAFC] border-white/[0.08]'
+                    }`}
+                  >
+                    <span>In Progress</span>
+                    <span className="w-2 h-2 rounded-full bg-[#8B5CF6]" />
+                  </button>
+
+                  <button
+                    type="button"
+                    data-testid="admin-control-status-waiting_for_user"
+                    disabled={
+                      !canModifySelectedTicket ||
+                      isUpdatingWorkflow ||
+                      selectedTicket.status === 'waiting_for_user'
+                    }
+                    onClick={() =>
+                      void handleQuickStatusChange('waiting_for_user')
+                    }
+                    className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer disabled:opacity-45 ${
+                      selectedTicket.status === 'waiting_for_user'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                        : 'bg-[#111827] hover:bg-[#1D293B] text-[#F8FAFC] border-white/[0.08]'
+                    }`}
+                  >
+                    <span>Waiting for User</span>
+                    <span className="w-2 h-2 rounded-full bg-amber-400" />
+                  </button>
+
+                  <button
+                    type="button"
+                    data-testid="admin-control-status-resolved"
+                    disabled={
+                      !canModifySelectedTicket ||
+                      isUpdatingWorkflow ||
+                      selectedTicket.status === 'resolved'
+                    }
+                    onClick={() => void handleQuickStatusChange('resolved')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer disabled:opacity-45 ${
+                      selectedTicket.status === 'resolved'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                        : 'bg-[#111827] hover:bg-[#1D293B] text-[#F8FAFC] border-white/[0.08]'
+                    }`}
+                  >
+                    <span>Mark Resolved</span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  </button>
+                </div>
+
+                {/* Change Assignment (where authorised) */}
+                {hasAdminOverride && (
+                  <div className="pt-2 border-t border-white/[0.07]">
+                    <button
+                      type="button"
+                      data-testid="admin-control-change-assignment-toggle"
+                      onClick={() => setIsReassignOpen((prev) => !prev)}
+                      className="w-full inline-flex items-center justify-between px-3.5 py-2 rounded-xl bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-medium text-[#CBD5E1] cursor-pointer"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <ArrowRightLeft className="w-3.5 h-3.5 text-[#06B6D4]" />
+                        <span>Change Assignment</span>
+                      </span>
+                      <span className="text-[11px] font-mono text-[#94A3B8]">
+                        {isReassignOpen ? 'Hide' : 'Assign'}
+                      </span>
+                    </button>
+
+                    {isReassignOpen && (
+                      <form
+                        onSubmit={handleReassignTicket}
+                        className="mt-2.5 p-3 rounded-xl bg-[#0B0F19] border border-white/[0.08] space-y-2.5"
+                      >
+                        <select
+                          value={reassignTargetUid}
+                          onChange={(e) => setReassignTargetUid(e.target.value)}
+                          className="w-full bg-[#161E2E] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
+                        >
+                          <option value="">Select staff member...</option>
+                          {supportCapableAdmins.map((adm) => (
+                            <option key={adm.uid} value={adm.uid}>
+                              {adm.name} ({adm.email})
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          value={reassignNote}
+                          onChange={(e) => setReassignNote(e.target.value)}
+                          placeholder="Assignment note (optional)..."
+                          className="w-full bg-[#161E2E] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
+                        />
+                        <button
+                          type="submit"
+                          disabled={!reassignTargetUid || isUpdatingWorkflow}
+                          className="w-full py-1.5 rounded-lg bg-[#06B6D4] hover:bg-[#0891B2] disabled:opacity-40 text-[#0B0F19] text-xs font-bold cursor-pointer"
+                        >
+                          Confirm Assignment
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                )}
+
+                {/* Close Ticket Button (Opens Confirmation Modal) */}
+                <div className="pt-2 border-t border-white/[0.07]">
+                  <button
+                    type="button"
+                    data-testid="admin-control-close-ticket-btn"
+                    disabled={!canModifySelectedTicket || isUpdatingWorkflow}
+                    onClick={() => {
+                      setCloseResolutionDraft(
+                        selectedTicket.resolutionSummary || ''
+                      );
+                      setCloseModalError(null);
+                      setIsCloseModalOpen(true);
+                    }}
+                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-300 text-xs font-bold transition-all cursor-pointer disabled:opacity-40"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Close Ticket</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 2. PROBLEM SUMMARY CARD (Derived from real ticket messages & history) */}
+          {problemSummary && (
+            <div
+              data-testid="admin-problem-summary-card"
+              className="p-5 rounded-2xl bg-[#161E2E] border border-white/[0.08] space-y-3.5 shadow-xl"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#F8FAFC] flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#06B6D4]" />
+                  <span>Problem Summary Card</span>
+                </h3>
+                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-[#111827] text-[#06B6D4] border border-white/[0.07]">
+                  Live Context
+                </span>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div className="p-3 rounded-xl bg-[#111827] border border-white/[0.06] space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#94A3B8]">
+                    1. Customer&apos;s Reported Issue
+                  </div>
+                  <p className="text-[#F8FAFC] leading-relaxed">
+                    {problemSummary.reportedIssue}
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-[#111827] border border-white/[0.06] space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#94A3B8]">
+                    2. Main Problem Identified
+                  </div>
+                  <p className="text-[#E2E8F0] leading-relaxed">
+                    {problemSummary.mainProblemIdentified}
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-[#111827] border border-white/[0.06] space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#94A3B8]">
+                    3. Actions Already Taken by Support
+                  </div>
+                  <p className="text-[#E2E8F0] leading-relaxed">
+                    {problemSummary.actionsTakenBySupport}
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-[#111827] border border-white/[0.06] space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#94A3B8]">
+                    4. Current Situation
+                  </div>
+                  <p className="text-[#F8FAFC] font-medium leading-relaxed">
+                    {problemSummary.currentSituation}
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/30 space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#C4B5FD]">
+                    5. Remaining Action Required
+                  </div>
+                  <p className="text-[#F8FAFC] font-medium leading-relaxed">
+                    {problemSummary.remainingActionRequired}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 3. CUSTOMER INFORMATION CARD */}
+          <div
+            data-testid="admin-customer-info-card"
+            className="p-5 rounded-2xl bg-[#161E2E] border border-white/[0.08] space-y-3 shadow-xl"
+          >
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#F8FAFC] flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#8B5CF6]" />
+              <span>Customer Information</span>
+            </h3>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/[0.06]">
+                <span className="text-[#94A3B8]">Customer Name</span>
+                <span className="font-semibold text-[#F8FAFC]">
+                  {selectedTicket.userName}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/[0.06]">
+                <span className="text-[#94A3B8]">Customer Email</span>
+                <span className="font-mono text-[#06B6D4] truncate max-w-[200px]">
+                  {selectedTicket.userEmail}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/[0.06]">
+                <span className="text-[#94A3B8]">Customer ID</span>
+                <span className="font-mono text-[11px] text-[#CBD5E1]">
+                  {selectedTicket.userId}
+                </span>
+              </div>
+
+              {selectedCustomerAccount && (
+                <>
+                  <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/[0.06]">
+                    <span className="text-[#94A3B8]">Location</span>
+                    <span className="text-[#F8FAFC]">
+                      {selectedCustomerAccount.city}
+                      {selectedCustomerAccount.neighborhood
+                        ? ` · ${selectedCustomerAccount.neighborhood}`
+                        : ''}
+                    </span>
+                  </div>
+
+                  {selectedCustomerAccount.phone && (
+                    <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/[0.06]">
+                      <span className="text-[#94A3B8]">Phone</span>
+                      <span className="font-mono text-[#F8FAFC]">
+                        {selectedCustomerAccount.phone}
+                      </span>
                     </div>
-                  ))}
+                  )}
+
+                  <div className="flex items-center justify-between gap-2 py-1">
+                    <span className="text-[#94A3B8]">Account Status</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                      {selectedCustomerAccount.accountStatus}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* 4. TICKET INFORMATION CARD */}
+          <div
+            data-testid="admin-ticket-info-card"
+            className="p-5 rounded-2xl bg-[#161E2E] border border-white/[0.08] space-y-3 shadow-xl"
+          >
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#F8FAFC] flex items-center gap-2">
+              <Tag className="w-4 h-4 text-[#06B6D4]" />
+              <span>Ticket Information</span>
+            </h3>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/[0.06]">
+                <span className="text-[#94A3B8]">Ticket ID</span>
+                <span className="font-mono font-semibold text-[#06B6D4]">
+                  {selectedTicket.ticketNumber || selectedTicket.id}
+                </span>
+              </div>
+
+              <div className="flex items-start justify-between gap-2 py-1.5 border-b border-white/[0.06]">
+                <span className="text-[#94A3B8] shrink-0">Subject</span>
+                <span className="font-semibold text-[#F8FAFC] text-right">
+                  {selectedTicket.subject}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/[0.06]">
+                <span className="text-[#94A3B8]">Category</span>
+                <span className="font-medium text-[#F8FAFC]">
+                  {selectedTicket.category || 'General Enquiry'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/[0.06]">
+                <span className="text-[#94A3B8]">Original Complaint Date</span>
+                <span className="font-mono text-[11px] text-[#CBD5E1]">
+                  {formatShortDate(selectedTicket.createdAtISO)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/[0.06]">
+                <span className="text-[#94A3B8]">Related Booking ID</span>
+                <span className="font-mono text-[11px] text-[#F8FAFC]">
+                  {selectedTicket.bookingId ||
+                    selectedTicket.relatedBookingId ||
+                    'None'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/[0.06]">
+                <span className="text-[#94A3B8]">Related Product ID</span>
+                <span className="font-mono text-[11px] text-[#F8FAFC]">
+                  {selectedTicket.productId ||
+                    selectedTicket.relatedProductId ||
+                    'None'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/[0.06]">
+                <span className="text-[#94A3B8]">Assigned Staff Member</span>
+                <span className="font-semibold text-[#F8FAFC]">
+                  {assignedStaffLabel}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 py-1">
+                <span className="text-[#94A3B8]">Last Activity</span>
+                <span className="font-mono text-[11px] text-[#CBD5E1]">
+                  {formatShortDate(
+                    selectedTicket.updatedAtISO || selectedTicket.createdAtISO
+                  )}
+                </span>
+              </div>
+
+              {isClosedTicket && (
+                <>
+                  <div className="flex items-center justify-between gap-2 py-1.5 border-t border-white/[0.06]">
+                    <span className="text-[#94A3B8]">Closed By</span>
+                    <span className="font-semibold text-emerald-400">
+                      {closedByStaffDisplayName}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 py-1">
+                    <span className="text-[#94A3B8]">Closure Timestamp</span>
+                    <span className="font-mono text-[11px] text-emerald-400">
+                      {formatShortDate(
+                        selectedTicket.closedAtISO ||
+                          selectedTicket.updatedAtISO
+                      )}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* 5. ASSIGNMENT & AUDIT HISTORY */}
+          <div className="p-5 rounded-2xl bg-[#161E2E] border border-white/[0.08] space-y-3 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#F8FAFC] flex items-center gap-2">
+                <History className="w-4 h-4 text-[#94A3B8]" />
+                <span>Assignment & Audit History</span>
+              </h3>
+              <span className="text-[11px] font-mono text-[#94A3B8]">
+                {history.length} events
+              </span>
+            </div>
+
+            {history.length === 0 ? (
+              <p className="text-xs text-[#94A3B8]">
+                No workflow audit events recorded yet.
+              </p>
+            ) : (
+              <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                {history.map((h) => (
+                  <div
+                    key={h.id}
+                    className="p-2.5 rounded-xl bg-[#111827] border border-white/[0.06] text-[11px] space-y-0.5"
+                  >
+                    <div className="flex items-center justify-between text-[#94A3B8] font-mono text-[10px]">
+                      <span className="uppercase text-[#06B6D4] font-semibold">
+                        {h.action.replace(/_/g, ' ')}
+                      </span>
+                      <span>{formatShortDate(h.createdAtISO)}</span>
+                    </div>
+                    <div className="text-[#F8FAFC] font-medium">
+                      {h.summary}
+                    </div>
+                    <div className="text-[10px] text-[#94A3B8]">
+                      Actor: {h.actorName} ({h.actorRole})
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ======================================================================
+          CLOSE TICKET CONFIRMATION MODAL
+         ====================================================================== */}
+      {isCloseModalOpen && (
+        <div
+          data-testid="admin-close-ticket-modal"
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <div className="w-full max-w-lg rounded-2xl bg-[#161E2E] border border-white/[0.1] p-6 shadow-2xl space-y-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <span className="text-[11px] font-mono uppercase tracking-wider text-emerald-400 font-semibold">
+                  Confirm Ticket Closure
+                </span>
+                <h3 className="text-base font-bold text-[#F8FAFC] mt-0.5">
+                  Close Support Ticket
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCloseModalOpen(false)}
+                className="p-1.5 rounded-lg bg-[#111827] text-[#94A3B8] hover:text-[#F8FAFC] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Ticket ID & Customer Name Summary */}
+            <div className="p-3.5 rounded-xl bg-[#111827] border border-white/[0.08] space-y-1.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[#94A3B8]">Ticket ID:</span>
+                <span className="font-mono font-bold text-[#06B6D4]">
+                  {selectedTicket.ticketNumber || selectedTicket.id}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#94A3B8]">Customer Name:</span>
+                <span className="font-semibold text-[#F8FAFC]">
+                  {selectedTicket.userName} ({selectedTicket.userEmail})
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#94A3B8]">Subject:</span>
+                <span className="text-[#CBD5E1] truncate max-w-[260px]">
+                  {selectedTicket.subject}
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleConfirmCloseTicket} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="close-ticket-resolution-summary"
+                  className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
+                >
+                  Official Resolution Summary{' '}
+                  <span className="text-[#EF4444]">*</span>
+                </label>
+                <textarea
+                  id="close-ticket-resolution-summary"
+                  data-testid="admin-close-resolution-textarea"
+                  rows={4}
+                  value={closeResolutionDraft}
+                  onChange={(e) => {
+                    setCloseResolutionDraft(e.target.value);
+                    if (closeModalError) setCloseModalError(null);
+                  }}
+                  placeholder="Enter the final resolution summary shared with the customer and recorded in the historical archive..."
+                  className="w-full rounded-xl bg-[#0B0F19] border border-white/[0.1] p-3.5 text-xs text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-emerald-400"
+                />
+                <p className="text-[11px] text-[#94A3B8] mt-1">
+                  Closing will move this ticket from Active Tickets to Closed
+                  Tickets and synchronize the resolution summary with the
+                  customer&apos;s support history.
+                </p>
+              </div>
+
+              {closeModalError && (
+                <div className="p-3 rounded-xl bg-[#EF4444]/15 border border-[#EF4444]/30 text-xs text-[#EF4444]">
+                  {closeModalError}
                 </div>
               )}
 
-              <div className="flex items-center justify-between gap-2">
-                <label
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#161E2E] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-medium text-[#94A3B8] ${
-                    !canModifySelectedTicket ||
-                    replyUploadEntries.length >= MAX_ATTACHMENTS_PER_TICKET
-                      ? 'opacity-50 cursor-not-allowed'
-                      : 'cursor-pointer'
-                  }`}
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  data-testid="admin-cancel-close-ticket-btn"
+                  onClick={() => setIsCloseModalOpen(false)}
+                  disabled={isUpdatingWorkflow}
+                  className="px-4 py-2.5 rounded-xl bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-semibold text-[#CBD5E1] cursor-pointer"
                 >
-                  <Paperclip className="w-3.5 h-3.5 text-[#06B6D4]" />
-                  <span>
-                    Attach File ({replyUploadEntries.length}/
-                    {MAX_ATTACHMENTS_PER_TICKET})
-                  </span>
-                  <input
-                    type="file"
-                    multiple
-                    disabled={
-                      !canModifySelectedTicket ||
-                      replyUploadEntries.length >= MAX_ATTACHMENTS_PER_TICKET
-                    }
-                    accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
-                    onChange={handleSelectReplyFiles}
-                    className="hidden"
-                  />
-                </label>
-
+                  Cancel
+                </button>
                 <button
                   type="submit"
-                  disabled={
-                    !canModifySelectedTicket ||
-                    sendingMessage ||
-                    hasPendingUploads ||
-                    (!composerText.trim() &&
-                      replyUploadEntries.filter((i) => i.status === 'completed')
-                        .length === 0)
-                  }
-                  className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer disabled:opacity-50 ${
-                    composerMode === 'internal_note'
-                      ? 'bg-[#F59E0B] hover:bg-amber-400 text-slate-950'
-                      : 'bg-[#8B5CF6] hover:bg-[#7C3AED] text-white'
-                  }`}
+                  data-testid="admin-confirm-close-ticket-btn"
+                  disabled={isUpdatingWorkflow}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-[#0B0F19] text-xs font-bold cursor-pointer"
                 >
-                  <Send className="w-3.5 h-3.5" />
+                  <CheckCircle2 className="w-4 h-4" />
                   <span>
-                    {sendingMessage
-                      ? 'Saving...'
-                      : hasPendingUploads
-                      ? 'Uploading...'
-                      : composerMode === 'internal_note'
-                      ? 'Save Internal Note'
-                      : 'Send Customer Reply'}
+                    {isUpdatingWorkflow
+                      ? 'Closing Ticket...'
+                      : 'Confirm & Close Ticket'}
                   </span>
                 </button>
               </div>
             </form>
           </div>
+        </div>
+      )}
 
-          {/* RIGHT COLUMN (5 cols): Metadata, Ownership, Status Workflow, Resolution Summary & Admin Override */}
-          <div className="lg:col-span-5 space-y-4">
-            {/* Card 1: Customer & Context Metadata */}
-            <div className="p-5 rounded-2xl bg-[#161E2E] border border-white/[0.08] space-y-3">
-              <div className="text-xs font-bold uppercase tracking-wider text-[#94A3B8]">
-                Ticket Metadata & Customer Profile
+      {/* ======================================================================
+          REOPEN TICKET CONFIRMATION MODAL
+         ====================================================================== */}
+      {isReopenModalOpen && (
+        <div
+          data-testid="admin-reopen-ticket-modal"
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-[#161E2E] border border-white/[0.1] p-6 shadow-2xl space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <span className="text-[11px] font-mono uppercase tracking-wider text-[#06B6D4] font-semibold">
+                  Restore Historical Ticket
+                </span>
+                <h3 className="text-base font-bold text-[#F8FAFC] mt-0.5">
+                  Reopen Ticket {selectedTicket.ticketNumber || selectedTicket.id}
+                </h3>
               </div>
-
-              <div className="grid grid-cols-2 gap-3 text-xs bg-[#111827] p-3.5 rounded-xl border border-white/[0.06]">
-                <div>
-                  <span className="text-[#94A3B8] text-[11px]">Customer:</span>
-                  <div className="font-semibold text-[#F8FAFC]">
-                    {selectedTicket.userName}
-                  </div>
-                  <div className="font-mono text-[11px] text-[#06B6D4] truncate">
-                    {selectedTicket.userEmail}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[#94A3B8] text-[11px]">Category:</span>
-                  <div className="font-semibold text-[#F8FAFC]">
-                    {selectedTicket.category || 'General Enquiry'}
-                  </div>
-                  <div className="font-mono text-[10px] text-[#94A3B8]">
-                    UID: {selectedTicket.userId.slice(0, 12)}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[#94A3B8] text-[11px]">
-                    Related Booking:
-                  </span>
-                  <div className="font-mono text-[#F8FAFC]">
-                    {selectedTicket.bookingId || 'None'}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[#94A3B8] text-[11px]">
-                    Related Listing:
-                  </span>
-                  <div className="font-mono text-[#F8FAFC]">
-                    {selectedTicket.productId || 'None'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Claim Ownership Status Box */}
-              <div className="p-3.5 rounded-xl bg-[#111827] border border-white/[0.06] flex items-center justify-between gap-2 text-xs">
-                <div>
-                  <div className="text-[11px] text-[#94A3B8]">
-                    Assigned Support Owner:
-                  </div>
-                  {selectedTicket.assignedTo ? (
-                    <div className="font-semibold text-[#F8FAFC] mt-0.5">
-                      {selectedTicket.assignedStaffName ||
-                        selectedTicket.assignedToEmail}{' '}
-                      {isSelectedClaimedByMe && (
-                        <span className="text-[#06B6D4] font-mono text-[11px]">
-                          (Claimed by You)
-                        </span>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="font-semibold text-[#F59E0B] mt-0.5">
-                      Unclaimed · Available to Claim
-                    </div>
-                  )}
-                </div>
-
-                {isSelectedUnclaimed &&
-                  !['resolved', 'closed'].includes(selectedTicket.status) && (
-                    <button
-                      type="button"
-                      disabled={claimingTicketId === selectedTicket.id}
-                      onClick={() => void handleClaimTicket(selectedTicket)}
-                      className="px-3.5 py-2 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold cursor-pointer"
-                    >
-                      {claimingTicketId === selectedTicket.id
-                        ? 'Claiming...'
-                        : 'Claim Ticket'}
-                    </button>
-                  )}
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsReopenModalOpen(false)}
+                className="p-1.5 rounded-lg bg-[#111827] text-[#94A3B8] hover:text-[#F8FAFC] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            {/* Card 2: Status Controls & Mandatory Resolution Summary (Priority Removed) */}
-            <div className="p-5 rounded-2xl bg-[#161E2E] border border-white/[0.08] space-y-4">
-              <div className="text-xs font-bold uppercase tracking-wider text-[#94A3B8]">
-                Ticket Status & Resolution Controls
-              </div>
-
-              {/* Status Workflow Buttons */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-[#94A3B8]">
-                  Workflow Status
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(
-                    [
-                      { status: 'in_progress', label: 'In Progress' },
-                      {
-                        status: 'waiting_for_user',
-                        label: 'Waiting for User',
-                      },
-                      { status: 'resolved', label: 'Mark Resolved' },
-                      { status: 'closed', label: 'Close Ticket' },
-                    ] as { status: SupportTicketStatus; label: string }[]
-                  ).map((st) => (
-                    <button
-                      key={st.status}
-                      type="button"
-                      disabled={
-                        !canModifySelectedTicket ||
-                        updatingStatus ||
-                        selectedTicket.status === st.status
-                      }
-                      onClick={() => void handleStatusChange(st.status)}
-                      className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-colors cursor-pointer disabled:opacity-50 ${
-                        selectedTicket.status === st.status
-                          ? getStatusBadgeStyle(st.status)
-                          : 'bg-[#111827] border-white/[0.07] text-[#F8FAFC] hover:bg-[#1D293B]'
-                      }`}
-                    >
-                      {st.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Resolution Summary (Required before Closing) */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-[#94A3B8]">
-                  Official Resolution Summary (Sent to Customer in BorrowBox Notification) *
+            <form onSubmit={handleConfirmReopenTicket} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="reopen-ticket-reason"
+                  className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
+                >
+                  Reason for Reopening (Recorded in Audit History)
                 </label>
                 <textarea
+                  id="reopen-ticket-reason"
+                  data-testid="admin-reopen-reason-textarea"
                   rows={3}
-                  disabled={!canModifySelectedTicket}
-                  value={resolutionSummaryDraft}
-                  onChange={(e) => setResolutionSummaryDraft(e.target.value)}
-                  placeholder="Enter the final resolution summary for the customer (required before closing ticket)..."
-                  className="w-full px-3 py-2 rounded-xl bg-[#111827] border border-white/[0.08] text-xs text-[#F8FAFC] placeholder:text-[#94A3B8] disabled:opacity-50"
+                  value={reopenReasonDraft}
+                  onChange={(e) => setReopenReasonDraft(e.target.value)}
+                  placeholder="Optional note explaining why this closed ticket is being reopened..."
+                  className="w-full rounded-xl bg-[#0B0F19] border border-white/[0.1] p-3 text-xs text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
                 />
               </div>
-            </div>
 
-            {/* Card 3: Administrator Override Controls (Super Admin & Level 2 Admin Only) */}
-            {hasAdminOverride && (
-              <div className="p-5 rounded-2xl bg-[#161E2E] border border-[#8B5CF6]/30 space-y-3.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-purple-300">
-                    <ShieldAlert className="w-4 h-4 text-[#8B5CF6]" />
-                    <span>Administrator Override Controls</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-[#94A3B8]">
-                    {currentAdmin.role.toUpperCase()}
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsReopenModalOpen(false)}
+                  disabled={isUpdatingWorkflow}
+                  className="px-4 py-2 rounded-xl bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-semibold text-[#CBD5E1] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  data-testid="admin-confirm-reopen-ticket-btn"
+                  disabled={isUpdatingWorkflow}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>
+                    {isUpdatingWorkflow ? 'Reopening...' : 'Confirm Reopen'}
                   </span>
-                </div>
-
-                {/* Reassign Ticket to Any Staff Member */}
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] text-[#94A3B8]">
-                    Reassign Ticket to Support Staff
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={reassignStaffId}
-                      onChange={(e) => setReassignStaffId(e.target.value)}
-                      className="flex-1 px-3 py-2 rounded-xl bg-[#111827] border border-white/[0.08] text-xs text-[#F8FAFC]"
-                    >
-                      <option value="">Select staff member...</option>
-                      {activeSupportAdmins.map((adm) => (
-                        <option key={adm.id} value={adm.uid}>
-                          {adm.name} ({adm.email}) · {adm.role}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      disabled={updatingStatus || !reassignStaffId}
-                      onClick={() => void handleAdminReassign()}
-                      className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] disabled:opacity-50 text-white text-xs font-semibold cursor-pointer shrink-0"
-                    >
-                      <UserPlus className="w-3.5 h-3.5" />
-                      <span>Reassign</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Release Claim & Reopen Buttons */}
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  {selectedTicket.assignedTo && (
-                    <button
-                      type="button"
-                      disabled={updatingStatus}
-                      onClick={() => void handleAdminReleaseClaim()}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#111827] hover:bg-[#1D293B] border border-white/[0.1] text-xs font-medium text-[#F59E0B] cursor-pointer"
-                    >
-                      <Unlock className="w-3.5 h-3.5" />
-                      <span>Release Claim to Unclaimed</span>
-                    </button>
-                  )}
-
-                  {['resolved', 'closed'].includes(selectedTicket.status) && (
-                    <button
-                      type="button"
-                      disabled={updatingStatus}
-                      onClick={() => void handleAdminReopen()}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#111827] hover:bg-[#1D293B] border border-white/[0.1] text-xs font-medium text-[#06B6D4] cursor-pointer"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Reopen Ticket</span>
-                    </button>
-                  )}
-                </div>
+                </button>
               </div>
-            )}
-
-            {/* Card 4: Immutable Ticket History Log */}
-            <div className="p-5 rounded-2xl bg-[#161E2E] border border-white/[0.08] space-y-3">
-              <div className="text-xs font-bold uppercase tracking-wider text-[#94A3B8]">
-                Ticket Claim & Activity History ({history.length})
-              </div>
-              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                {history.length === 0 ? (
-                  <div className="text-xs text-[#94A3B8]">
-                    No history events recorded yet.
-                  </div>
-                ) : (
-                  history.map((h) => (
-                    <div
-                      key={h.id}
-                      className="p-2.5 rounded-xl bg-[#111827] border border-white/[0.06] text-[11px] space-y-0.5"
-                    >
-                      <div className="flex items-center justify-between text-[#F8FAFC] font-medium">
-                        <span>{h.summary}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] font-mono text-[#94A3B8]">
-                        <span>
-                          {h.actorName} ({h.actorRole})
-                        </span>
-                        <span>
-                          {h.createdAtISO.slice(0, 16).replace('T', ' ')}
-                        </span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* Lightbox Modal for Larger Image View */}
-      {lightboxAttachment && (
+      {/* ======================================================================
+          IMAGE ATTACHMENT LIGHTBOX PREVIEW MODAL
+         ====================================================================== */}
+      {lightboxImage && (
         <div
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setLightboxAttachment(null)}
+          onClick={() => setLightboxImage(null)}
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
         >
           <div
-            className="relative max-w-4xl w-full bg-[#161E2E] border border-white/15 rounded-2xl overflow-hidden shadow-2xl"
             onClick={(e) => e.stopPropagation()}
+            className="max-w-3xl w-full rounded-2xl bg-[#161E2E] border border-white/[0.12] overflow-hidden shadow-2xl"
           >
-            <div className="flex items-center justify-between px-4 py-3 bg-[#111827] border-b border-white/10">
-              <div className="text-xs font-semibold text-[#F8FAFC] truncate">
-                {lightboxAttachment.name} (
-                {formatBytes(lightboxAttachment.sizeBytes)})
-              </div>
-              <div className="flex items-center gap-2">
-                <a
-                  href={
-                    (lightboxAttachment.url || '').includes('?')
-                      ? `${lightboxAttachment.url}&download=1`
-                      : `${lightboxAttachment.url}?download=1`
-                  }
-                  download={lightboxAttachment.name}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setLightboxAttachment(null)}
-                  className="p-1.5 rounded-lg bg-[#161E2E] hover:bg-[#1D293B] text-[#94A3B8] hover:text-white cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+            <div className="px-4 py-3 bg-[#111827] border-b border-white/[0.08] flex items-center justify-between">
+              <span className="text-xs font-semibold text-[#F8FAFC] truncate">
+                {lightboxImage.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => setLightboxImage(null)}
+                className="p-1 rounded-lg text-[#94A3B8] hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <div className="p-4 flex items-center justify-center max-h-[80vh] overflow-auto bg-black/60">
+            <div className="p-4 flex items-center justify-center bg-[#0B0F19]">
               <img
-                src={lightboxAttachment.url || lightboxAttachment.downloadUrl}
-                alt={lightboxAttachment.name}
-                className="max-w-full max-h-[72vh] object-contain rounded-lg"
+                src={lightboxImage.url}
+                alt={lightboxImage.name}
+                className="max-h-[75vh] w-auto object-contain rounded-lg"
               />
             </div>
           </div>
         </div>
-      )}
-        </>
       )}
     </div>
   );
