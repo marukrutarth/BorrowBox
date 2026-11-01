@@ -141,9 +141,12 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
         {/* Bottom Bar */}
         <div className="mt-12 pt-8 border-t border-white/[0.08] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-[#64748B]">
           <p>© {new Date().getFullYear()} BorrowBox. All prices in ₹ (INR).</p>
-          <p className="tracking-wide">
-            Bengaluru · Mumbai · Delhi NCR · Hyderabad · Pune · Chennai
-          </p>
+          <div className="space-y-0.5 text-left sm:text-right">
+            <p className="font-semibold text-[#F8FAFC]">Available Across India</p>
+            <p className="text-[11px] text-[#94A3B8]">
+              Discover rental opportunities across cities and communities throughout India.
+            </p>
+          </div>
         </div>
       </div>
     </footer>
