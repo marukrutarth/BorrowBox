@@ -10,13 +10,7 @@ export type CategoryName =
 
 export type ItemCondition = 'Like New' | 'Excellent' | 'Good';
 
-export type IndianCity =
-  | 'Bengaluru'
-  | 'Mumbai'
-  | 'Delhi NCR'
-  | 'Hyderabad'
-  | 'Pune'
-  | 'Chennai';
+export type IndianCity = string;
 
 export type UserActiveMode = 'renter' | 'owner';
 

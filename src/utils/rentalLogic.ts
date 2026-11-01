@@ -11,6 +11,7 @@ import {
   RentVsBuyResult,
   ValidationResult,
 } from '../types/marketplace';
+import { INDIA_STATES_AND_UTS } from '../data/indiaLocations';
 
 export const ALL_CATEGORIES: CategoryName[] = [
   'Electronics',
@@ -23,14 +24,9 @@ export const ALL_CATEGORIES: CategoryName[] = [
   'Musical Instruments',
 ];
 
-export const ALL_CITIES: IndianCity[] = [
-  'Bengaluru',
-  'Mumbai',
-  'Delhi NCR',
-  'Hyderabad',
-  'Pune',
-  'Chennai',
-];
+export const ALL_CITIES: IndianCity[] = INDIA_STATES_AND_UTS.flatMap(
+  (s) => s.cities
+);
 
 // Blueprint validation constants (synced with firebase-blueprint.json & firestore.rules)
 export const BLUEPRINT_LIMITS = {
