@@ -263,10 +263,10 @@ function formatTimestampToISO(val: unknown): string {
 }
 
 function sanitizeCity(city?: string): IndianCity {
-  if (city && ALL_CITIES.includes(city as IndianCity)) {
-    return city as IndianCity;
+  if (city && city.trim().length > 0) {
+    return city.trim();
   }
-  return 'Bengaluru';
+  return '';
 }
 
 function sanitizeName(name?: string | null, email?: string | null): string {
@@ -442,10 +442,10 @@ export async function ensureOrLoadUserProfile(
     phone: String(privData?.phone || cachedProfile?.phone || ''),
     photoURL: String(pubData.photoURL || cachedProfile?.photoURL || ''),
     city: sanitizeCity(
-      String(pubData.city || cachedProfile?.city || 'Bengaluru')
+      String(pubData.city || cachedProfile?.city || '')
     ),
     neighborhood: String(
-      pubData.neighborhood || cachedProfile?.neighborhood || 'Indiranagar'
+      pubData.neighborhood || cachedProfile?.neighborhood || ''
     ),
     canRent: Boolean(pubData.canRent ?? true),
     canList: Boolean(pubData.canList ?? true),
@@ -517,12 +517,12 @@ export async function updateUserProfileInFirestore(
 }
 
 function mapDocToProductListing(data: Record<string, unknown>): ProductListing {
-  const city = sanitizeCity(String(data.city || 'Bengaluru'));
+  const city = sanitizeCity(String(data.city || ''));
   const category = (data.category as CategoryName) || 'Electronics';
   const condition = (data.condition as ItemCondition) || 'Excellent';
   const imageUrl = String(data.imageUrl || 'sony_camera');
   const title = String(data.title || 'Community Rental Item');
-  const neighborhood = String(data.neighborhood || 'Indiranagar');
+  const neighborhood = String(data.neighborhood || '');
   const ownerId = String(data.ownerId || 'owner');
   const ownerName = String(data.ownerName || 'Community Owner');
 
@@ -1854,8 +1854,8 @@ export async function fetchAdminDashboardData(): Promise<AdminDashboardSnapshot>
         email: email || `${uid.slice(0, 8)}@borrowbox.in`,
         phone: phone || 'Not provided',
         photoURL: String(pub.photoURL || ''),
-        city: sanitizeCity(String(pub.city || 'Bengaluru')),
-        neighborhood: String(pub.neighborhood || 'Indiranagar'),
+        city: sanitizeCity(String(pub.city || '')),
+        neighborhood: String(pub.neighborhood || ''),
         canRent,
         canList,
         activeMode:

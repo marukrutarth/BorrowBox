@@ -25,6 +25,11 @@ import {
   formatINR,
   validateProfileUpdateInput,
 } from '../utils/rentalLogic';
+import {
+  INDIA_STATES_AND_UTS,
+  getStateForCity,
+  getLocalitiesForCity,
+} from '../data/indiaLocations';
 import { updateUserProfileInFirestore } from '../services/firebase';
 import { PageRoute } from '../components/Navbar';
 
@@ -50,7 +55,20 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   const [name, setName] = useState(userProfile.name);
   const [photoURL, setPhotoURL] = useState(userProfile.photoURL);
   const [city, setCity] = useState<IndianCity>(userProfile.city);
+  const [selectedState, setSelectedState] = useState<string>(
+    () => getStateForCity(userProfile.city) || ''
+  );
   const [neighborhood, setNeighborhood] = useState(userProfile.neighborhood);
+
+  const availableCities = React.useMemo(() => {
+    if (!selectedState) return ALL_CITIES;
+    const st = INDIA_STATES_AND_UTS.find((s) => s.name === selectedState);
+    return st ? st.cities : ALL_CITIES;
+  }, [selectedState]);
+
+  const localitySuggestions = React.useMemo(() => {
+    return city ? getLocalitiesForCity(city) : [];
+  }, [city]);
   const [phone, setPhone] = useState(userProfile.phone);
   const [activeMode, setActiveMode] = useState<UserActiveMode>(
     userProfile.activeMode
@@ -498,6 +516,39 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label
+                      htmlFor="profile-state"
+                      className="block text-xs font-semibold text-[#F8FAFC] mb-1"
+                    >
+                      State / Union Territory
+                    </label>
+                    <select
+                      id="profile-state"
+                      value={selectedState}
+                      onChange={(e) => {
+                        const nextState = e.target.value;
+                        setSelectedState(nextState);
+                        if (nextState) {
+                          const stateObj = INDIA_STATES_AND_UTS.find(
+                            (s) => s.name === nextState
+                          );
+                          if (stateObj && !stateObj.cities.includes(city)) {
+                            setCity(stateObj.cities[0]);
+                          }
+                        }
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
+                    >
+                      <option value="">All States & UTs (or select State)</option>
+                      {INDIA_STATES_AND_UTS.map((st) => (
+                        <option key={st.name} value={st.name}>
+                          {st.name} ({st.type === 'ut' ? 'UT' : 'State'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
                       htmlFor="profile-city"
                       className="block text-xs font-semibold text-[#F8FAFC] mb-1"
                     >
@@ -506,10 +557,17 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                     <select
                       id="profile-city"
                       value={city}
-                      onChange={(e) => setCity(e.target.value as IndianCity)}
+                      onChange={(e) => {
+                        const nextCity = e.target.value as IndianCity;
+                        setCity(nextCity);
+                        if (nextCity) {
+                          const parentState = getStateForCity(nextCity);
+                          if (parentState) setSelectedState(parentState);
+                        }
+                      }}
                       className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
                     >
-                      {ALL_CITIES.map((c) => (
+                      {availableCities.map((c) => (
                         <option key={c} value={c}>
                           {c}
                         </option>
@@ -519,28 +577,56 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                       <p className="text-xs text-[#EF4444] mt-1">{errors.city}</p>
                     )}
                   </div>
+                </div>
 
-                  <div>
-                    <label
-                      htmlFor="profile-neighborhood"
-                      className="block text-xs font-semibold text-[#F8FAFC] mb-1"
-                    >
-                      Neighborhood / Locality *
-                    </label>
-                    <input
-                      id="profile-neighborhood"
-                      type="text"
-                      value={neighborhood}
-                      onChange={(e) => setNeighborhood(e.target.value)}
-                      placeholder="e.g., Indiranagar, Bandra West"
-                      className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
-                    />
-                    {errors.neighborhood && (
-                      <p className="text-xs text-[#EF4444] mt-1">
-                        {errors.neighborhood}
-                      </p>
-                    )}
-                  </div>
+                <div>
+                  <label
+                    htmlFor="profile-neighborhood"
+                    className="block text-xs font-semibold text-[#F8FAFC] mb-1"
+                  >
+                    Neighborhood / Locality *
+                  </label>
+                  <input
+                    id="profile-neighborhood"
+                    list="profile-locality-options"
+                    type="text"
+                    value={neighborhood}
+                    onChange={(e) => setNeighborhood(e.target.value)}
+                    placeholder={
+                      city
+                        ? `e.g., Locality in ${city}`
+                        : 'e.g., Indiranagar, Bandra West'
+                    }
+                    className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
+                  />
+                  <datalist id="profile-locality-options">
+                    {localitySuggestions.map((loc) => (
+                      <option key={loc} value={loc} />
+                    ))}
+                  </datalist>
+                  {localitySuggestions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {localitySuggestions.slice(0, 6).map((loc) => (
+                        <button
+                          key={loc}
+                          type="button"
+                          onClick={() => setNeighborhood(loc)}
+                          className={`text-[11px] px-2 py-0.5 rounded-md border transition-colors cursor-pointer ${
+                            neighborhood === loc
+                              ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]'
+                              : 'bg-[#111827] text-[#94A3B8] border-white/[0.08] hover:text-[#F8FAFC]'
+                          }`}
+                        >
+                          {loc}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {errors.neighborhood && (
+                    <p className="text-xs text-[#EF4444] mt-1">
+                      {errors.neighborhood}
+                    </p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

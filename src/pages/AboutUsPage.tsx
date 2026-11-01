@@ -53,7 +53,7 @@ const WHY_BORROWBOX_BENEFITS = [
     icon: <Users className="w-5 h-5 text-[#A78BFA]" />,
     title: 'Connect With a Rental Community',
     description:
-      'Meet fellow photographers, creators, gamers, and makers in your neighborhood through in-person, verified handovers across Bengaluru, Mumbai, Delhi NCR, and beyond.',
+      'Meet fellow photographers, creators, gamers, and makers in your neighborhood through in-person, verified handovers across India.',
   },
 ];
 
@@ -394,10 +394,10 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
                 <Layers className="w-5 h-5" />
               </div>
               <h3 className="text-base font-bold text-[#F8FAFC]">
-                6 Metropolitan Hubs
+                36 States & Union Territories
               </h3>
               <p className="text-xs text-[#CBD5E1] leading-relaxed">
-                Active community peer rentals across Bengaluru, Mumbai, Delhi NCR, Hyderabad, Pune, and Chennai with verified neighborhood pickup locations.
+                Active community peer rentals across all 28 states and 8 union territories with verified neighborhood pickup locations throughout India.
               </p>
             </div>
           </div>

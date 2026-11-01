@@ -10,6 +10,11 @@ import {
 import { BorrowBoxUserProfile, IndianCity } from '../types/marketplace';
 import { ALL_CITIES, validateAuthInput } from '../utils/rentalLogic';
 import {
+  INDIA_STATES_AND_UTS,
+  getStateForCity,
+  getLocalitiesForCity,
+} from '../data/indiaLocations';
+import {
   FIREBASE_PROJECT_ID,
   registerWithEmailAndProfile,
   sendPasswordReset,
@@ -87,10 +92,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [city, setCity] = useState<IndianCity>('Bengaluru');
-  const [neighborhood, setNeighborhood] = useState('Indiranagar');
+  const [selectedState, setSelectedState] = useState<string>('');
+  const [city, setCity] = useState<IndianCity | ''>('');
+  const [neighborhood, setNeighborhood] = useState('');
   const [photoURL, setPhotoURL] = useState('');
   const [password, setPassword] = useState('');
+
+  const availableCities = React.useMemo(() => {
+    if (!selectedState) return ALL_CITIES;
+    const st = INDIA_STATES_AND_UTS.find((s) => s.name === selectedState);
+    return st ? st.cities : ALL_CITIES;
+  }, [selectedState]);
+
+  const localitySuggestions = React.useMemo(() => {
+    return city ? getLocalitiesForCity(city) : [];
+  }, [city]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -391,6 +407,41 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                   <div>
                     <label
+                      htmlFor="auth-state"
+                      className="block text-xs font-semibold text-[#F8FAFC] mb-1"
+                    >
+                      State / Union Territory
+                    </label>
+                    <select
+                      id="auth-state"
+                      value={selectedState}
+                      onChange={(e) => {
+                        const nextState = e.target.value;
+                        setSelectedState(nextState);
+                        if (nextState) {
+                          const stateObj = INDIA_STATES_AND_UTS.find(
+                            (s) => s.name === nextState
+                          );
+                          if (stateObj && !stateObj.cities.includes(city as IndianCity)) {
+                            setCity('');
+                          }
+                        }
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
+                    >
+                      <option value="">All States & UTs (or select State)</option>
+                      {INDIA_STATES_AND_UTS.map((st) => (
+                        <option key={st.name} value={st.name}>
+                          {st.name} ({st.type === 'ut' ? 'UT' : 'State'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label
                       htmlFor="auth-city"
                       className="block text-xs font-semibold text-[#F8FAFC] mb-1"
                     >
@@ -399,10 +450,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     <select
                       id="auth-city"
                       value={city}
-                      onChange={(e) => setCity(e.target.value as IndianCity)}
+                      onChange={(e) => {
+                        const nextCity = e.target.value as IndianCity | '';
+                        setCity(nextCity);
+                        if (nextCity) {
+                          const parentState = getStateForCity(nextCity);
+                          if (parentState) setSelectedState(parentState);
+                        }
+                      }}
                       className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
                     >
-                      {ALL_CITIES.map((c) => (
+                      <option value="">Select your city</option>
+                      {availableCities.map((c) => (
                         <option key={c} value={c}>
                           {c}
                         </option>
@@ -412,9 +471,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       <p className="text-xs text-[#EF4444] mt-1">{errors.city}</p>
                     )}
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label
                       htmlFor="auth-neighborhood"
@@ -424,12 +481,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     </label>
                     <input
                       id="auth-neighborhood"
+                      list="auth-locality-options"
                       type="text"
                       value={neighborhood}
                       onChange={(e) => setNeighborhood(e.target.value)}
-                      placeholder="e.g., Indiranagar"
+                      placeholder={
+                        city
+                          ? `e.g. Locality in ${city}`
+                          : 'e.g., Koramangala, Bandra West'
+                      }
                       className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
                     />
+                    <datalist id="auth-locality-options">
+                      {localitySuggestions.map((loc) => (
+                        <option key={loc} value={loc} />
+                      ))}
+                    </datalist>
                     {errors.neighborhood && (
                       <p className="text-xs text-[#EF4444] mt-1">
                         {errors.neighborhood}

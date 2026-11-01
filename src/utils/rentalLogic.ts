@@ -24,8 +24,8 @@ export const ALL_CATEGORIES: CategoryName[] = [
   'Musical Instruments',
 ];
 
-export const ALL_CITIES: IndianCity[] = INDIA_STATES_AND_UTS.flatMap(
-  (s) => s.cities
+export const ALL_CITIES: IndianCity[] = Array.from(
+  new Set(INDIA_STATES_AND_UTS.flatMap((s) => s.cities))
 );
 
 // Blueprint validation constants (synced with firebase-blueprint.json & firestore.rules)

@@ -21,6 +21,11 @@ import {
   formatINR,
   validateListingInput,
 } from '../utils/rentalLogic';
+import {
+  INDIA_STATES_AND_UTS,
+  getStateForCity,
+  getLocalitiesForCity,
+} from '../data/indiaLocations';
 import { PageRoute } from '../components/Navbar';
 import { ProductImage } from '../components/ProductImage';
 
@@ -85,9 +90,23 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
   const [city, setCity] = useState<IndianCity | ''>(
     editingListing?.city || demoUser?.city || ''
   );
+  const [selectedState, setSelectedState] = useState<string>(() => {
+    const initCity = editingListing?.city || demoUser?.city || '';
+    return initCity ? getStateForCity(initCity) || '' : '';
+  });
   const [neighborhood, setNeighborhood] = useState(
     editingListing?.neighborhood || demoUser?.neighborhood || ''
   );
+
+  const availableCities = React.useMemo(() => {
+    if (!selectedState) return ALL_CITIES;
+    const st = INDIA_STATES_AND_UTS.find((s) => s.name === selectedState);
+    return st ? st.cities : ALL_CITIES;
+  }, [selectedState]);
+
+  const localitySuggestions = React.useMemo(() => {
+    return city ? getLocalitiesForCity(city) : [];
+  }, [city]);
   const [pickupLocation, setPickupLocation] = useState(
     editingListing?.pickupLocation || ''
   );
@@ -215,7 +234,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
           title: title.trim(),
           category: category || 'Electronics',
           condition,
-          city: city || 'Bengaluru',
+          city: city || 'India',
           neighborhood: neighborhood.trim(),
           includedItems: includedItemsText.trim(),
         }),
@@ -249,7 +268,7 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
           title: title.trim() || category || 'Rental Gear',
           category: category || 'Electronics',
           condition,
-          city: city || 'Bengaluru',
+          city: city || 'India',
           replacementValueINR: Number(replacementValueINR) || 25000,
         }),
       });
@@ -663,48 +682,136 @@ export const ListItemPage: React.FC<ListItemPageProps> = ({
                 </div>
               </div>
 
-              {/* City, Neighborhood & Pickup Landmark */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label
-                    htmlFor="list-city"
-                    className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
-                  >
-                    City *
-                  </label>
-                  <select
-                    id="list-city"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value as IndianCity | '')}
-                    className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
-                  >
-                    <option value="">Select City</option>
-                    {ALL_CITIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.city && (
-                    <p className="text-xs text-[#EF4444] mt-1">{errors.city}</p>
-                  )}
+              {/* India-Wide Dynamic Location Hierarchy: State -> City -> Locality */}
+              <div className="space-y-3 p-4 rounded-xl bg-[#111827] border border-white/[0.08]">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-[#F8FAFC]">
+                    Listing Location (Pan-India)
+                  </span>
+                  <span className="text-[11px] text-[#06B6D4]">
+                    Available across all 28 states & 8 UTs
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label
+                      htmlFor="list-state"
+                      className="block text-xs font-medium text-[#94A3B8] mb-1"
+                    >
+                      State / Union Territory
+                    </label>
+                    <select
+                      id="list-state"
+                      value={selectedState}
+                      onChange={(e) => {
+                        const nextState = e.target.value;
+                        setSelectedState(nextState);
+                        if (nextState) {
+                          const stateObj = INDIA_STATES_AND_UTS.find(
+                            (s) => s.name === nextState
+                          );
+                          if (stateObj && !stateObj.cities.includes(city)) {
+                            setCity('');
+                          }
+                        }
+                      }}
+                      className="w-full px-3 py-2 bg-[#161E2E] border border-white/[0.08] rounded-xl text-xs text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
+                    >
+                      <option value="">All States & UTs (or select State)</option>
+                      {INDIA_STATES_AND_UTS.map((st) => (
+                        <option key={st.name} value={st.name}>
+                          {st.name} ({st.type === 'ut' ? 'UT' : 'State'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="list-city"
+                      className="block text-xs font-semibold text-[#F8FAFC] mb-1"
+                    >
+                      City *
+                    </label>
+                    <select
+                      id="list-city"
+                      value={city}
+                      onChange={(e) => {
+                        const nextCity = e.target.value as IndianCity | '';
+                        setCity(nextCity);
+                        if (nextCity) {
+                          const parentState = getStateForCity(nextCity);
+                          if (parentState) setSelectedState(parentState);
+                        }
+                      }}
+                      className="w-full px-3 py-2 bg-[#161E2E] border border-white/[0.08] rounded-xl text-xs text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
+                    >
+                      <option value="">Select City</option>
+                      {availableCities.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.city && (
+                      <p className="text-xs text-[#EF4444] mt-1">{errors.city}</p>
+                    )}
+                  </div>
                 </div>
 
                 <div>
-                  <label
-                    htmlFor="list-neighborhood"
-                    className="block text-xs font-semibold text-[#F8FAFC] mb-1.5"
-                  >
-                    Neighborhood / Locality *
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label
+                      htmlFor="list-neighborhood"
+                      className="block text-xs font-semibold text-[#F8FAFC]"
+                    >
+                      Neighborhood / Locality *
+                    </label>
+                    {localitySuggestions.length > 0 && (
+                      <span className="text-[11px] text-[#94A3B8]">
+                        Click a common hub or type any locality
+                      </span>
+                    )}
+                  </div>
                   <input
                     id="list-neighborhood"
+                    list="list-locality-options"
                     type="text"
                     value={neighborhood}
                     onChange={(e) => setNeighborhood(e.target.value)}
-                    placeholder="e.g., Koramangala, Bandra West, Saket"
-                    className="w-full px-3.5 py-2.5 bg-[#111827] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
+                    placeholder={
+                      city
+                        ? `e.g. Locality in ${city}`
+                        : 'e.g., Koramangala, Bandra West, Connaught Place'
+                    }
+                    className="w-full px-3.5 py-2.5 bg-[#161E2E] border border-white/[0.08] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
                   />
+                  <datalist id="list-locality-options">
+                    {localitySuggestions.map((loc) => (
+                      <option key={loc} value={loc} />
+                    ))}
+                  </datalist>
+
+                  {localitySuggestions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {localitySuggestions.slice(0, 6).map((loc) => (
+                        <button
+                          key={loc}
+                          type="button"
+                          onClick={() => setNeighborhood(loc)}
+                          className={`text-[11px] px-2 py-0.5 rounded-md border transition-colors cursor-pointer ${
+                            neighborhood === loc
+                              ? 'bg-[#8B5CF6] text-white border-[#8B5CF6]'
+                              : 'bg-[#161E2E] text-[#94A3B8] border-white/[0.08] hover:text-[#F8FAFC]'
+                          }`}
+                        >
+                          {loc}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   {errors.neighborhood && (
                     <p className="text-xs text-[#EF4444] mt-1">
                       {errors.neighborhood}

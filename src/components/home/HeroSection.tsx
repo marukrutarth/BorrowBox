@@ -236,7 +236,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                     <span>₹12,000 refundable deposit</span>
                     <span className="flex items-center gap-1">
                       <MapPin className="w-3 h-3 text-[#8B5CF6]" />
-                      <span>{selectedCity || 'Indiranagar, Bengaluru'}</span>
+                      <span>{selectedCity || 'Browse All India'}</span>
                     </span>
                   </div>
                 </div>

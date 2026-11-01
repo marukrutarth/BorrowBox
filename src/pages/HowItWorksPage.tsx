@@ -50,7 +50,7 @@ const RENTER_STEPS: StepItem[] = [
   {
     number: '02',
     title: 'Filter by City & Availability',
-    shortDesc: 'Instant matching in Bengaluru, Mumbai, Delhi NCR, Hyderabad, Pune, and Chennai.',
+    shortDesc: 'Instant matching across recognized cities and towns nationwide.',
     details:
       'Refine listings by metropolitan location, daily pricing, condition grade (Brand New, Like New, Good), and exact dates so you only see gear ready for pickup when you need it.',
     icon: Layers,
@@ -573,7 +573,7 @@ export const HowItWorksPage: React.FC<HowItWorksPageProps> = ({ onNavigate }) =>
             Ready to experience smarter gear access?
           </h2>
           <p className="text-sm sm:text-base text-[#94A3B8] leading-relaxed">
-            Join thousands of photographers, gamers, makers, and outdoor enthusiasts in Bengaluru, Mumbai, Delhi NCR, and across India.
+            Join thousands of photographers, gamers, makers, and outdoor enthusiasts across all 28 states, 8 union territories, and communities throughout India.
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">

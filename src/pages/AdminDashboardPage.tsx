@@ -94,6 +94,12 @@ import { BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH } from '../utils/introAnimation
 import { PageRoute } from '../components/Navbar';
 import { AdminTicketsModule } from '../components/support/AdminTicketsModule';
 import {
+  INDIA_STATES_AND_UTS,
+  getStateForCity,
+  getLocalitiesForCity,
+} from '../data/indiaLocations';
+import { ALL_CITIES } from '../utils/rentalLogic';
+import {
   markSupportNotificationRead,
   subscribeToAdminSupportTickets,
   subscribeToSupportNotifications,
@@ -222,6 +228,17 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
   const [bookingSearch, setBookingSearch] = useState('');
   const [bookingStatusFilter, setBookingStatusFilter] = useState<string>('all');
+
+  // India-Wide Dynamic Admin Location Filters
+  const [adminStateFilter, setAdminStateFilter] = useState<string>('all');
+  const [adminCityFilter, setAdminCityFilter] = useState<string>('all');
+  const [adminLocalityFilter, setAdminLocalityFilter] = useState<string>('');
+
+  const adminAvailableCities = useMemo(() => {
+    if (adminStateFilter === 'all') return ALL_CITIES;
+    const st = INDIA_STATES_AND_UTS.find((s) => s.name === adminStateFilter);
+    return st ? st.cities : ALL_CITIES;
+  }, [adminStateFilter]);
 
   const [reportFilter, setReportFilter] = useState<'all' | ReportStatus>('all');
   const [isNewReportModalOpen, setIsNewReportModalOpen] = useState(false);
@@ -1308,12 +1325,24 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     if (userStatusFilter !== 'all' && u.accountStatus !== userStatusFilter) {
       return false;
     }
+    if (adminStateFilter !== 'all') {
+      const userState = getStateForCity(u.city);
+      if (userState !== adminStateFilter) return false;
+    }
+    if (adminCityFilter !== 'all' && u.city !== adminCityFilter) {
+      return false;
+    }
+    if (adminLocalityFilter.trim()) {
+      const locQ = adminLocalityFilter.trim().toLowerCase();
+      if (!u.neighborhood.toLowerCase().includes(locQ)) return false;
+    }
     if (userSearch.trim()) {
       const q = userSearch.trim().toLowerCase();
       return (
         u.name.toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q) ||
         u.city.toLowerCase().includes(q) ||
+        u.neighborhood.toLowerCase().includes(q) ||
         u.uid.toLowerCase().includes(q)
       );
     }
@@ -1325,12 +1354,24 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     if (productModFilter !== 'all' && modStatus !== productModFilter) {
       return false;
     }
+    if (adminStateFilter !== 'all') {
+      const itemState = getStateForCity(item.city);
+      if (itemState !== adminStateFilter) return false;
+    }
+    if (adminCityFilter !== 'all' && item.city !== adminCityFilter) {
+      return false;
+    }
+    if (adminLocalityFilter.trim()) {
+      const locQ = adminLocalityFilter.trim().toLowerCase();
+      if (!item.neighborhood.toLowerCase().includes(locQ)) return false;
+    }
     if (productSearch.trim()) {
       const q = productSearch.trim().toLowerCase();
       return (
         item.title.toLowerCase().includes(q) ||
         item.category.toLowerCase().includes(q) ||
         item.city.toLowerCase().includes(q) ||
+        item.neighborhood.toLowerCase().includes(q) ||
         item.owner.name.toLowerCase().includes(q)
       );
     }
@@ -1341,21 +1382,34 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     if (bookingStatusFilter !== 'all' && b.status !== bookingStatusFilter) {
       return false;
     }
+    if (adminStateFilter !== 'all') {
+      const bookingState = getStateForCity(b.listingCity);
+      if (bookingState !== adminStateFilter) return false;
+    }
+    if (adminCityFilter !== 'all' && b.listingCity !== adminCityFilter) {
+      return false;
+    }
     if (bookingSearch.trim()) {
       const q = bookingSearch.trim().toLowerCase();
       return (
         b.listingTitle.toLowerCase().includes(q) ||
         b.borrowerName.toLowerCase().includes(q) ||
         b.ownerName.toLowerCase().includes(q) ||
+        b.listingCity.toLowerCase().includes(q) ||
         b.id.toLowerCase().includes(q)
       );
     }
     return true;
   });
 
-  const filteredReports = reports.filter((r) =>
-    reportFilter === 'all' ? true : r.status === reportFilter
-  );
+  const filteredReports = reports.filter((r) => {
+    if (reportFilter !== 'all' && r.status !== reportFilter) return false;
+    if (adminCityFilter !== 'all') {
+      const targetListing = combinedListings.find((l) => l.id === r.targetId);
+      if (targetListing && targetListing.city !== adminCityFilter) return false;
+    }
+    return true;
+  });
 
   const filteredTickets = supportTickets.filter((t) =>
     ticketFilter === 'all' ? true : t.status === ticketFilter
@@ -1376,6 +1430,97 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     }
     return true;
   });
+
+  const renderAdminLocationFilterBar = (itemCountLabel: string) => (
+    <div className="p-3.5 rounded-xl bg-[#111827] border border-white/[0.07] flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <span className="font-semibold text-[#06B6D4] flex items-center gap-1.5 shrink-0">
+          <MapPin className="w-3.5 h-3.5 text-[#8B5CF6]" />
+          <span>Location:</span>
+        </span>
+
+        {/* State / UT */}
+        <select
+          value={adminStateFilter}
+          onChange={(e) => {
+            const nextState = e.target.value;
+            setAdminStateFilter(nextState);
+            if (nextState !== 'all') {
+              const stateObj = INDIA_STATES_AND_UTS.find(
+                (s) => s.name === nextState
+              );
+              if (
+                stateObj &&
+                adminCityFilter !== 'all' &&
+                !stateObj.cities.includes(adminCityFilter)
+              ) {
+                setAdminCityFilter('all');
+              }
+            }
+          }}
+          className="bg-[#161E2E] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
+        >
+          <option value="all">All States & UTs ({INDIA_STATES_AND_UTS.length})</option>
+          {INDIA_STATES_AND_UTS.map((st) => (
+            <option key={st.name} value={st.name}>
+              {st.name} ({st.type === 'ut' ? 'UT' : 'State'})
+            </option>
+          ))}
+        </select>
+
+        {/* City */}
+        <select
+          value={adminCityFilter}
+          onChange={(e) => {
+            const nextCity = e.target.value;
+            setAdminCityFilter(nextCity);
+            if (nextCity !== 'all') {
+              const parentState = getStateForCity(nextCity);
+              if (parentState) setAdminStateFilter(parentState);
+            }
+          }}
+          className="bg-[#161E2E] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-[#F8FAFC] focus:outline-none focus:border-[#8B5CF6]"
+        >
+          <option value="all">All Cities ({adminAvailableCities.length})</option>
+          {adminAvailableCities.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+
+        {/* Locality Input */}
+        <input
+          type="text"
+          value={adminLocalityFilter}
+          onChange={(e) => setAdminLocalityFilter(e.target.value)}
+          placeholder="Filter locality..."
+          className="bg-[#161E2E] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6] w-36 sm:w-44"
+        />
+
+        {(adminStateFilter !== 'all' ||
+          adminCityFilter !== 'all' ||
+          adminLocalityFilter.trim()) && (
+          <button
+            type="button"
+            onClick={() => {
+              setAdminStateFilter('all');
+              setAdminCityFilter('all');
+              setAdminLocalityFilter('');
+            }}
+            className="text-[11px] text-[#8B5CF6] hover:underline cursor-pointer flex items-center gap-1"
+          >
+            <X className="w-3 h-3" />
+            <span>Reset Location</span>
+          </button>
+        )}
+      </div>
+
+      <span className="text-[11px] font-mono text-[#94A3B8]">
+        {itemCountLabel}
+      </span>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#0B0F19] text-[#F8FAFC] flex flex-col lg:flex-row">
@@ -2076,6 +2221,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   </div>
                 </div>
 
+                {renderAdminLocationFilterBar(
+                  `Showing ${filteredUsers.length} of ${combinedUsers.length} users`
+                )}
+
                 {/* Users Table */}
                 <div className="rounded-2xl bg-[#161E2E] border border-white/[0.08] overflow-hidden">
                   <div className="overflow-x-auto">
@@ -2226,6 +2375,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     ))}
                   </div>
                 </div>
+
+                {renderAdminLocationFilterBar(
+                  `Showing ${filteredListings.length} of ${combinedListings.length} listings`
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {filteredListings.map((item) => {
@@ -2397,6 +2550,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     <option value="disputed">Disputed</option>
                   </select>
                 </div>
+
+                {renderAdminLocationFilterBar(
+                  `Showing ${filteredBookings.length} of ${combinedBookings.length} bookings`
+                )}
 
                 <div className="rounded-2xl bg-[#161E2E] border border-white/[0.08] overflow-hidden">
                   <div className="overflow-x-auto">
@@ -2824,34 +2981,69 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       City-Wise Marketplace Distribution
                     </h2>
                     <div className="space-y-3">
-                      {[
-                        'Bengaluru',
-                        'Mumbai',
-                        'Delhi NCR',
-                        'Hyderabad',
-                        'Pune',
-                        'Chennai',
-                      ].map((city) => {
-                        const cityListings = combinedListings.filter(
-                          (l) => l.city === city
-                        ).length;
-                        const cityUsers = combinedUsers.filter(
-                          (u) => u.city === city
-                        ).length;
-                        return (
+                      {(() => {
+                        const cityStats = new Map<
+                          string,
+                          { listings: number; users: number; state: string }
+                        >();
+
+                        for (const item of combinedListings) {
+                          if (!item.city) continue;
+                          const cur = cityStats.get(item.city) || {
+                            listings: 0,
+                            users: 0,
+                            state: getStateForCity(item.city) || 'India',
+                          };
+                          cur.listings += 1;
+                          cityStats.set(item.city, cur);
+                        }
+
+                        for (const user of combinedUsers) {
+                          if (!user.city) continue;
+                          const cur = cityStats.get(user.city) || {
+                            listings: 0,
+                            users: 0,
+                            state: getStateForCity(user.city) || 'India',
+                          };
+                          cur.users += 1;
+                          cityStats.set(user.city, cur);
+                        }
+
+                        const entries = Array.from(cityStats.entries())
+                          .map(([cityName, data]) => ({
+                            cityName,
+                            ...data,
+                            total: data.listings + data.users,
+                          }))
+                          .sort((a, b) => b.total - a.total);
+
+                        if (entries.length === 0) {
+                          return (
+                            <div className="p-4 text-center text-xs text-[#94A3B8]">
+                              No active cities recorded yet.
+                            </div>
+                          );
+                        }
+
+                        return entries.slice(0, 10).map((entry) => (
                           <div
-                            key={city}
+                            key={entry.cityName}
                             className="p-3 rounded-xl bg-[#111827] border border-white/[0.06] flex items-center justify-between text-xs"
                           >
-                            <span className="font-semibold text-[#F8FAFC]">
-                              {city}
-                            </span>
+                            <div>
+                              <span className="font-semibold text-[#F8FAFC]">
+                                {entry.cityName}
+                              </span>
+                              <span className="text-[11px] text-[#94A3B8] ml-2">
+                                ({entry.state})
+                              </span>
+                            </div>
                             <span className="font-mono text-[#94A3B8]">
-                              {cityListings} listings · {cityUsers} users
+                              {entry.listings} listings · {entry.users} users
                             </span>
                           </div>
-                        );
-                      })}
+                        ));
+                      })()}
                     </div>
                   </div>
                 </div>

@@ -234,7 +234,7 @@ export const INDIA_STATES_AND_UTS: StateLocation[] = [
     name: 'Tripura',
     type: 'state',
     code: 'TR',
-    cities: ['Agartala', 'Dharmanagar', 'Udaipur', 'Kailashahar'],
+    cities: ['Agartala', 'Dharmanagar', 'Udaipur (Tripura)', 'Kailashahar'],
   },
   {
     name: 'Uttar Pradesh',

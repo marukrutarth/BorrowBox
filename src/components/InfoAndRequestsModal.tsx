@@ -24,7 +24,7 @@ const INFO_CONTENT: Record<
     title: 'About BorrowBox',
     subtitle: 'Access More. Own Less.',
     paragraphs: [
-      'BorrowBox is a peer-to-peer neighborhood rental marketplace operating across Bengaluru, Mumbai, Delhi NCR, Hyderabad, Pune, and Chennai.',
+      'BorrowBox is a peer-to-peer neighborhood rental marketplace operating across all 28 states and 8 union territories throughout India.',
       'High-value items like full-frame cameras, PlayStation 5 consoles, power tools, projectors, and alpine trekking gear often sit unused for most of the year. BorrowBox connects local owners with nearby borrowers so people can rent what they need in Indian Rupees (₹) and turn what they own into extra earnings.',
       'Community listings published by verified owners are clearly distinguished from sample catalog items.',
     ],
@@ -63,7 +63,7 @@ const INFO_CONTENT: Record<
     paragraphs: [
       'Support Email: support@borrowbox.in',
       'Operating Hours: Monday to Sunday, 8:00 AM – 10:00 PM IST',
-      'Active City Hubs: Bengaluru (Indiranagar, HSR Layout), Mumbai (Andheri, Powai), Delhi NCR (Hauz Khas, Gurgaon), Hyderabad (Jubilee Hills), Pune (Koregaon Park), and Chennai (Adyar).',
+      'Active Coverage: Recognized cities, towns, and local communities across all 28 states and 8 union territories throughout India.',
     ],
   },
   terms: {
