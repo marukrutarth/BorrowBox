@@ -26,10 +26,9 @@
         },
         "city": {
           "type": "string",
-          "description": "Primary Indian city for rentals and listings.",
-          "enum": ["Bengaluru", "Mumbai", "Delhi NCR", "Hyderabad", "Pune", "Chennai"],
+          "description": "Primary Indian city or town across all 28 states and 8 union territories for rentals and listings.",
           "minLength": 2,
-          "maxLength": 40
+          "maxLength": 60
         },
         "neighborhood": {
           "type": "string",
@@ -257,9 +256,9 @@
         },
         "city": {
           "type": "string",
-          "enum": ["Bengaluru", "Mumbai", "Delhi NCR", "Hyderabad", "Pune", "Chennai"],
+          "description": "Recognised Indian city or town across all 28 states and 8 union territories.",
           "minLength": 2,
-          "maxLength": 40
+          "maxLength": 60
         },
         "neighborhood": {
           "type": "string",

@@ -35,6 +35,7 @@ service cloud.firestore {
     function isSuperAdmin() {
       return isSignedIn() && request.auth.token.email_verified == true && (
         request.auth.token.email == 'marukrutarth@gmail.com' ||
+        request.auth.token.email == 'marginoferror1626@gmail.com' ||
         (
           exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
           get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.status == 'active' &&
@@ -122,8 +123,7 @@ service cloud.firestore {
         && data.photoURL.size() <= 500
         && data.city is string
         && data.city.size() >= 2
-        && data.city.size() <= 40
-        && data.city in ['Bengaluru', 'Mumbai', 'Delhi NCR', 'Hyderabad', 'Pune', 'Chennai']
+        && data.city.size() <= 60
         && data.neighborhood is string
         && data.neighborhood.size() >= 2
         && data.neighborhood.size() <= 80
@@ -301,8 +301,7 @@ service cloud.firestore {
         && data.replacementValueINR <= 2000000
         && data.city is string
         && data.city.size() >= 2
-        && data.city.size() <= 40
-        && data.city in ['Bengaluru', 'Mumbai', 'Delhi NCR', 'Hyderabad', 'Pune', 'Chennai']
+        && data.city.size() <= 60
         && data.neighborhood is string
         && data.neighborhood.size() >= 2
         && data.neighborhood.size() <= 80

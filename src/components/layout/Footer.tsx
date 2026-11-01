@@ -15,7 +15,7 @@ interface FooterLinkItem {
   route: PageRoute;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
+const FooterComponent: React.FC<FooterProps> = ({ onNavigate }) => {
   const handleLinkClick = (e: React.MouseEvent, route: PageRoute) => {
     e.preventDefault();
     onNavigate(route);
@@ -152,3 +152,5 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
     </footer>
   );
 };
+
+export const Footer = React.memo(FooterComponent);

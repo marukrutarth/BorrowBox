@@ -25,7 +25,7 @@ import {
   isListingAvailableForDates,
 } from '../utils/rentalLogic';
 import { ProductImage } from '../components/ProductImage';
-import { ProductCard } from '../components/ProductCard';
+import { ProductCard } from '../components/products/ProductCard';
 import { PageRoute } from '../components/Navbar';
 import { CheckoutModal } from '../components/checkout/CheckoutModal';
 

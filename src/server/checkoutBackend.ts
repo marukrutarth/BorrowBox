@@ -1,6 +1,5 @@
 import { Express, Request, Response } from 'express';
-import fs from 'fs';
-import path from 'path';
+import { hasDateRangeOverlap } from '../utils/rentalLogic';
 
 export interface CheckoutQuoteInput {
   dailyRateINR: number;
@@ -177,12 +176,12 @@ export function registerCheckoutRoutes(app: Express): void {
       return;
     }
 
-    // Server-side overlap detection
+    // Server-side overlap detection using shared rentalLogic helper
     const conflict = Array.isArray(existingBookings)
       ? existingBookings.find((b: { startDate?: string; endDate?: string; status?: string }) => {
           if (!b.startDate || !b.endDate) return false;
           if (['cancelled', 'rejected', 'completed'].includes(b.status || '')) return false;
-          return startDate <= b.endDate && endDate >= b.startDate;
+          return hasDateRangeOverlap(startDate, endDate, b.startDate, b.endDate);
         })
       : null;
 

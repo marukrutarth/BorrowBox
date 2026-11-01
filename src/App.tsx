@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { DEMO_PRODUCT_LISTINGS } from './data/demoCatalog';
@@ -45,22 +45,57 @@ import {
   verifyAndLoadAdminSession,
 } from './services/firebase';
 import { Navbar, PageRoute } from './components/Navbar';
-import { Footer, FooterInfoPageKey } from './components/Footer';
+import { Footer, FooterInfoPageKey } from './components/layout/Footer';
 import { HomePage } from './pages/HomePage';
-import { BrowsePage } from './pages/BrowsePage';
-import { ProductDetailsPage } from './pages/ProductDetailsPage';
-import { ListItemPage } from './pages/ListItemPage';
-import { AuthPage } from './pages/AuthPage';
-import { ProfilePage } from './pages/ProfilePage';
-import { DashboardPage } from './pages/DashboardPage';
-import { AdminDashboardPage } from './pages/AdminDashboardPage';
-import { MySupportPage } from './pages/MySupportPage';
-import { About } from './pages/About';
-import { AboutUsPage } from './pages/AboutUsPage';
-import { HowItWorksPage } from './pages/HowItWorksPage';
-import { ContactPage } from './pages/ContactPage';
-import { TermsPage } from './pages/TermsPage';
-import { PrivacyPage } from './pages/PrivacyPage';
+
+const BrowsePage = lazy(() =>
+  import('./pages/BrowsePage').then((m) => ({ default: m.BrowsePage }))
+);
+const ProductDetailsPage = lazy(() =>
+  import('./pages/ProductDetailsPage').then((m) => ({
+    default: m.ProductDetailsPage,
+  }))
+);
+const ListItemPage = lazy(() =>
+  import('./pages/ListItemPage').then((m) => ({ default: m.ListItemPage }))
+);
+const AuthPage = lazy(() =>
+  import('./pages/AuthPage').then((m) => ({ default: m.AuthPage }))
+);
+const ProfilePage = lazy(() =>
+  import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage }))
+);
+const DashboardPage = lazy(() =>
+  import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage }))
+);
+const AdminDashboardPage = lazy(() =>
+  import('./pages/AdminDashboardPage').then((m) => ({
+    default: m.AdminDashboardPage,
+  }))
+);
+const MySupportPage = lazy(() =>
+  import('./pages/MySupportPage').then((m) => ({ default: m.MySupportPage }))
+);
+const About = lazy(() =>
+  import('./pages/About').then((m) => ({ default: m.About }))
+);
+const AboutUsPage = lazy(() =>
+  import('./pages/AboutUsPage').then((m) => ({ default: m.AboutUsPage }))
+);
+const HowItWorksPage = lazy(() =>
+  import('./pages/HowItWorksPage').then((m) => ({
+    default: m.HowItWorksPage,
+  }))
+);
+const ContactPage = lazy(() =>
+  import('./pages/ContactPage').then((m) => ({ default: m.ContactPage }))
+);
+const TermsPage = lazy(() =>
+  import('./pages/TermsPage').then((m) => ({ default: m.TermsPage }))
+);
+const PrivacyPage = lazy(() =>
+  import('./pages/PrivacyPage').then((m) => ({ default: m.PrivacyPage }))
+);
 import {
   InfoModal,
   RequestsModal,
@@ -1068,6 +1103,107 @@ export default function App() {
       ? `details-${currentRoute.itemId}`
       : currentRoute.page;
 
+  // Dynamic route-aware SEO synchronization
+  useEffect(() => {
+    const seoMap: Record<
+      PageRoute['page'],
+      { title: string; description: string }
+    > = {
+      home: {
+        title: 'BorrowBox — Access More. Own Less. | Peer-to-Peer Rental Marketplace Across India',
+        description:
+          'BorrowBox is an Indian peer-to-peer neighborhood rental marketplace where verified owners and borrowers rent cameras, PS5 consoles, tools, projectors, and outdoor gear in ₹ (INR) across India.',
+      },
+      browse: {
+        title: `Explore Rentals${selectedCity !== 'All' ? ` in ${selectedCity}` : ' Across India'} | BorrowBox`,
+        description:
+          'Browse verified peer-to-peer equipment rentals across all 28 states and 8 union territories in India with transparent daily ₹ rates and refundable security deposits.',
+      },
+      details: {
+        title: activeListing
+          ? `${activeListing.title} (${activeListing.city}) | BorrowBox Rental`
+          : 'Item Details | BorrowBox',
+        description: activeListing
+          ? `Rent ${activeListing.title} in ${activeListing.neighborhood}, ${activeListing.city} on BorrowBox. Verified owner handover with refundable deposit protection.`
+          : 'View verified equipment specifications, daily ₹ pricing, and availability on BorrowBox.',
+      },
+      'list-item': {
+        title: 'List an Item & Earn | BorrowBox India',
+        description:
+          'Turn your idle cameras, consoles, tools, and event gear into extra income by listing on BorrowBox across any Indian city.',
+      },
+      dashboard: {
+        title: 'Rental Workspace & Bookings | BorrowBox',
+        description:
+          'Manage your active borrows, owner listings, QR handover codes, and verified booking conversations on BorrowBox.',
+      },
+      profile: {
+        title: 'My Profile & Location Settings | BorrowBox',
+        description:
+          'Manage your BorrowBox account profile, Indian state and city location preferences, and verified rental history.',
+      },
+      login: {
+        title: 'Sign In | BorrowBox',
+        description: 'Sign in to your BorrowBox account to rent or list equipment across India.',
+      },
+      signup: {
+        title: 'Create Account | BorrowBox',
+        description: 'Join BorrowBox to borrow and lend verified gear in your city across India.',
+      },
+      admin: {
+        title: 'Admin Console | BorrowBox',
+        description: 'BorrowBox platform operations, RBAC governance, moderation, and support management.',
+      },
+      support: {
+        title: 'Support & Help Center | BorrowBox',
+        description: 'Create and track support tickets, booking inquiries, and resolution updates with BorrowBox Support.',
+      },
+      about: {
+        title: 'About Us | BorrowBox — Access More. Own Less.',
+        description: 'Learn how BorrowBox is building India’s trusted peer-to-peer sharing economy across every state and city.',
+      },
+      team: {
+        title: 'Our Team | BorrowBox',
+        description: 'Meet the engineering and product team behind BorrowBox.',
+      },
+      'how-it-works': {
+        title: 'How It Works — Borrowing & Lending Guide | BorrowBox',
+        description: 'Step-by-step guide to discovering gear, reserving dates, QR handover verification, and deposit protection on BorrowBox.',
+      },
+      contact: {
+        title: 'Contact Us | BorrowBox',
+        description: 'Get in touch with the BorrowBox team for support, partnership, or platform inquiries.',
+      },
+      terms: {
+        title: 'Terms & Conditions | BorrowBox',
+        description: 'Read BorrowBox marketplace rental terms, borrower responsibilities, and security deposit policies.',
+      },
+      privacy: {
+        title: 'Privacy Policy | BorrowBox',
+        description: 'Learn how BorrowBox protects your personal data, location preferences, and transaction security.',
+      },
+    };
+
+    const meta = seoMap[currentRoute.page] || seoMap.home;
+    document.title = meta.title;
+
+    const descEl = document.querySelector('meta[name="description"]');
+    if (descEl) descEl.setAttribute('content', meta.description);
+    const ogTitleEl = document.querySelector('meta[property="og:title"]');
+    if (ogTitleEl) ogTitleEl.setAttribute('content', meta.title);
+    const ogDescEl = document.querySelector('meta[property="og:description"]');
+    if (ogDescEl) ogDescEl.setAttribute('content', meta.description);
+  }, [currentRoute, activeListing, selectedCity]);
+
+  const routeFallback = (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="flex items-center gap-3 text-sm text-[#94A3B8]">
+        <Loader2 className="w-5 h-5 animate-spin text-[#8B5CF6]" />
+        <span>Loading workspace…</span>
+      </div>
+    </div>
+  );
+
   // Dedicated standalone Admin Console route (/admin)
   if (currentRoute.page === 'admin') {
     return (
@@ -1078,30 +1214,32 @@ export default function App() {
             setIsIntroActive(false);
           }}
         />
-        <AdminDashboardPage
-          firebaseUser={firebaseUser}
-          userProfile={userProfile}
-          verifiedAdminRecord={verifiedAdminRecord}
-          isVerifyingAdminSession={isVerifyingAdminSession || isAuthLoading}
-          adminAccessDeniedReason={adminAccessDeniedReason}
-          allListings={listings}
-          allBookings={bookings}
-          allReviews={reviews}
-          onNavigate={handleNavigate}
-          onLogout={handleLogout}
-          onListingModerationChanged={(listingId, modStatus) => {
-            setListings((prev) =>
-              prev.map((item) =>
-                item.id === listingId
-                  ? {
-                      ...item,
-                      status: modStatus === 'rejected' ? 'archived' : 'active',
-                    }
-                  : item
-              )
-            );
-          }}
-        />
+        <Suspense fallback={routeFallback}>
+          <AdminDashboardPage
+            firebaseUser={firebaseUser}
+            userProfile={userProfile}
+            verifiedAdminRecord={verifiedAdminRecord}
+            isVerifyingAdminSession={isVerifyingAdminSession || isAuthLoading}
+            adminAccessDeniedReason={adminAccessDeniedReason}
+            allListings={listings}
+            allBookings={bookings}
+            allReviews={reviews}
+            onNavigate={handleNavigate}
+            onLogout={handleLogout}
+            onListingModerationChanged={(listingId, modStatus) => {
+              setListings((prev) =>
+                prev.map((item) =>
+                  item.id === listingId
+                    ? {
+                        ...item,
+                        status: modStatus === 'rejected' ? 'archived' : 'active',
+                      }
+                    : item
+                )
+              );
+            }}
+          />
+        </Suspense>
       </>
     );
   }
@@ -1150,7 +1288,9 @@ export default function App() {
               ease: [0.22, 1, 0.36, 1],
             }}
           >
-            {renderMainContent()}
+            <Suspense fallback={routeFallback}>
+              {renderMainContent()}
+            </Suspense>
           </motion.div>
         </AnimatePresence>
       </main>

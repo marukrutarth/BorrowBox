@@ -14,7 +14,7 @@ export interface ProductCardProps {
   onSelect: (listingId: string) => void;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({
+const ProductCardComponent: React.FC<ProductCardProps> = ({
   listing,
   onSelect,
 }) => {
@@ -136,3 +136,5 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     </article>
   );
 };
+
+export const ProductCard = React.memo(ProductCardComponent);

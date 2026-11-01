@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  ALL_CITIES,
   calculateRentalQuote,
   calculateRentVsBuy,
   computePersonalizedRecommendations,
@@ -13,6 +14,11 @@ import {
   validateListingInput,
   validateProfileUpdateInput,
 } from './rentalLogic';
+import {
+  INDIA_STATES_AND_UTS,
+  getLocalitiesForCity,
+  getStateForCity,
+} from '../data/indiaLocations';
 import { ProductListing } from '../types/marketplace';
 
 const sampleListings: ProductListing[] = [
@@ -329,4 +335,48 @@ test('calculateRentVsBuy and computePersonalizedRecommendations return accurate 
   assert.equal(recs.length, 2);
   assert.equal(recs[0].id, 'item-1');
 });
+
+test('INDIA_STATES_AND_UTS covers all 28 states and 8 union territories with unique ALL_CITIES', () => {
+  const states = INDIA_STATES_AND_UTS.filter((s) => s.type === 'state');
+  const uts = INDIA_STATES_AND_UTS.filter((s) => s.type === 'ut');
+  assert.equal(states.length, 28, 'Must include all 28 Indian states');
+  assert.equal(uts.length, 8, 'Must include all 8 Indian union territories');
+  assert.equal(INDIA_STATES_AND_UTS.length, 36);
+
+  // Verify ALL_CITIES has zero duplicate keys
+  const uniqueCities = new Set(ALL_CITIES);
+  assert.equal(uniqueCities.size, ALL_CITIES.length, 'ALL_CITIES must not contain duplicate city names');
+  assert.ok(ALL_CITIES.length > 200, 'Should support over 200 recognised Indian cities and towns');
+
+  // Verify helper lookups across metro and non-metro cities
+  assert.equal(getStateForCity('Jaipur'), 'Rajasthan');
+  assert.equal(getStateForCity('Kochi'), 'Kerala');
+  assert.equal(getStateForCity('Guwahati'), 'Assam');
+  const gujarat = INDIA_STATES_AND_UTS.find((s) => s.name === 'Gujarat');
+  assert.ok(gujarat?.cities.includes('Ahmedabad'));
+  assert.ok(getLocalitiesForCity('Jaipur').length >= 3);
+});
+
+test('validateAuthInput and validateProfileUpdateInput accept non-metro Indian cities across states and UTs', () => {
+  const jaipurSignup = validateAuthInput('signup', {
+    fullName: 'Aarav Verma',
+    email: 'aarav@example.in',
+    phone: '9876543210',
+    city: 'Jaipur',
+    neighborhood: 'Malviya Nagar',
+    password: 'securePassword123',
+  });
+  assert.equal(jaipurSignup.valid, true);
+
+  const kochiProfile = validateProfileUpdateInput({
+    name: 'Meera Nair',
+    photoURL: '',
+    city: 'Kochi',
+    neighborhood: 'Kakkanad',
+    phone: '9876543210',
+    activeMode: 'renter',
+  });
+  assert.equal(kochiProfile.valid, true);
+});
+
 

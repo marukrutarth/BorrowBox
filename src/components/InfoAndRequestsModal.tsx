@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Heart, MapPin, Trash2, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { FooterInfoPageKey } from './Footer';
+import { FooterInfoPageKey } from './layout/Footer';
 import { ProductListing, RentalRequestRecord } from '../types/marketplace';
 import { formatINR } from '../utils/rentalLogic';
 import {

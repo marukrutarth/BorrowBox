@@ -7,6 +7,8 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { registerSupportRoutes } from './src/server/supportBackend.ts';
 import { registerContactRoutes } from './src/server/contactBackend.ts';
 import { registerCheckoutRoutes } from './src/server/checkoutBackend.ts';
+import { ALL_CITIES, hasDateRangeOverlap } from './src/utils/rentalLogic.ts';
+import { PRIMARY_SUPER_ADMIN_EMAIL } from './src/utils/adminRbac.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -91,7 +93,7 @@ async function startServer() {
       return;
     }
 
-    // Check overlapping active bookings
+    // Check overlapping active bookings using shared helper
     const conflict = Array.isArray(existingBookings)
       ? existingBookings.find(
           (b: {
@@ -107,7 +109,7 @@ async function startServer() {
             ) {
               return false;
             }
-            return startDate <= b.endDate && endDate >= b.startDate;
+            return hasDateRangeOverlap(startDate, endDate, b.startDate, b.endDate);
           }
         )
       : null;
@@ -311,22 +313,28 @@ Provide a recommended daily price, min/max range, suggested refundable deposit, 
       return;
     }
 
-    // Deterministic parser fallback / baseline
+    // Deterministic parser fallback / baseline matching pan-India cities
     const lower = raw.toLowerCase();
-    const cities = [
-      'Bengaluru',
-      'Mumbai',
-      'Delhi NCR',
-      'Hyderabad',
-      'Pune',
-      'Chennai',
-    ];
+    const sortedCities = [...ALL_CITIES].sort((a, b) => b.length - a.length);
     let matchedCity = 'All';
-    for (const c of cities) {
-      if (lower.includes(c.toLowerCase()) || (c === 'Bengaluru' && lower.includes('bangalore')) || (c === 'Delhi NCR' && lower.includes('delhi'))) {
+    for (const c of sortedCities) {
+      if (lower.includes(c.toLowerCase())) {
         matchedCity = c;
         break;
       }
+    }
+    if (matchedCity === 'All') {
+      if (lower.includes('bangalore')) matchedCity = 'Bengaluru';
+      else if (lower.includes('delhi') || lower.includes('gurgaon') || lower.includes('noida'))
+        matchedCity = 'Delhi NCR';
+      else if (lower.includes('bombay')) matchedCity = 'Mumbai';
+      else if (lower.includes('calcutta')) matchedCity = 'Kolkata';
+      else if (lower.includes('madras')) matchedCity = 'Chennai';
+      else if (lower.includes('banaras') || lower.includes('kashi')) matchedCity = 'Varanasi';
+      else if (lower.includes('baroda')) matchedCity = 'Vadodara';
+      else if (lower.includes('cochin')) matchedCity = 'Kochi';
+      else if (lower.includes('pondicherry')) matchedCity = 'Puducherry';
+      else if (lower.includes('trivandrum')) matchedCity = 'Thiruvananthapuram';
     }
 
     const categories: Array<{ name: string; keywords: string[] }> = [
@@ -386,7 +394,7 @@ Provide a recommended daily price, min/max range, suggested refundable deposit, 
         contents: `Parse the following Indian rental marketplace search request into structured filter parameters:
 User query: "${raw}"
 Allowed Categories: "All", "Electronics", "Photography", "Gaming", "Tools", "Events", "Outdoor", "Education", "Musical Instruments"
-Allowed Cities: "All", "Bengaluru", "Mumbai", "Delhi NCR", "Hyderabad", "Pune", "Chennai"`,
+Allowed Cities: "All" or any recognised Indian city across all 28 states and 8 union territories (e.g. "Bengaluru", "Mumbai", "Delhi NCR", "Hyderabad", "Pune", "Chennai", "Ahmedabad", "Jaipur", "Kolkata", "Kochi", "Lucknow", "Chandigarh", "Indore", etc.)`,
         config: {
           responseMimeType: 'application/json',
           responseSchema: {
@@ -457,7 +465,10 @@ Allowed Cities: "All", "Bengaluru", "Mumbai", "Delhi NCR", "Hyderabad", "Pune", 
     }
 
     // Bootstrap primary Super Admin check
-    if (normalizedEmail === 'marukrutarth@gmail.com') {
+    if (
+      normalizedEmail === 'marukrutarth@gmail.com' ||
+      normalizedEmail === PRIMARY_SUPER_ADMIN_EMAIL
+    ) {
       res.json({
         authorized: true,
         role: 'super_admin',
@@ -559,7 +570,8 @@ Allowed Cities: "All", "Bengaluru", "Mumbai", "Delhi NCR", "Hyderabad", "Pune", 
 
     if (
       targetType === 'admin' &&
-      String(targetEmail).trim().toLowerCase() === 'marukrutarth@gmail.com' &&
+      (String(targetEmail).trim().toLowerCase() === 'marukrutarth@gmail.com' ||
+        String(targetEmail).trim().toLowerCase() === PRIMARY_SUPER_ADMIN_EMAIL) &&
       requestedRole &&
       requestedRole !== 'super_admin'
     ) {

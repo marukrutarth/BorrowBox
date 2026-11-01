@@ -36,7 +36,7 @@ import {
   getLocalitiesForCity,
   getStateForCity,
 } from '../data/indiaLocations';
-import { ProductCard } from '../components/ProductCard';
+import { ProductCard } from '../components/products/ProductCard';
 import { PageRoute } from '../components/Navbar';
 import { CitySelectorModal } from '../components/location/CitySelectorModal';
 

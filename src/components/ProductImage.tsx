@@ -9,7 +9,7 @@ interface ProductImageProps {
   viewMode?: 'full' | 'closeup' | 'accessories';
 }
 
-export const ProductImage: React.FC<ProductImageProps> = ({
+const ProductImageComponent: React.FC<ProductImageProps> = ({
   srcKeyOrUrl,
   alt,
   className = '',
@@ -45,6 +45,8 @@ export const ProductImage: React.FC<ProductImageProps> = ({
       <img
         src={resolvedSrc}
         alt={alt}
+        loading="lazy"
+        decoding="async"
         referrerPolicy="no-referrer"
         onError={() => setHasError(true)}
         className={`w-full h-full object-cover transition-transform duration-500 ease-out ${scaleTransform}`}
@@ -53,3 +55,5 @@ export const ProductImage: React.FC<ProductImageProps> = ({
     </div>
   );
 };
+
+export const ProductImage = React.memo(ProductImageComponent);
