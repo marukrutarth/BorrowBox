@@ -56,6 +56,11 @@ import { DashboardPage } from './pages/DashboardPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { MySupportPage } from './pages/MySupportPage';
 import { About } from './pages/About';
+import { AboutUsPage } from './pages/AboutUsPage';
+import { HowItWorksPage } from './pages/HowItWorksPage';
+import { ContactPage } from './pages/ContactPage';
+import { TermsPage } from './pages/TermsPage';
+import { PrivacyPage } from './pages/PrivacyPage';
 import {
   InfoModal,
   RequestsModal,
@@ -112,6 +117,42 @@ function parseUrlToRoute(pathname: string, search: string): PageRoute {
   if (pathname === '/about' || pathname === '/about/') {
     return { page: 'about' };
   }
+  if (
+    pathname === '/team' ||
+    pathname === '/team/' ||
+    pathname === '/our-team' ||
+    pathname === '/our-team/'
+  ) {
+    return { page: 'team' };
+  }
+  if (
+    pathname === '/how-it-works' ||
+    pathname === '/how-it-works/' ||
+    pathname === '/howitworks'
+  ) {
+    return { page: 'how-it-works' };
+  }
+  if (
+    pathname === '/contact' ||
+    pathname === '/contact/' ||
+    pathname === '/contact-us'
+  ) {
+    return { page: 'contact' };
+  }
+  if (
+    pathname === '/terms' ||
+    pathname === '/terms/' ||
+    pathname === '/terms-and-conditions'
+  ) {
+    return { page: 'terms' };
+  }
+  if (
+    pathname === '/privacy' ||
+    pathname === '/privacy/' ||
+    pathname === '/privacy-policy'
+  ) {
+    return { page: 'privacy' };
+  }
   return { page: 'home' };
 }
 
@@ -151,6 +192,16 @@ function routeToUrl(route: PageRoute): string {
         : '/support';
     case 'about':
       return '/about';
+    case 'team':
+      return '/team';
+    case 'how-it-works':
+      return '/how-it-works';
+    case 'contact':
+      return '/contact';
+    case 'terms':
+      return '/terms';
+    case 'privacy':
+      return '/privacy';
     case 'home':
     default:
       return '/';
@@ -751,8 +802,7 @@ export default function App() {
   const isProtectedPage =
     currentRoute.page === 'list-item' ||
     currentRoute.page === 'profile' ||
-    currentRoute.page === 'dashboard' ||
-    currentRoute.page === 'support';
+    currentRoute.page === 'dashboard';
 
   const renderMainContent = () => {
     if (isAuthLoading && isProtectedPage) {
@@ -773,8 +823,6 @@ export default function App() {
           ? 'Protected Page: Please log in or create a BorrowBox account to list an item for rent.'
           : currentRoute.page === 'dashboard'
           ? 'Protected Page: Please log in or create an account to access your Borrower & Lender Dashboard.'
-          : currentRoute.page === 'support'
-          ? 'Protected Page: Please log in or create an account to access My Support and manage your support tickets.'
           : 'Protected Page: Please log in or create an account to view and edit your BorrowBox profile.';
 
       return (
@@ -902,19 +950,29 @@ export default function App() {
       );
     }
 
-    if (currentRoute.page === 'support' && userProfile) {
+    if (currentRoute.page === 'support') {
       return (
         <div className="dark">
           <MySupportPage
             userProfile={userProfile}
-            userBookings={bookings.filter(
-              (b) =>
-                b.borrowerId === userProfile.uid ||
-                b.ownerId === userProfile.uid
-            )}
-            userListings={listings.filter(
-              (l) => !l.isDemoData && l.owner.id === userProfile.uid
-            )}
+            isAuthenticated={Boolean(userProfile)}
+            onOpenAuthModal={() => handleNavigate({ page: 'login' })}
+            userBookings={
+              userProfile
+                ? bookings.filter(
+                    (b) =>
+                      b.borrowerId === userProfile.uid ||
+                      b.ownerId === userProfile.uid
+                  )
+                : []
+            }
+            userListings={
+              userProfile
+                ? listings.filter(
+                    (l) => !l.isDemoData && l.owner.id === userProfile.uid
+                  )
+                : []
+            }
             initialTicketId={currentRoute.ticketId}
             isAuthorizedAdmin={Boolean(verifiedAdminRecord)}
             onNavigate={handleNavigate}
@@ -949,7 +1007,27 @@ export default function App() {
     }
 
     if (currentRoute.page === 'about') {
+      return <AboutUsPage onNavigate={handleNavigate} />;
+    }
+
+    if (currentRoute.page === 'team') {
       return <About onNavigate={handleNavigate} />;
+    }
+
+    if (currentRoute.page === 'how-it-works') {
+      return <HowItWorksPage onNavigate={handleNavigate} />;
+    }
+
+    if (currentRoute.page === 'contact') {
+      return <ContactPage onNavigate={handleNavigate} />;
+    }
+
+    if (currentRoute.page === 'terms') {
+      return <TermsPage onNavigate={handleNavigate} />;
+    }
+
+    if (currentRoute.page === 'privacy') {
+      return <PrivacyPage onNavigate={handleNavigate} />;
     }
 
     return (

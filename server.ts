@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import { registerSupportRoutes } from './src/server/supportBackend.ts';
+import { registerContactRoutes } from './src/server/contactBackend.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,6 +32,7 @@ async function startServer() {
   const app = express();
   app.use(express.json({ limit: '12mb' }));
   registerSupportRoutes(app);
+  registerContactRoutes(app);
 
   // 1. Server-side booking & date overlap validation endpoint
   app.post('/api/marketplace/validate-booking', (req, res) => {

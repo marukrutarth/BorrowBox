@@ -430,11 +430,16 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                         type="button"
                         onClick={() => {
                           setMenuOpen(false);
-                          onOpenHowItWorks();
+                          onNavigate({ page: 'how-it-works' });
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
                         }}
-                        className="w-full min-h-[44px] text-left px-3 py-2.5 rounded-xl text-sm font-medium text-[#F8FAFC] hover:bg-[#161E2E] flex items-center gap-3 bb-btn-interactive cursor-pointer"
+                        className={`w-full min-h-[44px] text-left px-3 py-2.5 rounded-xl text-sm font-medium flex items-center gap-3 bb-btn-interactive cursor-pointer ${
+                          currentRoute.page === 'how-it-works'
+                            ? 'bg-[#1D293B] text-[#F8FAFC]'
+                            : 'text-[#F8FAFC] hover:bg-[#161E2E]'
+                        }`}
                       >
-                        <HelpCircle className="w-4 h-4 text-[#94A3B8] shrink-0" />
+                        <HelpCircle className="w-4 h-4 text-[#8B5CF6] shrink-0" />
                         <span>How It Works</span>
                       </button>
 

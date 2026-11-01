@@ -253,8 +253,15 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
 
         <button
           type="button"
-          onClick={onOpenHowItWorks}
-          className="px-3.5 py-2 rounded-lg hover:text-[#F8FAFC] hover:bg-white/[0.03] bb-btn-interactive cursor-pointer"
+          onClick={() => {
+            onNavigate({ page: 'how-it-works' });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className={`px-3.5 py-2 rounded-lg bb-btn-interactive cursor-pointer ${
+            currentRoute.page === 'how-it-works'
+              ? 'text-[#F8FAFC] bg-white/[0.05]'
+              : 'hover:text-[#F8FAFC] hover:bg-white/[0.03]'
+          }`}
         >
           How It Works
         </button>

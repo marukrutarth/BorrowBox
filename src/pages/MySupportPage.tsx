@@ -857,7 +857,7 @@ export const MySupportPage: React.FC<MySupportPageProps> = ({
               onClick={() => onOpenAuthModal('signin')}
               className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold cursor-pointer"
             >
-              Sign In to My Support
+              Sign In to Support
             </button>
             <button
               type="button"
@@ -881,7 +881,7 @@ export const MySupportPage: React.FC<MySupportPageProps> = ({
             <LifeBuoy className="w-4 h-4" />
             <span>BorrowBox Customer Support</span>
           </div>
-          <h1 className="text-2xl font-bold text-white">My Support</h1>
+          <h1 className="text-2xl font-bold text-white">Support</h1>
           <p className="text-xs text-slate-400">
             Create support requests, track ticket progress, and communicate
             directly with assigned BorrowBox support staff.

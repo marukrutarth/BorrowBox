@@ -27,7 +27,12 @@ export type PageRoute =
   | { page: 'signup' }
   | { page: 'admin' }
   | { page: 'support'; ticketId?: string }
-  | { page: 'about' };
+  | { page: 'about' }
+  | { page: 'team' }
+  | { page: 'how-it-works' }
+  | { page: 'contact' }
+  | { page: 'terms' }
+  | { page: 'privacy' };
 
 export interface NavbarProps {
   currentRoute: PageRoute;
