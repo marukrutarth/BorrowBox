@@ -658,7 +658,6 @@ service cloud.firestore {
           'bookingId',
           'subject',
           'description',
-          'priority',
           'status',
           'internalNotes',
           'assignedToEmail',
@@ -687,8 +686,8 @@ service cloud.firestore {
         && data.bookingId is string && data.bookingId.size() <= 128
         && data.subject is string && data.subject.size() >= 3 && data.subject.size() <= 160
         && data.description is string && data.description.size() >= 5 && data.description.size() <= 1200
-        && data.priority in ['low', 'medium', 'high', 'urgent']
-        && data.status in ['open', 'in_progress', 'resolved', 'closed']
+        && (!('priority' in data) || data.priority in ['low', 'medium', 'high', 'urgent', 'normal'])
+        && data.status in ['open', 'in_progress', 'waiting_for_user', 'resolved', 'closed']
         && data.internalNotes is string && data.internalNotes.size() <= 2000
         && data.assignedToEmail is string && data.assignedToEmail.size() <= 120
         && data.createdAt is timestamp
@@ -1153,15 +1152,41 @@ service cloud.firestore {
 
     // 17. Collection Rules: Complete Support Ticket Management System (/supportTickets/{ticketId})
     match /supportTickets/{ticketId} {
+      function parentTicketExists() {
+        return exists(/databases/$(database)/documents/supportTickets/$(ticketId));
+      }
+
+      function parentTicketAfterExists() {
+        return existsAfter(/databases/$(database)/documents/supportTickets/$(ticketId));
+      }
+
+      function parentTicketData() {
+        return parentTicketExists()
+          ? get(/databases/$(database)/documents/supportTickets/$(ticketId)).data
+          : getAfter(/databases/$(database)/documents/supportTickets/$(ticketId)).data;
+      }
+
+      function isTicketOwner() {
+        return isSignedIn()
+          && (parentTicketExists() || parentTicketAfterExists())
+          && parentTicketData().userId == request.auth.uid;
+      }
+
+      function isAssignedStaff() {
+        return isAdmin()
+          && (parentTicketExists() || parentTicketAfterExists())
+          && parentTicketData().assignedTo == request.auth.uid;
+      }
+
       // Customer ownership restriction: customers can only read/list their own tickets; staff/admins can read all
       allow get, list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
 
-      // Customer ticket creation: must be open, unclaimed, normal/urgent priority, and never contain internal staff notes
+      // Customer ticket creation: must be open, unclaimed, and never contain internal staff notes (priority optional for backward compatibility)
       allow create: if isSignedIn()
         && isValidId(ticketId)
         && (request.resource.data.userId == request.auth.uid || isAdmin())
         && request.resource.data.status == 'open'
-        && (request.resource.data.priority == 'normal' || request.resource.data.priority == 'urgent')
+        && (!('priority' in request.resource.data) || request.resource.data.priority in ['normal', 'urgent', 'low', 'medium', 'high'])
         && (!('assignedTo' in request.resource.data) || request.resource.data.assignedTo == null || request.resource.data.assignedTo == '')
         && (!('internalNotes' in request.resource.data) || request.resource.data.internalNotes == '');
 
@@ -1169,11 +1194,11 @@ service cloud.firestore {
       // (A) Administrator Override (Super Admin / Level 2 Admin): can reassign, release claims, reopen, or override ownership
       // (B) Staff Claiming Unclaimed Ticket: authorised staff can claim only if currently unclaimed (assignedTo == null/''), setting assignedTo = request.auth.uid and status = 'in_progress'
       // (C) Assigned Staff Working on Claimed Ticket: regular staff can only modify tickets where resource.data.assignedTo == request.auth.uid and cannot reassign ownership
-      // (D) Customer Reply Status Transition: customer can only transition their own waiting_for_user ticket back to in_progress
+      // (D) Customer Reply Status/Timestamp Transition: customer can update updatedAt/updatedAtISO and transition waiting_for_user back to in_progress on their own ticket
       allow update: if isValidId(ticketId)
         && request.resource.data.userId == resource.data.userId
         && request.resource.data.ticketNumber == resource.data.ticketNumber
-        && (request.resource.data.priority == 'normal' || request.resource.data.priority == 'urgent')
+        && (!('priority' in request.resource.data) || request.resource.data.priority in ['normal', 'urgent', 'low', 'medium', 'high'])
         && (request.resource.data.status in ['open', 'in_progress', 'waiting_for_user', 'resolved', 'closed'])
         && (request.resource.data.status != 'closed' || (request.resource.data.resolutionSummary is string && request.resource.data.resolutionSummary.size() >= 5))
         && (!('internalNotes' in request.resource.data) || request.resource.data.internalNotes == '')
@@ -1196,14 +1221,17 @@ service cloud.firestore {
             && request.resource.data.assignedTo == request.auth.uid
           )
           ||
-          // Tier D: Customer replying to waiting_for_user ticket
+          // Tier D: Customer replying to their own active ticket
           (
             isSignedIn()
             && resource.data.userId == request.auth.uid
-            && resource.data.status == 'waiting_for_user'
-            && request.resource.data.status == 'in_progress'
-            && request.resource.data.assignedTo == resource.data.assignedTo
-            && request.resource.data.priority == resource.data.priority
+            && resource.data.status in ['open', 'in_progress', 'waiting_for_user']
+            && (
+              (resource.data.status == 'waiting_for_user' && request.resource.data.status == 'in_progress')
+              || request.resource.data.status == resource.data.status
+            )
+            && request.resource.data.get('assignedTo', null) == resource.data.get('assignedTo', null)
+            && request.resource.data.get('priority', null) == resource.data.get('priority', null)
             && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'updatedAtISO'])
           )
         );
@@ -1215,26 +1243,23 @@ service cloud.firestore {
         // Customers can ONLY read non-internal messages on their own tickets; staff/admins can read all messages
         allow get, list: if isAdmin()
           || (
-            isSignedIn()
+            isTicketOwner()
             && resource.data.isInternal != true
-            && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid
           );
 
         // Staff can only post replies or internal notes if they claimed the ticket (or have Admin Override);
         // Customers can only post non-internal customer messages on their own ticket
         allow create: if (
-            isOverrideAdmin()
-            || (
-              isAdmin()
-              && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.assignedTo == request.auth.uid
-            )
+            (isOverrideAdmin() || isAssignedStaff())
+            && request.resource.data.senderId == request.auth.uid
+            && request.resource.data.ticketId == ticketId
           )
           || (
-            isSignedIn()
+            isTicketOwner()
+            && request.resource.data.ticketId == ticketId
             && request.resource.data.senderId == request.auth.uid
             && request.resource.data.senderRole == 'customer'
             && request.resource.data.isInternal == false
-            && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid
           );
 
         allow update, delete: if false;
@@ -1244,11 +1269,7 @@ service cloud.firestore {
       // Strictly inaccessible to customers
       match /privateNotes/{noteId} {
         allow get, list: if isAdmin();
-        allow create, update: if isOverrideAdmin()
-          || (
-            isAdmin()
-            && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.assignedTo == request.auth.uid
-          );
+        allow create, update: if isOverrideAdmin() || isAssignedStaff();
         allow delete: if isSuperAdmin();
       }
 
@@ -1257,11 +1278,10 @@ service cloud.firestore {
         // Customers can read history on their own ticket except internal_note_added events
         allow get, list: if isAdmin()
           || (
-            isSignedIn()
+            isTicketOwner()
             && resource.data.action != 'internal_note_added'
-            && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.userId == request.auth.uid
           );
-        allow create: if isSignedIn() && request.resource.data.actorId == request.auth.uid;
+        allow create: if (isAdmin() || isTicketOwner()) && request.resource.data.actorId == request.auth.uid;
         allow update, delete: if false;
       }
     }

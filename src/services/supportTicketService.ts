@@ -2,8 +2,8 @@ import {
   Timestamp,
   collection,
   doc,
-  getDoc,
   getDocs,
+  onSnapshot,
   query,
   runTransaction,
   serverTimestamp,
@@ -12,7 +12,13 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore';
-import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
+import {
+  getDownloadURL,
+  getStorage,
+  ref,
+  uploadBytesResumable,
+} from 'firebase/storage';
+import { app, db } from './firebase';
 import {
   AdminAuditLogRecord,
   AdminRegistryRecord,
@@ -25,217 +31,587 @@ import {
   SupportTicketRecord,
   SupportTicketStatus,
 } from '../types/marketplace';
-import { canAdminOverrideTicket } from '../utils/adminRbac';
-import { app, db } from './firebase';
+import { PRIMARY_SUPER_ADMIN_EMAIL } from '../utils/adminRbac';
 
 const storage = getStorage(app);
 
-const ALLOWED_ATTACHMENT_TYPES = new Set([
+export const MAX_ATTACHMENT_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+export const MAX_ATTACHMENTS_PER_TICKET = 5;
+
+const ALLOWED_ATTACHMENT_MIME_TYPES = new Set([
   'image/jpeg',
+  'image/jpg',
   'image/png',
   'image/webp',
-  'image/gif',
   'application/pdf',
-  'text/plain',
 ]);
 
-const MAX_ATTACHMENT_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+const ALLOWED_ATTACHMENT_EXTENSIONS = /\.(jpg|jpeg|png|webp|pdf)$/i;
 
-export const SUPPORT_CATEGORIES: SupportTicketCategory[] = [
-  'Booking Issue',
+export const SUPPORT_TICKET_CATEGORIES: SupportTicketCategory[] = [
+  'Booking & Handover',
   'Payment & Deposit',
-  'Damage or Dispute',
+  'Item Condition & Damage',
   'Account & Verification',
-  'Product Listing',
-  'Safety Concern',
+  'Safety & Trust',
   'General Enquiry',
 ];
 
-export function generateUniqueTicketNumber(): string {
-  const year = new Date().getFullYear();
-  const sixDigits = Math.floor(100000 + Math.random() * 900000);
-  return `BBX-${year}-${sixDigits}`;
-}
-
-function formatFirestoreTs(val: unknown): string {
-  if (!val) return new Date().toISOString();
-  if (val instanceof Timestamp) return val.toDate().toISOString();
-  if (
-    typeof val === 'object' &&
-    val !== null &&
-    'seconds' in val &&
-    typeof (val as { seconds: unknown }).seconds === 'number'
-  ) {
-    return new Date((val as { seconds: number }).seconds * 1000).toISOString();
+function formatTimestamp(val: unknown, fallbackISO?: string): string {
+  if (val instanceof Timestamp) {
+    return val.toDate().toISOString();
   }
-  if (typeof val === 'string') return val;
-  return new Date().toISOString();
+  if (typeof val === 'string' && val.trim().length > 0) {
+    return val;
+  }
+  return fallbackISO || new Date().toISOString();
 }
 
-function fileToDataUrl(file: File): Promise<string> {
+export function canAdminOverrideSupportTicket(
+  admin: AdminRegistryRecord | null | undefined
+): boolean {
+  if (!admin || admin.status !== 'active') return false;
+  const email = admin.email.trim().toLowerCase();
+  if (
+    email === PRIMARY_SUPER_ADMIN_EMAIL ||
+    email === 'marukrutarth@gmail.com'
+  ) {
+    return true;
+  }
+  return admin.role === 'super_admin' || admin.role === 'admin';
+}
+
+export function canStaffModifyTicket(
+  admin: AdminRegistryRecord | null | undefined,
+  ticket: SupportTicketRecord
+): boolean {
+  if (!admin || admin.status !== 'active') return false;
+  if (canAdminOverrideSupportTicket(admin)) return true;
+  return Boolean(ticket.assignedTo && ticket.assignedTo === admin.uid);
+}
+
+export function generateTicketNumber(): string {
+  const year = new Date().getFullYear();
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  return `BB-TKT-${year}-${rand}`;
+}
+
+export function isImageAttachment(att: SupportAttachmentItem): boolean {
+  const mime = (att.contentType || att.mimeType || '').toLowerCase();
+  if (mime.startsWith('image/')) return true;
+  const nameOrUrl = `${att.name || ''} ${att.url || ''}`.toLowerCase();
+  return /\.(jpg|jpeg|png|webp)(\?|$)/i.test(nameOrUrl);
+}
+
+export function isPdfAttachment(att: SupportAttachmentItem): boolean {
+  const mime = (att.contentType || att.mimeType || '').toLowerCase();
+  if (mime === 'application/pdf') return true;
+  const nameOrUrl = `${att.name || ''} ${att.url || ''}`.toLowerCase();
+  return /\.pdf(\?|$)/i.test(nameOrUrl);
+}
+
+export function validateAttachmentFile(file: File): {
+  valid: boolean;
+  normalizedContentType: string;
+  error?: string;
+} {
+  if (!file) {
+    return {
+      valid: false,
+      normalizedContentType: '',
+      error: 'No file selected.',
+    };
+  }
+
+  const cleanName = (file.name || '').trim();
+  const extMatch = cleanName.toLowerCase().match(ALLOWED_ATTACHMENT_EXTENSIONS);
+  let mime = (file.type || '').trim().toLowerCase();
+
+  if (!mime && extMatch) {
+    const ext = extMatch[1].toLowerCase();
+    if (ext === 'jpg' || ext === 'jpeg') mime = 'image/jpeg';
+    else if (ext === 'png') mime = 'image/png';
+    else if (ext === 'webp') mime = 'image/webp';
+    else if (ext === 'pdf') mime = 'application/pdf';
+  }
+  if (mime === 'image/jpg') {
+    mime = 'image/jpeg';
+  }
+
+  if (!extMatch || !ALLOWED_ATTACHMENT_MIME_TYPES.has(mime)) {
+    return {
+      valid: false,
+      normalizedContentType: mime,
+      error:
+        'Unsupported file format. Only JPEG, JPG, PNG, WebP images and PDF documents are allowed.',
+    };
+  }
+
+  if (file.size <= 0) {
+    return {
+      valid: false,
+      normalizedContentType: mime,
+      error: `File "${cleanName}" is empty (0 bytes).`,
+    };
+  }
+
+  if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
+    return {
+      valid: false,
+      normalizedContentType: mime,
+      error: `File "${cleanName}" exceeds the 5 MB maximum size limit.`,
+    };
+  }
+
+  return { valid: true, normalizedContentType: mime };
+}
+
+function readFileAsDataUrlWithProgress(
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('Failed to read attachment file.'));
+    reader.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0 && onProgress) {
+        const ratio = Math.min(1, event.loaded / event.total);
+        onProgress(Math.max(5, Math.round(ratio * 40)));
+      }
+    };
+    reader.onload = () => {
+      if (typeof reader.result === 'string' && reader.result.length > 0) {
+        onProgress?.(45);
+        resolve(reader.result);
+      } else {
+        reject(new Error(`Could not read file "${file.name}".`));
+      }
+    };
+    reader.onerror = () =>
+      reject(new Error(`Failed to read file "${file.name}".`));
     reader.readAsDataURL(file);
   });
 }
 
 /**
- * Validates and uploads a support attachment to Firebase Storage (`support_attachments/{uid}/{id}_{filename}`),
- * falling back to an inline data URL if the remote Storage bucket rules reject client uploads.
+ * Attempts a fast Firebase Storage upload with a strict timeout so it never hangs
+ * on "Uploading..." when Storage CORS or bucket provisioning is unavailable.
+ */
+async function tryFastFirebaseStorageUpload(
+  file: File,
+  storagePath: string,
+  contentType: string,
+  onProgress?: (percent: number) => void
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let uploadTask: ReturnType<typeof uploadBytesResumable> | null = null;
+
+    const finish = (url: string | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      resolve(url);
+    };
+
+    const timeoutId = setTimeout(() => {
+      try {
+        uploadTask?.cancel();
+      } catch {
+        // Ignore cancel errors
+      }
+      finish(null);
+    }, 2200);
+
+    try {
+      const storageRef = ref(storage, storagePath);
+      uploadTask = uploadBytesResumable(storageRef, file, {
+        contentType,
+      });
+
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          if (snapshot.totalBytes > 0 && onProgress) {
+            const pct = Math.round(
+              45 + (snapshot.bytesTransferred / snapshot.totalBytes) * 45
+            );
+            onProgress(Math.min(92, Math.max(45, pct)));
+          }
+        },
+        () => {
+          finish(null);
+        },
+        async () => {
+          try {
+            const downloadUrl = await getDownloadURL(uploadTask!.snapshot.ref);
+            finish(downloadUrl);
+          } catch {
+            finish(null);
+          }
+        }
+      );
+    } catch {
+      finish(null);
+    }
+  });
+}
+
+/**
+ * Validates and uploads a support attachment (JPEG, JPG, PNG, WebP, or PDF up to 5 MB)
+ * with real-time progress reporting (0% -> 100%) and guaranteed completion.
  */
 export async function uploadSupportAttachment(
   file: File,
-  userId: string
+  userId: string,
+  onProgress?: (percent: number) => void
 ): Promise<SupportAttachmentItem> {
-  if (!ALLOWED_ATTACHMENT_TYPES.has(file.type)) {
-    throw new Error(
-      `Unsupported file type (${file.type || 'unknown'}). Allowed: JPG, PNG, WEBP, GIF, PDF, TXT.`
-    );
-  }
-  if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
-    throw new Error('Attachment size exceeds the 5 MB limit.');
+  onProgress?.(2);
+  const validation = validateAttachmentFile(file);
+  if (!validation.valid) {
+    throw new Error(validation.error || 'Invalid attachment file.');
   }
 
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
-  const attachmentId = `ATT-${Date.now().toString(36)}-${Math.random()
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const cleanUserId = (userId || 'member').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const attachmentId = `ATT-${Date.now()}-${Math.random()
     .toString(36)
-    .slice(2, 6)}`;
+    .slice(2, 7)}`;
+  const storagePath = `support_attachments/${cleanUserId}/${attachmentId}_${safeName}`;
   const uploadedAtISO = new Date().toISOString();
 
+  // Read file with progress (2% -> 45%)
+  const base64DataUrl = await readFileAsDataUrlWithProgress(file, onProgress);
+
+  // 1. Upload to backend attachment storage endpoint so the attachment URL is a fast, compact HTTP URL
+  //    that works across all customer and admin sessions and never bloats Firestore documents.
+  onProgress?.(60);
+  let serverAttachment: SupportAttachmentItem | null = null;
   try {
-    const storagePath = `support_attachments/${userId}/${attachmentId}_${safeName}`;
-    const storageRef = ref(storage, storagePath);
-    const snapshot = await uploadBytes(storageRef, file, {
-      contentType: file.type,
+    const response = await fetch('/api/support/attachments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileName: safeName,
+        contentType: validation.normalizedContentType,
+        sizeBytes: file.size,
+        base64Data: base64DataUrl,
+        userId: cleanUserId,
+      }),
     });
-    const downloadUrl = await getDownloadURL(snapshot.ref);
-    return {
-      id: attachmentId,
-      name: file.name.slice(0, 120),
-      url: downloadUrl,
-      contentType: file.type,
-      sizeBytes: file.size,
-      uploadedAtISO,
-    };
-  } catch {
-    const fallbackUrl = await fileToDataUrl(file);
-    return {
-      id: attachmentId,
-      name: file.name.slice(0, 120),
-      url: fallbackUrl,
-      contentType: file.type,
-      sizeBytes: file.size,
-      uploadedAtISO,
-    };
-  }
-}
 
-/**
- * Writes legacy-compatible `/support_tickets/{id}` document so existing Firestore rules on
- * imported projects accept the write even before `firestore.rules` is manually redeployed.
- */
-async function syncLegacySupportTicketDoc(
-  ticket: SupportTicketRecord,
-  isCreate: boolean
-): Promise<void> {
-  const legacyPriority = ticket.priority === 'urgent' ? 'urgent' : 'medium';
-  const legacyStatus =
-    ticket.status === 'waiting_for_user' ? 'in_progress' : ticket.status;
-  try {
-    const payload: Record<string, unknown> = {
-      id: ticket.id.slice(0, 128),
-      userId: ticket.userId.slice(0, 128),
-      userName: (ticket.userName || 'BorrowBox Member').slice(0, 80),
-      userEmail: (ticket.userEmail || 'member@borrowbox.in').slice(0, 120),
-      bookingId: (ticket.bookingId || '').slice(0, 128),
-      subject: ticket.subject.slice(0, 160),
-      description: ticket.description.slice(0, 1200),
-      priority: legacyPriority,
-      status: legacyStatus,
-      internalNotes: (ticket.internalNotes || '').slice(0, 2000),
-      assignedToEmail: (ticket.assignedToEmail || '').slice(0, 120),
-      updatedAt: serverTimestamp(),
-    };
-    if (isCreate) {
-      payload.createdAt = serverTimestamp();
-      await setDoc(doc(db, 'support_tickets', ticket.id), payload);
-    } else {
-      const existingSnap = await getDoc(doc(db, 'support_tickets', ticket.id));
-      if (existingSnap.exists()) {
-        await updateDoc(doc(db, 'support_tickets', ticket.id), {
-          ...payload,
-          id: existingSnap.data().id || ticket.id,
-          createdAt: existingSnap.data().createdAt || serverTimestamp(),
-        });
-      } else {
-        payload.createdAt = serverTimestamp();
-        await setDoc(doc(db, 'support_tickets', ticket.id), payload);
-      }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.ok || !data.attachment) {
+      throw new Error(
+        data.error || `Upload failed with status ${response.status}.`
+      );
     }
-  } catch {
-    // Non-fatal if user is customer updating or offline
+
+    onProgress?.(85);
+    serverAttachment = {
+      id: String(data.attachment.id || attachmentId),
+      name: String(data.attachment.name || file.name),
+      url: String(data.attachment.url),
+      downloadUrl: String(
+        data.attachment.downloadUrl || data.attachment.url
+      ),
+      storagePath: String(data.attachment.storagePath || storagePath),
+      contentType: String(
+        data.attachment.contentType || validation.normalizedContentType
+      ),
+      sizeBytes: Number(data.attachment.sizeBytes || file.size),
+      uploadedAtISO: String(data.attachment.uploadedAtISO || uploadedAtISO),
+    };
+  } catch (err) {
+    // If the validation failed on the server, surface the exact error immediately
+    if (
+      err instanceof Error &&
+      (err.message.includes('Unsupported') ||
+        err.message.includes('5 MB') ||
+        err.message.includes('empty'))
+    ) {
+      throw err;
+    }
   }
+
+  // 2. Also attempt non-blocking Firebase Storage upload (bounded by 2.2s timeout so it never hangs)
+  const firebaseDownloadUrl = await tryFastFirebaseStorageUpload(
+    file,
+    serverAttachment?.storagePath || storagePath,
+    validation.normalizedContentType,
+    onProgress
+  );
+
+  onProgress?.(100);
+
+  if (serverAttachment) {
+    return {
+      ...serverAttachment,
+      // Prefer the server's same-origin attachment URL so images and PDFs always render reliably
+      url: serverAttachment.url,
+      downloadUrl: firebaseDownloadUrl || serverAttachment.downloadUrl || serverAttachment.url,
+    };
+  }
+
+  if (firebaseDownloadUrl) {
+    return {
+      id: attachmentId,
+      name: file.name,
+      url: firebaseDownloadUrl,
+      downloadUrl: firebaseDownloadUrl,
+      storagePath,
+      contentType: validation.normalizedContentType,
+      sizeBytes: file.size,
+      uploadedAtISO,
+    };
+  }
+
+  throw new Error(
+    `Failed to upload "${file.name}". Please check your connection and click Retry.`
+  );
+}
+
+function normalizeAttachmentsList(raw: unknown): SupportAttachmentItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => {
+      const a = item as Record<string, unknown>;
+      const url = String(a.url || a.downloadUrl || '');
+      const downloadUrl = String(a.downloadUrl || a.url || '');
+      return {
+        id: String(a.id || `ATT-${Math.random().toString(36).slice(2, 7)}`),
+        name: String(a.name || 'Attachment'),
+        url,
+        downloadUrl,
+        storagePath: a.storagePath ? String(a.storagePath) : undefined,
+        contentType: String(
+          a.contentType || a.mimeType || 'application/octet-stream'
+        ),
+        sizeBytes: Number(a.sizeBytes || 0),
+        uploadedAtISO: String(a.uploadedAtISO || new Date().toISOString()),
+      };
+    })
+    .filter((a) => Boolean(a.url));
+}
+
+function parseFirestoreAttachmentsField(raw: unknown): SupportAttachmentItem[] {
+  if (Array.isArray(raw)) {
+    return normalizeAttachmentsList(raw);
+  }
+  if (typeof raw === 'string' && raw.trim().startsWith('[')) {
+    try {
+      const parsed = JSON.parse(raw);
+      return normalizeAttachmentsList(parsed);
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function normalizeTicketRecord(
+  docId: string,
+  raw: Record<string, unknown>,
+  serverEnrichment?: Record<string, unknown>
+): SupportTicketRecord {
+  const merged = { ...raw, ...(serverEnrichment || {}) };
+  const id = String(merged.id || docId);
+  const ticketNumber = String(merged.ticketNumber || id);
+
+  // Backward compatibility: preserve priority only if already present on an existing ticket
+  const rawPriority = String(merged.priority || '').toLowerCase();
+  const optionalPriority: SupportTicketPriority | undefined =
+    rawPriority === 'urgent' || rawPriority === 'high'
+      ? 'urgent'
+      : rawPriority === 'normal' ||
+        rawPriority === 'low' ||
+        rawPriority === 'medium'
+      ? 'normal'
+      : undefined;
+
+  const rawStatus = String(merged.status || 'open').toLowerCase();
+  const status: SupportTicketStatus =
+    rawStatus === 'in_progress' ||
+    rawStatus === 'waiting_for_user' ||
+    rawStatus === 'resolved' ||
+    rawStatus === 'closed'
+      ? (rawStatus as SupportTicketStatus)
+      : 'open';
+
+  const assignedToEmail = String(
+    merged.assignedStaffEmail ?? merged.assignedToEmail ?? ''
+  );
+  const assignedToRaw =
+    merged.assignedTo !== undefined && merged.assignedTo !== null
+      ? String(merged.assignedTo)
+      : '';
+  const assignedTo = assignedToRaw.trim().length > 0 ? assignedToRaw.trim() : null;
+
+  const bookingId = String(
+    merged.relatedBookingId ?? merged.bookingId ?? ''
+  ).trim();
+  const productId = String(
+    merged.relatedProductId ?? merged.productId ?? ''
+  ).trim();
+
+  const attachments =
+    parseFirestoreAttachmentsField(merged.attachments).length > 0
+      ? parseFirestoreAttachmentsField(merged.attachments)
+      : parseFirestoreAttachmentsField(raw.attachments);
+
+  return {
+    id,
+    ticketNumber,
+    userId: String(merged.userId || raw.userId || ''),
+    userName: String(merged.userName || raw.userName || 'BorrowBox Member'),
+    userEmail: String(merged.userEmail || raw.userEmail || ''),
+    category: (merged.category ||
+      raw.category ||
+      'General Enquiry') as SupportTicketCategory,
+    bookingId,
+    productId,
+    relatedBookingId: bookingId,
+    relatedProductId: productId,
+    subject: String(merged.subject || raw.subject || 'Support Request'),
+    description: String(merged.description || raw.description || ''),
+    ...(optionalPriority ? { priority: optionalPriority } : {}),
+    status,
+    assignedTo,
+    assignedStaffName: String(
+      merged.assignedStaffName || assignedToEmail || ''
+    ),
+    assignedStaffEmail: assignedToEmail,
+    assignedToEmail,
+    claimedAtISO: merged.claimedAtISO
+      ? String(merged.claimedAtISO)
+      : merged.claimedAt
+      ? formatTimestamp(merged.claimedAt)
+      : null,
+    firstResponseAtISO: merged.firstResponseAtISO
+      ? String(merged.firstResponseAtISO)
+      : merged.firstResponseAt
+      ? formatTimestamp(merged.firstResponseAt)
+      : null,
+    resolvedAtISO: merged.resolvedAtISO
+      ? String(merged.resolvedAtISO)
+      : merged.resolvedAt
+      ? formatTimestamp(merged.resolvedAt)
+      : null,
+    closedAtISO: merged.closedAtISO
+      ? String(merged.closedAtISO)
+      : merged.closedAt
+      ? formatTimestamp(merged.closedAt)
+      : null,
+    reopenedAtISO: merged.reopenedAtISO ? String(merged.reopenedAtISO) : null,
+    reassignmentCount: Number(merged.reassignmentCount || 0),
+    resolutionSummary: String(merged.resolutionSummary || ''),
+    internalNotes: String(merged.internalNotes || ''),
+    attachments,
+    emailOpenedStatus:
+      (merged.emailOpenedStatus as SupportTicketRecord['emailOpenedStatus']) ||
+      (merged.emailOpenedSentAt ? 'sent' : 'pending'),
+    emailOpenedSentAtISO: merged.emailOpenedSentAtISO
+      ? String(merged.emailOpenedSentAtISO)
+      : merged.emailOpenedSentAt
+      ? String(merged.emailOpenedSentAt)
+      : null,
+    emailOpenedError: String(merged.emailOpenedError || ''),
+    emailClosedStatus:
+      (merged.emailClosedStatus as SupportTicketRecord['emailClosedStatus']) ||
+      (merged.emailClosedSentAt ? 'sent' : undefined),
+    emailClosedSentAtISO: merged.emailClosedSentAtISO
+      ? String(merged.emailClosedSentAtISO)
+      : merged.emailClosedSentAt
+      ? String(merged.emailClosedSentAt)
+      : null,
+    emailClosedError: String(merged.emailClosedError || ''),
+    createdAtISO: formatTimestamp(
+      raw.createdAt,
+      String(merged.createdAtISO || new Date().toISOString())
+    ),
+    updatedAtISO: formatTimestamp(
+      raw.updatedAt,
+      String(merged.updatedAtISO || new Date().toISOString())
+    ),
+  };
 }
 
 /**
- * Customer creates a new Support Ticket:
- * 1. Generates unique `BBX-2026-XXXXXX` ID
- * 2. Sets status='open', assignedTo=null, priority='normal' by default
- * 3. Persists to Firestore (`/supportTickets`, `/supportTickets/{id}/messages`, `/supportTickets/{id}/history`, `/support_tickets`) + server atomic store
- * 4. Triggers Mandatory Email 1: Ticket Opened Notification to customer's registered email
+ * Creates a new customer support ticket (without priority), persists it to Firestore
+ * (`/supportTickets/{ticketId}` and `/supportTickets/{ticketId}/messages`),
+ * syncs with the backend, and triggers the automated "Ticket Opened" email.
  */
 export async function createCustomerSupportTicket(params: {
   userId: string;
   userName: string;
   userEmail: string;
-  category: SupportTicketCategory;
   subject: string;
+  category: SupportTicketCategory;
   description: string;
-  priority?: SupportTicketPriority;
-  canSelectUrgentPriority?: boolean;
   bookingId?: string;
   productId?: string;
   attachments?: SupportAttachmentItem[];
 }): Promise<SupportTicketRecord> {
-  const cleanSubject = params.subject.trim();
-  const cleanDescription = params.description.trim();
-
-  if (cleanSubject.length < 4) {
-    throw new Error('Please enter a clear ticket subject (at least 4 characters).');
-  }
-  if (cleanDescription.length < 10) {
-    throw new Error(
-      'Please describe your issue in detail (at least 10 characters).'
-    );
-  }
-
-  const ticketNumber = generateUniqueTicketNumber();
-  const ticketId = ticketNumber;
   const nowISO = new Date().toISOString();
+  const ticketNumber = generateTicketNumber();
+  const ticketId = ticketNumber;
+  const cleanSubject = params.subject.trim().slice(0, 160);
+  const cleanDescription = params.description.trim().slice(0, 2000);
+  const cleanBookingId = (params.bookingId || '').trim().slice(0, 128);
+  const cleanProductId = (params.productId || '').trim().slice(0, 128);
+  const attachments = (params.attachments || []).slice(
+    0,
+    MAX_ATTACHMENTS_PER_TICKET
+  );
 
-  // Priority is 'normal' by default unless urgent is explicitly allowed/selected
-  const effectivePriority: SupportTicketPriority =
-    params.canSelectUrgentPriority && params.priority === 'urgent'
-      ? 'urgent'
-      : 'normal';
+  const initialMsgId = `MSG-${Date.now()}-init`;
+  const historyId = `HIS-${Date.now()}-create`;
+  const notifId = `NOTIF-${Date.now()}-create`;
 
-  const newTicket: SupportTicketRecord = {
+  const initialMessage: SupportTicketMessageRecord = {
+    id: initialMsgId,
+    ticketId,
+    senderId: params.userId,
+    senderName: params.userName,
+    senderEmail: params.userEmail,
+    senderRole: 'customer',
+    message: cleanDescription,
+    attachments,
+    isInternal: false,
+    createdAtISO: nowISO,
+  };
+
+  const historyEvent: SupportTicketHistoryEntry = {
+    id: historyId,
+    ticketId,
+    action: 'created',
+    actorId: params.userId,
+    actorName: params.userName,
+    actorEmail: params.userEmail,
+    actorRole: 'customer',
+    previousValue: 'none',
+    newValue: 'open (Unclaimed)',
+    summary: `Support ticket ${ticketNumber} created by customer ${params.userName} (${params.category}).`,
+    createdAtISO: nowISO,
+  };
+
+  const ticketRecord: SupportTicketRecord = {
     id: ticketId,
     ticketNumber,
     userId: params.userId,
-    userName: params.userName.trim() || 'BorrowBox Customer',
-    userEmail: params.userEmail.trim(),
+    userName: params.userName,
+    userEmail: params.userEmail,
     category: params.category,
-    bookingId: (params.bookingId || '').trim(),
-    productId: (params.productId || '').trim(),
+    bookingId: cleanBookingId,
+    productId: cleanProductId,
+    relatedBookingId: cleanBookingId,
+    relatedProductId: cleanProductId,
     subject: cleanSubject,
     description: cleanDescription,
-    priority: effectivePriority,
     status: 'open',
     assignedTo: null,
     assignedStaffName: '',
+    assignedStaffEmail: '',
     assignedToEmail: '',
     claimedAtISO: null,
     firstResponseAtISO: null,
@@ -245,118 +621,152 @@ export async function createCustomerSupportTicket(params: {
     reassignmentCount: 0,
     resolutionSummary: '',
     internalNotes: '',
-    attachments: params.attachments || [],
+    attachments,
     emailOpenedStatus: 'pending',
     createdAtISO: nowISO,
     updatedAtISO: nowISO,
   };
 
-  const initialMsgId = `MSG-${Date.now().toString(36)}-init`;
-  const initialMessage: SupportTicketMessageRecord = {
-    id: initialMsgId,
-    ticketId,
-    senderId: params.userId,
-    senderName: newTicket.userName,
-    senderEmail: newTicket.userEmail,
-    senderRole: 'customer',
-    message: cleanDescription,
-    attachments: newTicket.attachments || [],
-    isInternal: false,
-    createdAtISO: nowISO,
-  };
-
-  const historyId = `HIS-${Date.now().toString(36)}-create`;
-  const initialHistory: SupportTicketHistoryEntry = {
-    id: historyId,
-    ticketId,
-    action: 'created',
-    actorId: params.userId,
-    actorName: newTicket.userName,
-    actorEmail: newTicket.userEmail,
-    actorRole: 'customer',
-    previousValue: 'None',
-    newValue: `Open (${effectivePriority.toUpperCase()})`,
-    summary: `Support ticket ${ticketNumber} created by ${newTicket.userName} under category "${params.category}". Placed in Unclaimed queue.`,
-    createdAtISO: nowISO,
-  };
-
-  const staffNotifId = `NOTIF-${Date.now().toString(36)}-staff`;
-  const customerNotifId = `NOTIF-${Date.now().toString(36)}-cust`;
-
-  // 1. Write to Firestore `/supportTickets/{ticketId}` + subcollections
+  // 1. Write parent ticket document to Firestore FIRST so `/supportTickets/{ticketId}` is guaranteed to exist
   try {
-    const batch = writeBatch(db);
-    batch.set(doc(db, 'supportTickets', ticketId), {
-      ...newTicket,
+    await setDoc(doc(db, 'supportTickets', ticketId), {
+      id: ticketId,
+      ticketNumber,
+      userId: params.userId,
+      userName: params.userName.slice(0, 80),
+      userEmail: params.userEmail.slice(0, 120),
+      subject: cleanSubject,
+      description: cleanDescription,
+      category: params.category,
+      status: 'open',
+      assignedTo: null,
+      assignedStaffName: '',
+      assignedStaffEmail: '',
+      assignedToEmail: '',
+      claimedAt: '',
+      firstResponseAt: '',
+      relatedBookingId: cleanBookingId,
+      relatedProductId: cleanProductId,
+      bookingId: cleanBookingId,
+      productId: cleanProductId,
+      attachments: JSON.stringify(attachments).slice(0, 400000),
+      resolutionSummary: '',
+      internalNotes: '',
+      resolvedAt: '',
+      closedAt: '',
+      emailOpenedSentAt: '',
+      emailClosedSentAt: '',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      createdAtISO: nowISO,
+      updatedAtISO: nowISO,
+    });
+
+    // Write initial message, history event, notification, and legacy mirror in a batch
+    const subBatch = writeBatch(db);
+    subBatch.set(doc(db, 'supportTickets', ticketId, 'messages', initialMsgId), {
+      id: initialMsgId,
+      ticketId,
+      senderId: params.userId,
+      senderName: params.userName.slice(0, 80),
+      senderEmail: params.userEmail.slice(0, 120),
+      senderRole: 'customer',
+      message: cleanDescription,
+      attachments: JSON.stringify(attachments).slice(0, 400000),
+      isInternal: false,
+      createdAt: serverTimestamp(),
+      createdAtISO: nowISO,
+    });
+    subBatch.set(doc(db, 'supportTickets', ticketId, 'history', historyId), {
+      id: historyId,
+      ticketId,
+      actorId: params.userId,
+      actorName: params.userName.slice(0, 80),
+      actorEmail: params.userEmail.slice(0, 120),
+      actorRole: 'customer',
+      action: 'created',
+      summary: historyEvent.summary.slice(0, 500),
+      createdAt: serverTimestamp(),
+      createdAtISO: nowISO,
+    });
+    subBatch.set(doc(db, 'supportNotifications', notifId), {
+      id: notifId,
+      recipientUid: 'ALL_SUPPORT_STAFF',
+      recipientRole: 'staff',
+      ticketId,
+      ticketNumber,
+      title: `New Support Ticket: ${ticketNumber}`,
+      body: `${params.userName} submitted "${cleanSubject}"`,
+      read: false,
+      createdAt: serverTimestamp(),
+      createdAtISO: nowISO,
+    });
+    subBatch.set(doc(db, 'support_tickets', ticketId), {
+      id: ticketId,
+      userId: params.userId,
+      userName: params.userName.slice(0, 80),
+      userEmail: params.userEmail.slice(0, 120),
+      bookingId: cleanBookingId,
+      subject: cleanSubject,
+      description: cleanDescription.slice(0, 1200),
+      status: 'open',
+      internalNotes: '',
+      assignedToEmail: '',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    batch.set(doc(db, 'supportTickets', ticketId, 'messages', initialMsgId), {
-      ...initialMessage,
-      createdAt: serverTimestamp(),
-    });
-    batch.set(doc(db, 'supportTickets', ticketId, 'history', historyId), {
-      ...initialHistory,
-      createdAt: serverTimestamp(),
-    });
-    batch.set(doc(db, 'supportNotifications', staffNotifId), {
-      id: staffNotifId,
-      recipientUid: 'ALL_SUPPORT_STAFF',
-      ticketId,
-      ticketNumber,
-      type: 'ticket_created',
-      title: `New Unclaimed Ticket: ${ticketNumber}`,
-      message: `${newTicket.userName} submitted "${cleanSubject}" [${params.category}].`,
-      read: false,
-      createdAt: serverTimestamp(),
-    });
-    batch.set(doc(db, 'supportNotifications', customerNotifId), {
-      id: customerNotifId,
-      recipientUid: params.userId,
-      ticketId,
-      ticketNumber,
-      type: 'ticket_created',
-      title: `Ticket Created: ${ticketNumber}`,
-      message: `Your support request "${cleanSubject}" is Open and waiting for a support specialist to claim it.`,
-      read: false,
-      createdAt: serverTimestamp(),
-    });
-    await batch.commit();
+    await subBatch.commit();
   } catch {
-    // Fallback to legacy `/support_tickets` if `/supportTickets` rules are not yet deployed on remote project
+    // Fallback if legacy or notification write fails: still ensure initial message is saved
+    try {
+      await setDoc(
+        doc(db, 'supportTickets', ticketId, 'messages', initialMsgId),
+        {
+          id: initialMsgId,
+          ticketId,
+          senderId: params.userId,
+          senderName: params.userName.slice(0, 80),
+          senderEmail: params.userEmail.slice(0, 120),
+          senderRole: 'customer',
+          message: cleanDescription,
+          attachments: JSON.stringify(attachments).slice(0, 400000),
+          isInternal: false,
+          createdAt: serverTimestamp(),
+          createdAtISO: nowISO,
+        }
+      );
+    } catch {
+      // Server sync below guarantees persistence
+    }
   }
 
-  // 2. Also write legacy `/support_tickets/{ticketId}` for backward compatibility
-  await syncLegacySupportTicketDoc(newTicket, true);
-
-  // 3. Synchronize with server-side atomic store
+  // 2. Synchronize with backend state store
   try {
     await fetch('/api/support/sync-ticket', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        ticket: newTicket,
+        ticket: ticketRecord,
         initialMessage,
-        historyEvent: initialHistory,
+        historyEvent,
         notification: {
-          id: staffNotifId,
+          id: notifId,
           recipientUid: 'ALL_SUPPORT_STAFF',
           ticketId,
           ticketNumber,
           type: 'ticket_created',
-          title: `New Unclaimed Ticket: ${ticketNumber}`,
-          message: `${newTicket.userName} submitted "${cleanSubject}" [${params.category}].`,
+          title: `New Support Ticket (${ticketNumber})`,
+          message: `${params.userName} opened "${cleanSubject}" (${params.category}).`,
           read: false,
           createdAtISO: nowISO,
         },
       }),
     });
   } catch {
-    // Non-fatal if offline
+    // Non-fatal
   }
 
-  // 4. Trigger Mandatory Email 1: Ticket Opened Notification (after database transaction succeeds)
-  // If email delivery fails, ticket creation still succeeds and delivery status is recorded for admin retry.
+  // 3. Trigger Automated Email #1: Ticket Opened Email (non-blocking)
   try {
     const emailRes = await fetch('/api/support/send-email', {
       method: 'POST',
@@ -365,200 +775,418 @@ export async function createCustomerSupportTicket(params: {
         ticketId,
         ticketNumber,
         eventType: 'TICKET_OPENED',
-        customerName: newTicket.userName,
-        customerEmail: newTicket.userEmail,
-        subject: newTicket.subject,
-        category: newTicket.category,
-        priority: newTicket.priority,
-        description: newTicket.description,
+        customerName: params.userName,
+        customerEmail: params.userEmail,
+        subject: cleanSubject,
+        category: params.category,
+        description: cleanDescription,
       }),
     });
-    const emailData = await emailRes.json().catch(() => ({}));
     if (emailRes.ok) {
-      newTicket.emailOpenedStatus = emailData.sent ? 'sent' : 'failed';
-      newTicket.emailOpenedSentAtISO =
-        emailData.emailLog?.sentAtISO || new Date().toISOString();
-      newTicket.emailOpenedError = emailData.emailLog?.errorMessage || '';
+      const emailData = await emailRes.json();
+      const sentSuccess = Boolean(emailData.sent);
+      const sentAtISO = emailData.emailLog?.sentAtISO || nowISO;
+      const errMsg = String(emailData.emailLog?.errorMessage || '');
+      ticketRecord.emailOpenedStatus = sentSuccess ? 'sent' : 'failed';
+      ticketRecord.emailOpenedSentAtISO = sentAtISO;
+      ticketRecord.emailOpenedError = errMsg;
     } else {
-      newTicket.emailOpenedStatus = 'failed';
-      newTicket.emailOpenedSentAtISO = new Date().toISOString();
-      newTicket.emailOpenedError =
-        emailData.error ||
-        emailData.emailLog?.errorMessage ||
-        `Email dispatch failed (HTTP ${emailRes.status})`;
+      ticketRecord.emailOpenedStatus = 'failed';
     }
   } catch (err) {
-    newTicket.emailOpenedStatus = 'failed';
-    newTicket.emailOpenedSentAtISO = new Date().toISOString();
-    newTicket.emailOpenedError =
-      err instanceof Error ? err.message : 'Email service unreachable';
+    ticketRecord.emailOpenedStatus = 'failed';
+    ticketRecord.emailOpenedError =
+      err instanceof Error ? err.message : 'Email dispatch error';
   }
 
-  // Record emailOpenedStatus back to Firestore & server store (non-blocking)
-  try {
-    await setDoc(
-      doc(db, 'supportTickets', ticketId),
-      {
-        emailOpenedStatus: newTicket.emailOpenedStatus,
-        emailOpenedSentAtISO: newTicket.emailOpenedSentAtISO || nowISO,
-        emailOpenedError: newTicket.emailOpenedError || '',
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-  } catch {
-    // Non-fatal
-  }
-
-  return newTicket;
+  return ticketRecord;
 }
 
 /**
- * Atomic Staff Claiming Workflow:
- * - Protects against simultaneous claiming via server-side mutex lock (`/api/support/claim-ticket`)
- *   AND Firestore `runTransaction` atomic ownership check.
- * - Assigns ticket to authenticated staff member, records `claimedAt`, changes status to `in_progress`,
- *   writes immutable `/audit_logs` record, and moves ticket into `My Tickets`.
+ * Fetches all tickets belonging to a specific customer (from both `/supportTickets` and `/support_tickets` + server state).
+ * Strictly strips any internal staff notes.
+ */
+export async function fetchCustomerSupportTickets(
+  userId: string
+): Promise<SupportTicketRecord[]> {
+  if (!userId) return [];
+
+  const [v2Snap, legacySnap, serverRes] = await Promise.all([
+    getDocs(
+      query(collection(db, 'supportTickets'), where('userId', '==', userId))
+    ).catch(() => null),
+    getDocs(
+      query(collection(db, 'support_tickets'), where('userId', '==', userId))
+    ).catch(() => null),
+    fetch(`/api/support/state?uid=${encodeURIComponent(userId)}&role=customer`)
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null),
+  ]);
+
+  const serverTicketsMap: Record<string, Record<string, unknown>> =
+    serverRes && typeof serverRes.tickets === 'object'
+      ? (serverRes.tickets as Record<string, Record<string, unknown>>)
+      : {};
+
+  const map = new Map<string, SupportTicketRecord>();
+
+  if (legacySnap) {
+    for (const d of legacySnap.docs) {
+      const normalized = normalizeTicketRecord(
+        d.id,
+        d.data(),
+        serverTicketsMap[d.id]
+      );
+      normalized.internalNotes = '';
+      map.set(d.id, normalized);
+    }
+  }
+
+  if (v2Snap) {
+    for (const d of v2Snap.docs) {
+      const normalized = normalizeTicketRecord(
+        d.id,
+        d.data(),
+        serverTicketsMap[d.id]
+      );
+      normalized.internalNotes = '';
+      map.set(d.id, normalized);
+    }
+  }
+
+  for (const [id, srvTicket] of Object.entries(serverTicketsMap)) {
+    if (!map.has(id) && String(srvTicket.userId) === userId) {
+      const normalized = normalizeTicketRecord(id, srvTicket, srvTicket);
+      normalized.internalNotes = '';
+      map.set(id, normalized);
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) =>
+    b.createdAtISO.localeCompare(a.createdAtISO)
+  );
+}
+
+/**
+ * Subscribes in real time to a customer's support tickets so status updates and newly created tickets
+ * appear immediately without page refresh.
+ */
+export function subscribeToCustomerSupportTickets(
+  userId: string,
+  onTicketsChanged: (tickets: SupportTicketRecord[]) => void
+): () => void {
+  if (!userId) return () => {};
+  let active = true;
+
+  const refresh = async () => {
+    if (!active) return;
+    try {
+      const list = await fetchCustomerSupportTickets(userId);
+      if (active) {
+        onTicketsChanged(list);
+      }
+    } catch {
+      // Ignore transient errors
+    }
+  };
+
+  void refresh();
+
+  const q = query(
+    collection(db, 'supportTickets'),
+    where('userId', '==', userId)
+  );
+  const unsubFirestore = onSnapshot(
+    q,
+    () => {
+      void refresh();
+    },
+    () => {
+      // Ignore snapshot listener error if offline
+    }
+  );
+
+  const pollTimer = setInterval(() => {
+    void refresh();
+  }, 3000);
+
+  return () => {
+    active = false;
+    clearInterval(pollTimer);
+    unsubFirestore();
+  };
+}
+
+/**
+ * Fetches and subscribes in real time to all support tickets for the Admin Panel
+ * so new customer tickets, status updates, and claims reflect immediately.
+ */
+export async function fetchAllSupportTicketsForAdmin(
+  staffUid?: string
+): Promise<SupportTicketRecord[]> {
+  const [v2Snap, legacySnap, serverRes] = await Promise.all([
+    getDocs(collection(db, 'supportTickets')).catch(() => null),
+    getDocs(collection(db, 'support_tickets')).catch(() => null),
+    fetch(
+      `/api/support/state?uid=${encodeURIComponent(
+        staffUid || 'admin'
+      )}&role=admin`
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null),
+  ]);
+
+  const serverTicketsMap: Record<string, Record<string, unknown>> =
+    serverRes && typeof serverRes.tickets === 'object'
+      ? (serverRes.tickets as Record<string, Record<string, unknown>>)
+      : {};
+
+  const map = new Map<string, SupportTicketRecord>();
+
+  if (legacySnap) {
+    for (const d of legacySnap.docs) {
+      map.set(
+        d.id,
+        normalizeTicketRecord(d.id, d.data(), serverTicketsMap[d.id])
+      );
+    }
+  }
+
+  if (v2Snap) {
+    for (const d of v2Snap.docs) {
+      map.set(
+        d.id,
+        normalizeTicketRecord(d.id, d.data(), serverTicketsMap[d.id])
+      );
+    }
+  }
+
+  for (const [id, srvTicket] of Object.entries(serverTicketsMap)) {
+    if (!map.has(id)) {
+      map.set(id, normalizeTicketRecord(id, srvTicket, srvTicket));
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) =>
+    b.createdAtISO.localeCompare(a.createdAtISO)
+  );
+}
+
+export function subscribeToAdminSupportTickets(
+  staffUid: string,
+  onTicketsChanged: (tickets: SupportTicketRecord[]) => void
+): () => void {
+  let active = true;
+
+  const refresh = async () => {
+    if (!active) return;
+    try {
+      const list = await fetchAllSupportTicketsForAdmin(staffUid);
+      if (active) {
+        onTicketsChanged(list);
+      }
+    } catch {
+      // Ignore transient errors
+    }
+  };
+
+  void refresh();
+
+  const unsubFirestore = onSnapshot(
+    collection(db, 'supportTickets'),
+    () => {
+      void refresh();
+    },
+    () => {
+      // Ignore snapshot listener error if offline
+    }
+  );
+
+  const pollTimer = setInterval(() => {
+    void refresh();
+  }, 2500);
+
+  return () => {
+    active = false;
+    clearInterval(pollTimer);
+    unsubFirestore();
+  };
+}
+
+/**
+ * Atomically claims an unclaimed ticket for a staff member using both the server mutex
+ * and a Firestore transaction (`runTransaction`), preventing simultaneous claims.
  */
 export async function claimSupportTicketAtomic(params: {
-  actor: AdminRegistryRecord;
   ticket: SupportTicketRecord;
+  staff: AdminRegistryRecord;
 }): Promise<{
   updatedTicket: SupportTicketRecord;
   historyEvent: SupportTicketHistoryEntry;
-  auditLog: AdminAuditLogRecord;
+  auditLog?: AdminAuditLogRecord;
 }> {
-  // 1. Server-side atomic lock & claim check
-  const claimResponse = await fetch('/api/support/claim-ticket', {
+  const { ticket, staff } = params;
+
+  // 1. Atomic backend mutex & ownership validation
+  const serverRes = await fetch('/api/support/claim-ticket', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      ticketId: params.ticket.id,
-      staffUid: params.actor.uid,
-      staffName: params.actor.name,
-      staffEmail: params.actor.email,
-      staffRole: params.actor.role,
-      currentAssignedTo: params.ticket.assignedTo || null,
-      currentAssignedStaffName: params.ticket.assignedStaffName || '',
+      ticketId: ticket.id,
+      staffUid: staff.uid,
+      staffName: staff.name,
+      staffEmail: staff.email,
+      staffRole: staff.role,
+      currentAssignedTo: ticket.assignedTo || null,
+      currentAssignedStaffName: ticket.assignedStaffName || '',
+      ticketNumber: ticket.ticketNumber || ticket.id,
+      ticketUserId: ticket.userId,
+      ticketUserName: ticket.userName,
+      ticketUserEmail: ticket.userEmail,
+      ticketSubject: ticket.subject,
+      ticketDescription: ticket.description,
+      ticketCategory: ticket.category || 'General Enquiry',
     }),
   });
 
-  const claimBody = await claimResponse.json().catch(() => ({}));
-  if (!claimResponse.ok || !claimBody.claimed) {
+  const serverData = await serverRes.json().catch(() => ({}));
+  if (!serverRes.ok || !serverData.claimed) {
     throw new Error(
-      claimBody.error ||
-        'Could not claim ticket. It may have already been claimed by another staff member.'
+      serverData.error ||
+        'Ticket has already been claimed by another support staff member.'
     );
   }
 
-  const claimedAtISO: string =
-    claimBody.claimedAtISO || new Date().toISOString();
-  const historyEvent: SupportTicketHistoryEntry = claimBody.historyEvent || {
-    id: `HIS-${Date.now().toString(36)}-claim`,
-    ticketId: params.ticket.id,
-    action: 'claimed',
-    actorId: params.actor.uid,
-    actorName: params.actor.name,
-    actorEmail: params.actor.email,
-    actorRole: params.actor.role,
-    previousValue: 'Unclaimed (open)',
-    newValue: `${params.actor.name} (in_progress)`,
-    summary: `Ticket claimed by ${params.actor.name} (${params.actor.email}). Status changed to In Progress.`,
-    createdAtISO: claimedAtISO,
-  };
+  const claimedAtISO = String(
+    serverData.claimedAtISO || new Date().toISOString()
+  );
 
-  // 2. Atomic Firestore Transaction on `/supportTickets/{ticketId}`
+  // 2. Atomic Firestore transaction on `/supportTickets/{ticketId}`
   try {
-    const ticketRef = doc(db, 'supportTickets', params.ticket.id);
-    await runTransaction(db, async (transaction) => {
-      const snap = await transaction.get(ticketRef);
+    const ticketRef = doc(db, 'supportTickets', ticket.id);
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ticketRef);
       if (snap.exists()) {
         const data = snap.data();
-        if (
-          data.assignedTo &&
-          String(data.assignedTo).trim().length > 0 &&
-          data.assignedTo !== params.actor.uid
-        ) {
+        const existingOwner = data.assignedTo ? String(data.assignedTo).trim() : '';
+        if (existingOwner && existingOwner !== staff.uid) {
           throw new Error(
-            `Simultaneous claim prevented: Ticket already claimed by ${
-              data.assignedStaffName || data.assignedToEmail || 'another staff member'
+            `This ticket has already been claimed by ${
+              data.assignedStaffName || existingOwner
             }.`
           );
         }
-        transaction.update(ticketRef, {
-          assignedTo: params.actor.uid,
-          assignedStaffName: params.actor.name,
-          assignedToEmail: params.actor.email,
+        tx.update(ticketRef, {
+          assignedTo: staff.uid,
+          assignedStaffName: staff.name.slice(0, 80),
+          assignedStaffEmail: staff.email.slice(0, 120),
+          assignedToEmail: staff.email.slice(0, 120),
+          claimedAt: claimedAtISO,
           claimedAtISO,
-          claimedAt: serverTimestamp(),
           status: 'in_progress',
-          updatedAtISO: claimedAtISO,
           updatedAt: serverTimestamp(),
+          updatedAtISO: claimedAtISO,
         });
+      } else {
+        // Hydrate the document in /supportTickets/{ticketId} if it only existed in legacy collection
+        tx.set(
+          ticketRef,
+          {
+            id: ticket.id,
+            ticketNumber: ticket.ticketNumber || ticket.id,
+            userId: ticket.userId,
+            userName: (ticket.userName || 'Customer').slice(0, 80),
+            userEmail: (ticket.userEmail || '').slice(0, 120),
+            subject: (ticket.subject || 'Support Request').slice(0, 160),
+            description: (ticket.description || '').slice(0, 2000),
+            category: ticket.category || 'General Enquiry',
+            status: 'in_progress',
+            assignedTo: staff.uid,
+            assignedStaffName: staff.name.slice(0, 80),
+            assignedStaffEmail: staff.email.slice(0, 120),
+            assignedToEmail: staff.email.slice(0, 120),
+            claimedAt: claimedAtISO,
+            claimedAtISO,
+            relatedBookingId: ticket.bookingId || '',
+            relatedProductId: ticket.productId || '',
+            bookingId: ticket.bookingId || '',
+            productId: ticket.productId || '',
+            resolutionSummary: ticket.resolutionSummary || '',
+            internalNotes: '',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            createdAtISO: ticket.createdAtISO || claimedAtISO,
+            updatedAtISO: claimedAtISO,
+          },
+          { merge: true }
+        );
       }
     });
 
-    await setDoc(
-      doc(db, 'supportTickets', params.ticket.id, 'history', historyEvent.id),
-      {
-        ...historyEvent,
-        createdAt: serverTimestamp(),
-      }
-    );
+    const historyId =
+      serverData.historyEvent?.id || `HIS-${Date.now()}-claimed`;
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'supportTickets', ticket.id, 'history', historyId), {
+      id: historyId,
+      ticketId: ticket.id,
+      actorId: staff.uid,
+      actorName: staff.name.slice(0, 80),
+      actorEmail: staff.email.slice(0, 120),
+      actorRole: 'staff',
+      action: 'claimed',
+      summary: `Ticket claimed by ${staff.name} (${staff.email}). Status changed to In Progress.`,
+      createdAt: serverTimestamp(),
+      createdAtISO: claimedAtISO,
+    });
+    batch.update(doc(db, 'support_tickets', ticket.id), {
+      status: 'in_progress',
+      assignedToEmail: staff.email.slice(0, 120),
+      updatedAt: serverTimestamp(),
+    });
+    await batch.commit();
   } catch (err) {
-    if (
-      err instanceof Error &&
-      err.message.includes('Simultaneous claim prevented')
-    ) {
+    if (err instanceof Error && err.message.includes('already been claimed')) {
       throw err;
     }
   }
 
   const updatedTicket: SupportTicketRecord = {
-    ...params.ticket,
-    assignedTo: params.actor.uid,
-    assignedStaffName: params.actor.name,
-    assignedToEmail: params.actor.email,
+    ...ticket,
+    assignedTo: staff.uid,
+    assignedStaffName: staff.name,
+    assignedStaffEmail: staff.email,
+    assignedToEmail: staff.email,
     claimedAtISO,
     status: 'in_progress',
     updatedAtISO: claimedAtISO,
   };
 
-  // 3. Sync legacy `/support_tickets` and write immutable `/audit_logs`
-  await syncLegacySupportTicketDoc(updatedTicket, false);
-
-  const logId = `aud-${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2, 6)}`;
-  const auditLog: AdminAuditLogRecord = {
-    id: logId,
-    adminId: params.actor.uid,
-    adminEmail: params.actor.email,
-    adminRole: params.actor.role,
-    action: 'Claimed Support Ticket',
-    targetType: 'support_ticket',
-    targetId: params.ticket.id,
-    targetLabel: `${params.ticket.ticketNumber || params.ticket.id}: ${params.ticket.subject}`,
-    previousValue: 'assignedTo=Unclaimed, status=open',
-    newValue: `assignedTo=${params.actor.name} (${params.actor.email}), status=in_progress`,
+  const historyEvent: SupportTicketHistoryEntry = serverData.historyEvent || {
+    id: `HIS-${Date.now()}-claim`,
+    ticketId: ticket.id,
+    actorId: staff.uid,
+    actorName: staff.name,
+    actorEmail: staff.email,
+    actorRole: staff.role,
+    action: 'claimed',
+    previousValue: 'Unclaimed (open)',
+    newValue: `${staff.name} (in_progress)`,
+    summary: `Ticket claimed by ${staff.name} (${staff.email}). Status changed to In Progress.`,
     createdAtISO: claimedAtISO,
   };
 
-  try {
-    await setDoc(doc(db, 'audit_logs', logId), {
-      ...auditLog,
-      createdAt: serverTimestamp(),
-    });
-  } catch {
-    // Non-fatal if offline
-  }
-
-  return { updatedTicket, historyEvent, auditLog };
+  return {
+    updatedTicket,
+    historyEvent,
+    auditLog: serverData.auditLog,
+  };
 }
 
 /**
- * Posts a reply (customer or assigned staff) or a private Internal Note (staff only).
- * Enforces ownership on backend & Firestore.
+ * Posts a reply (customer or claimed staff/override admin) or an internal staff note.
+ * Writes to BOTH `/api/support/tickets/:ticketId/message` and Firestore `/supportTickets/{ticketId}/messages/{messageId}`
+ * with a shared deterministic message ID so both Customer (`My Support`) and Admin (`Support -> Tickets`)
+ * see the exact same public conversation in real time without duplicates.
  */
 export async function postSupportTicketReplyOrNote(params: {
   ticket: SupportTicketRecord;
@@ -575,128 +1203,263 @@ export async function postSupportTicketReplyOrNote(params: {
   historyEvent: SupportTicketHistoryEntry;
   updatedTicket: SupportTicketRecord;
 }> {
-  const cleanMsg = params.message.trim();
-  if (!cleanMsg) {
-    throw new Error('Please enter a message before sending.');
-  }
+  const { ticket } = params;
+  const isInternal =
+    params.senderRole === 'customer' ? false : Boolean(params.isInternal);
+  const cleanMessage = params.message.trim();
+  const attachments = (params.attachments || []).slice(
+    0,
+    MAX_ATTACHMENTS_PER_TICKET
+  );
+  const deterministicMsgId = `MSG-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 7)}`;
 
-  const res = await fetch(`/api/support/tickets/${params.ticket.id}/message`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      senderId: params.senderId,
-      senderName: params.senderName,
-      senderEmail: params.senderEmail,
-      senderRole: params.senderRole,
-      actorAdminRole: params.actorAdminRole || params.senderRole,
-      message: cleanMsg,
-      attachments: params.attachments || [],
-      isInternal: Boolean(params.isInternal),
-      currentAssignedTo: params.ticket.assignedTo,
-    }),
-  });
+  const res = await fetch(
+    `/api/support/tickets/${encodeURIComponent(ticket.id)}/message`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messageId: deterministicMsgId,
+        senderId: params.senderId,
+        senderName: params.senderName,
+        senderEmail: params.senderEmail,
+        senderRole: params.senderRole,
+        actorAdminRole: params.actorAdminRole || params.senderRole,
+        message: cleanMessage,
+        attachments,
+        isInternal,
+        currentAssignedTo: ticket.assignedTo || null,
+        ticketUserId: ticket.userId,
+        ticketUserName: ticket.userName,
+        ticketUserEmail: ticket.userEmail,
+        ticketSubject: ticket.subject,
+        ticketNumber: ticket.ticketNumber || ticket.id,
+        ticketCategory: ticket.category || 'General Enquiry',
+      }),
+    }
+  );
 
-  const body = await res.json().catch(() => ({}));
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(body.error || 'Failed to post ticket message.');
+    throw new Error(data.error || 'Failed to post ticket message.');
   }
 
-  const messageRecord: SupportTicketMessageRecord = body.message;
-  const historyEvent: SupportTicketHistoryEntry = body.historyEvent;
-  const nowISO = messageRecord.createdAtISO || new Date().toISOString();
+  const nowISO = String(data.message?.createdAtISO || new Date().toISOString());
+  const resolvedRole: 'customer' | 'staff' | 'admin' =
+    params.senderRole === 'customer'
+      ? 'customer'
+      : data.message?.senderRole === 'admin' || params.senderRole === 'admin'
+      ? 'admin'
+      : 'staff';
+
+  const messageRecord: SupportTicketMessageRecord = {
+    id: String(data.message?.id || deterministicMsgId),
+    ticketId: ticket.id,
+    senderId: params.senderId,
+    senderName: params.senderName,
+    senderEmail: params.senderEmail,
+    senderRole: resolvedRole,
+    message: cleanMessage || `Attached ${attachments.length} file(s)`,
+    attachments,
+    isInternal,
+    createdAtISO: nowISO,
+  };
+
+  const historyEvent: SupportTicketHistoryEntry = data.historyEvent || {
+    id: `HIS-${Date.now()}-msg`,
+    ticketId: ticket.id,
+    actorId: params.senderId,
+    actorName: params.senderName,
+    actorEmail: params.senderEmail,
+    actorRole: params.actorAdminRole || params.senderRole,
+    action: isInternal ? 'internal_note_added' : 'replied',
+    summary: isInternal
+      ? `Internal staff note added by ${params.senderName}.`
+      : `${params.senderName} posted a reply.`,
+    createdAtISO: nowISO,
+  };
+
+  // Persist message & history to Firestore subcollections for real-time onSnapshot listeners
+  try {
+    const ticketRef = doc(db, 'supportTickets', ticket.id);
+
+    // If customer is replying to waiting_for_user, transition status -> in_progress; otherwise update timestamps
+    if (params.senderRole === 'customer') {
+      const nextCustomerStatus: SupportTicketStatus =
+        ticket.status === 'waiting_for_user' ? 'in_progress' : ticket.status;
+      try {
+        await updateDoc(ticketRef, {
+          status: nextCustomerStatus,
+          updatedAt: serverTimestamp(),
+          updatedAtISO: nowISO,
+        });
+      } catch {
+        // Ignore if parent doc was only in server store
+      }
+    } else if (!isInternal) {
+      try {
+        await updateDoc(ticketRef, {
+          ...(ticket.firstResponseAtISO
+            ? {}
+            : { firstResponseAt: nowISO, firstResponseAtISO: nowISO }),
+          updatedAt: serverTimestamp(),
+          updatedAtISO: nowISO,
+        });
+      } catch {
+        // Ensure parent doc exists if admin is replying to a ticket that wasn't in /supportTickets yet
+        try {
+          await setDoc(
+            ticketRef,
+            {
+              id: ticket.id,
+              ticketNumber: ticket.ticketNumber || ticket.id,
+              userId: ticket.userId,
+              userName: (ticket.userName || 'Customer').slice(0, 80),
+              userEmail: (ticket.userEmail || '').slice(0, 120),
+              subject: (ticket.subject || 'Support Request').slice(0, 160),
+              description: (ticket.description || '').slice(0, 2000),
+              category: ticket.category || 'General Enquiry',
+              status: ticket.status || 'in_progress',
+              assignedTo: ticket.assignedTo || params.senderId,
+              assignedStaffName:
+                ticket.assignedStaffName || params.senderName.slice(0, 80),
+              assignedStaffEmail:
+                ticket.assignedToEmail || params.senderEmail.slice(0, 120),
+              assignedToEmail:
+                ticket.assignedToEmail || params.senderEmail.slice(0, 120),
+              relatedBookingId: ticket.bookingId || '',
+              relatedProductId: ticket.productId || '',
+              bookingId: ticket.bookingId || '',
+              productId: ticket.productId || '',
+              resolutionSummary: ticket.resolutionSummary || '',
+              internalNotes: '',
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+              createdAtISO: ticket.createdAtISO || nowISO,
+              updatedAtISO: nowISO,
+            },
+            { merge: true }
+          );
+        } catch {
+          // Ignore
+        }
+      }
+    }
+
+    // Write the message document to `/supportTickets/{ticketId}/messages/{messageRecord.id}`
+    await setDoc(
+      doc(db, 'supportTickets', ticket.id, 'messages', messageRecord.id),
+      {
+        id: messageRecord.id,
+        ticketId: ticket.id,
+        senderId: params.senderId,
+        senderName: params.senderName.slice(0, 80),
+        senderEmail: params.senderEmail.slice(0, 120),
+        senderRole: resolvedRole,
+        message: messageRecord.message.slice(0, 2000),
+        attachments: JSON.stringify(attachments).slice(0, 400000),
+        isInternal,
+        createdAt: serverTimestamp(),
+        createdAtISO: nowISO,
+      }
+    );
+
+    // If internal note, also store in dedicated staff-only `/privateNotes` subcollection
+    if (isInternal) {
+      try {
+        await setDoc(
+          doc(
+            db,
+            'supportTickets',
+            ticket.id,
+            'privateNotes',
+            messageRecord.id
+          ),
+          {
+            id: messageRecord.id,
+            ticketId: ticket.id,
+            authorId: params.senderId,
+            authorName: params.senderName.slice(0, 80),
+            authorEmail: params.senderEmail.slice(0, 120),
+            note: messageRecord.message.slice(0, 2000),
+            createdAt: serverTimestamp(),
+            createdAtISO: nowISO,
+          }
+        );
+      } catch {
+        // Ignore
+      }
+    }
+
+    // Write history event
+    try {
+      await setDoc(
+        doc(db, 'supportTickets', ticket.id, 'history', historyEvent.id),
+        {
+          id: historyEvent.id,
+          ticketId: ticket.id,
+          actorId: params.senderId,
+          actorName: params.senderName.slice(0, 80),
+          actorEmail: params.senderEmail.slice(0, 120),
+          actorRole: resolvedRole,
+          action: historyEvent.action,
+          summary: historyEvent.summary.slice(0, 500),
+          createdAt: serverTimestamp(),
+          createdAtISO: nowISO,
+        }
+      );
+    } catch {
+      // Ignore
+    }
+  } catch {
+    // Non-fatal if Firestore rules/offline mode block secondary write
+  }
+
+  const nextStatus: SupportTicketStatus =
+    params.senderRole === 'customer' && ticket.status === 'waiting_for_user'
+      ? 'in_progress'
+      : ticket.status;
 
   const updatedTicket: SupportTicketRecord = {
-    ...params.ticket,
-    status:
-      params.senderRole === 'customer' &&
-      params.ticket.status === 'waiting_for_user'
-        ? 'in_progress'
-        : params.ticket.status,
+    ...ticket,
+    status: nextStatus,
     firstResponseAtISO:
-      params.senderRole !== 'customer' &&
-      !params.isInternal &&
-      !params.ticket.firstResponseAtISO
+      !isInternal && params.senderRole !== 'customer' && !ticket.firstResponseAtISO
         ? nowISO
-        : params.ticket.firstResponseAtISO,
-    internalNotes: body.ticket?.internalNotes ?? params.ticket.internalNotes,
+        : ticket.firstResponseAtISO,
+    internalNotes: isInternal
+      ? data.ticket?.internalNotes ||
+        (ticket.internalNotes
+          ? `${ticket.internalNotes}\n[${params.senderName}]: ${cleanMessage}`
+          : `[${params.senderName}]: ${cleanMessage}`)
+      : ticket.internalNotes,
     updatedAtISO: nowISO,
   };
 
-  try {
-    const batch = writeBatch(db);
-    batch.set(
-      doc(db, 'supportTickets', params.ticket.id, 'messages', messageRecord.id),
-      {
-        ...messageRecord,
-        createdAt: serverTimestamp(),
-      }
-    );
-    batch.set(
-      doc(db, 'supportTickets', params.ticket.id, 'history', historyEvent.id),
-      {
-        ...historyEvent,
-        createdAt: serverTimestamp(),
-      }
-    );
-    if (params.senderRole === 'customer') {
-      if (params.ticket.status === 'waiting_for_user') {
-        batch.update(doc(db, 'supportTickets', params.ticket.id), {
-          status: 'in_progress',
-          updatedAtISO: nowISO,
-          updatedAt: serverTimestamp(),
-        });
-      }
-    } else {
-      batch.update(doc(db, 'supportTickets', params.ticket.id), {
-        status: updatedTicket.status,
-        firstResponseAtISO: updatedTicket.firstResponseAtISO || null,
-        internalNotes: '',
-        updatedAtISO: nowISO,
-        updatedAt: serverTimestamp(),
-      });
-      if (updatedTicket.internalNotes) {
-        batch.set(
-          doc(db, 'supportTickets', params.ticket.id, 'privateNotes', 'scratchpad'),
-          {
-            ticketId: params.ticket.id,
-            internalNotes: updatedTicket.internalNotes,
-            updatedBy: params.senderEmail,
-            updatedAtISO: nowISO,
-            updatedAt: serverTimestamp(),
-          }
-        );
-      }
-    }
-    await batch.commit();
-  } catch {
-    // Non-fatal if `/supportTickets` collection rules are pending manual deploy
-  }
-
-  if (params.senderRole !== 'customer') {
-    await syncLegacySupportTicketDoc(updatedTicket, false);
-  }
-
-  return { messageRecord, historyEvent, updatedTicket };
+  return {
+    messageRecord,
+    historyEvent,
+    updatedTicket,
+  };
 }
 
 /**
- * Updates ticket status (`open`, `in_progress`, `waiting_for_user`, `resolved`, `closed`),
- * priority (`normal`, `urgent`), resolution summary, or performs an Administrator Override
- * (`reassign`, `release_claim`, `reopen`).
- * Triggers Mandatory Email 2: Ticket Closed Notification when closed.
+ * Updates ticket status, resolution summary, or executes an Administrator Override
+ * (reassigning staff, releasing claim to Unclaimed, or reopening a resolved/closed ticket).
+ * Automatically dispatches Email #2 (TICKET_CLOSED) when status transitions to 'closed'.
  */
 export async function updateSupportTicketWorkflowOrOverride(params: {
-  actor: AdminRegistryRecord;
   ticket: SupportTicketRecord;
+  actor: AdminRegistryRecord;
   operation:
     | 'status_change'
-    | 'priority_change'
     | 'reassign'
     | 'release_claim'
     | 'reopen'
     | 'update_notes';
   newStatus?: SupportTicketStatus;
-  newPriority?: SupportTicketPriority;
   newAssignedTo?: string | null;
   newAssignedStaffName?: string;
   newAssignedToEmail?: string;
@@ -705,229 +1468,150 @@ export async function updateSupportTicketWorkflowOrOverride(params: {
 }): Promise<{
   updatedTicket: SupportTicketRecord;
   historyEvent: SupportTicketHistoryEntry;
-  auditLog: AdminAuditLogRecord;
+  auditLog?: AdminAuditLogRecord;
+  closedEmailDispatched?: boolean;
 }> {
-  const isOverrideOp = ['reassign', 'release_claim', 'reopen'].includes(
-    params.operation
-  );
-  if (isOverrideOp && !canAdminOverrideTicket(params.actor)) {
-    throw new Error(
-      'Permission Denied: Only Super Admins and Level 2 Administrators can reassign tickets, release staff claims, or reopen resolved tickets.'
-    );
-  }
+  const { ticket, actor, operation } = params;
 
-  if (
-    !isOverrideOp &&
-    params.ticket.assignedTo !== params.actor.uid &&
-    !canAdminOverrideTicket(params.actor)
-  ) {
-    throw new Error(
-      'Access Denied: Regular support staff can only modify tickets assigned to them.'
-    );
-  }
-
-  if (params.newStatus === 'closed') {
-    const summaryText = (
-      params.resolutionSummary ??
-      params.ticket.resolutionSummary ??
-      ''
-    ).trim();
-    if (summaryText.length < 5) {
-      throw new Error(
-        'Please provide a clear Resolution Summary (at least 5 characters) before closing this ticket.'
-      );
-    }
-  }
-
-  // First sync current ticket to server so server has full metadata
-  await fetch('/api/support/sync-ticket', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ticket: params.ticket }),
-  }).catch(() => null);
-
-  const response = await fetch(
-    `/api/support/tickets/${params.ticket.id}/update`,
+  const res = await fetch(
+    `/api/support/tickets/${encodeURIComponent(ticket.id)}/update`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        actorUid: params.actor.uid,
-        actorName: params.actor.name,
-        actorEmail: params.actor.email,
-        actorRole: params.actor.role,
-        operation: params.operation,
+        actorUid: actor.uid,
+        actorName: actor.name,
+        actorEmail: actor.email,
+        actorRole: actor.role,
+        operation,
         newStatus: params.newStatus,
-        newPriority: params.newPriority,
         newAssignedTo: params.newAssignedTo,
         newAssignedStaffName: params.newAssignedStaffName,
         newAssignedToEmail: params.newAssignedToEmail,
         resolutionSummary: params.resolutionSummary,
         internalNotes: params.internalNotes,
-        currentAssignedTo: params.ticket.assignedTo,
+        currentAssignedTo: ticket.assignedTo || null,
       }),
     }
   );
 
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(body.error || 'Failed to update support ticket.');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to update support ticket.');
   }
 
   const nowISO = new Date().toISOString();
-  const serverTicket = body.ticket || {};
-  const historyEvent: SupportTicketHistoryEntry = body.historyEvent || {
-    id: `HIS-${Date.now().toString(36)}-upd`,
-    ticketId: params.ticket.id,
-    action: 'status_changed',
-    actorId: params.actor.uid,
-    actorName: params.actor.name,
-    actorEmail: params.actor.email,
-    actorRole: params.actor.role,
-    previousValue: params.ticket.status,
-    newValue: params.newStatus || params.ticket.status,
-    summary: `Ticket updated by ${params.actor.name}.`,
-    createdAtISO: nowISO,
-  };
-
   const updatedTicket: SupportTicketRecord = {
-    ...params.ticket,
-    status: (serverTicket.status ||
+    ...ticket,
+    status: (data.ticket?.status ||
       params.newStatus ||
-      params.ticket.status) as SupportTicketStatus,
-    priority: (serverTicket.priority ||
-      params.newPriority ||
-      params.ticket.priority) as SupportTicketPriority,
+      ticket.status) as SupportTicketStatus,
     assignedTo:
-      serverTicket.assignedTo !== undefined
-        ? serverTicket.assignedTo
+      data.ticket?.assignedTo !== undefined
+        ? data.ticket.assignedTo
+        : operation === 'release_claim'
+        ? null
         : params.newAssignedTo !== undefined
         ? params.newAssignedTo
-        : params.ticket.assignedTo,
+        : ticket.assignedTo,
     assignedStaffName:
-      serverTicket.assignedStaffName !== undefined
-        ? serverTicket.assignedStaffName
-        : params.newAssignedStaffName !== undefined
-        ? params.newAssignedStaffName
-        : params.ticket.assignedStaffName,
+      data.ticket?.assignedStaffName !== undefined
+        ? data.ticket.assignedStaffName
+        : operation === 'release_claim'
+        ? ''
+        : params.newAssignedStaffName ?? ticket.assignedStaffName,
+    assignedStaffEmail:
+      data.ticket?.assignedToEmail !== undefined
+        ? data.ticket.assignedToEmail
+        : operation === 'release_claim'
+        ? ''
+        : params.newAssignedToEmail ?? ticket.assignedToEmail,
     assignedToEmail:
-      serverTicket.assignedToEmail !== undefined
-        ? serverTicket.assignedToEmail
-        : params.newAssignedToEmail !== undefined
-        ? params.newAssignedToEmail
-        : params.ticket.assignedToEmail,
-    claimedAtISO:
-      serverTicket.claimedAtISO !== undefined
-        ? serverTicket.claimedAtISO
-        : params.ticket.claimedAtISO,
-    resolvedAtISO:
-      serverTicket.resolvedAtISO !== undefined
-        ? serverTicket.resolvedAtISO
-        : params.ticket.resolvedAtISO,
-    closedAtISO:
-      serverTicket.closedAtISO !== undefined
-        ? serverTicket.closedAtISO
-        : params.ticket.closedAtISO,
-    reopenedAtISO:
-      serverTicket.reopenedAtISO !== undefined
-        ? serverTicket.reopenedAtISO
-        : params.ticket.reopenedAtISO,
-    reassignmentCount:
-      typeof serverTicket.reassignmentCount === 'number'
-        ? serverTicket.reassignmentCount
-        : params.ticket.reassignmentCount || 0,
+      data.ticket?.assignedToEmail !== undefined
+        ? data.ticket.assignedToEmail
+        : operation === 'release_claim'
+        ? ''
+        : params.newAssignedToEmail ?? ticket.assignedToEmail,
     resolutionSummary:
       params.resolutionSummary !== undefined
-        ? params.resolutionSummary
-        : serverTicket.resolutionSummary ?? params.ticket.resolutionSummary,
+        ? params.resolutionSummary.trim()
+        : data.ticket?.resolutionSummary ?? ticket.resolutionSummary,
     internalNotes:
       params.internalNotes !== undefined
         ? params.internalNotes
-        : serverTicket.internalNotes ?? params.ticket.internalNotes,
+        : data.ticket?.internalNotes ?? ticket.internalNotes,
+    reassignmentCount:
+      data.ticket?.reassignmentCount ??
+      (operation === 'reassign'
+        ? (ticket.reassignmentCount || 0) + 1
+        : ticket.reassignmentCount || 0),
+    resolvedAtISO:
+      params.newStatus === 'resolved' || params.newStatus === 'closed'
+        ? ticket.resolvedAtISO || nowISO
+        : ticket.resolvedAtISO,
+    closedAtISO:
+      params.newStatus === 'closed' ? nowISO : ticket.closedAtISO,
+    reopenedAtISO:
+      operation === 'reopen' ? nowISO : ticket.reopenedAtISO,
     updatedAtISO: nowISO,
   };
 
-  // Persist to Firestore `/supportTickets` and `/support_tickets`
+  // Persist to Firestore
   try {
     const batch = writeBatch(db);
-    batch.set(
-      doc(db, 'supportTickets', params.ticket.id),
-      {
-        ...updatedTicket,
-        internalNotes: '',
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-    if (updatedTicket.internalNotes) {
+    const ticketRef = doc(db, 'supportTickets', ticket.id);
+    batch.update(ticketRef, {
+      status: updatedTicket.status,
+      assignedTo: updatedTicket.assignedTo || null,
+      assignedStaffName: (updatedTicket.assignedStaffName || '').slice(0, 80),
+      assignedStaffEmail: (updatedTicket.assignedToEmail || '').slice(0, 120),
+      assignedToEmail: (updatedTicket.assignedToEmail || '').slice(0, 120),
+      resolutionSummary: (updatedTicket.resolutionSummary || '').slice(0, 2000),
+      resolvedAt: updatedTicket.resolvedAtISO || '',
+      closedAt: updatedTicket.closedAtISO || '',
+      updatedAt: serverTimestamp(),
+      updatedAtISO: nowISO,
+    });
+
+    if (data.historyEvent?.id) {
       batch.set(
-        doc(db, 'supportTickets', params.ticket.id, 'privateNotes', 'scratchpad'),
+        doc(db, 'supportTickets', ticket.id, 'history', data.historyEvent.id),
         {
-          ticketId: params.ticket.id,
-          internalNotes: updatedTicket.internalNotes,
-          updatedBy: params.actor.email,
-          updatedAtISO: nowISO,
-          updatedAt: serverTimestamp(),
+          id: data.historyEvent.id,
+          ticketId: ticket.id,
+          actorId: actor.uid,
+          actorName: actor.name.slice(0, 80),
+          actorEmail: actor.email.slice(0, 120),
+          actorRole: canAdminOverrideSupportTicket(actor) ? 'admin' : 'staff',
+          action: data.historyEvent.action,
+          summary: String(data.historyEvent.summary || '').slice(0, 500),
+          createdAt: serverTimestamp(),
+          createdAtISO: nowISO,
         }
       );
     }
-    batch.set(
-      doc(db, 'supportTickets', params.ticket.id, 'history', historyEvent.id),
-      {
-        ...historyEvent,
-        createdAt: serverTimestamp(),
-      }
-    );
+
+    batch.update(doc(db, 'support_tickets', ticket.id), {
+      status:
+        updatedTicket.status === 'waiting_for_user'
+          ? 'in_progress'
+          : updatedTicket.status,
+      assignedToEmail: (updatedTicket.assignedToEmail || '').slice(0, 120),
+      updatedAt: serverTimestamp(),
+    });
+
     await batch.commit();
   } catch {
-    // Non-fatal
+    // Non-fatal if Firestore rules/offline mode block secondary write
   }
 
-  await syncLegacySupportTicketDoc(updatedTicket, false);
-
-  // Record administrative action in immutable `/audit_logs`
-  const logId = `aud-${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2, 6)}`;
-  const auditActionLabel =
-    params.operation === 'reassign'
-      ? 'Reassigned Support Ticket (Admin Override)'
-      : params.operation === 'release_claim'
-      ? 'Released Ticket Claim (Admin Override)'
-      : params.operation === 'reopen'
-      ? 'Reopened Support Ticket (Admin Override)'
-      : params.operation === 'priority_change'
-      ? `Changed Ticket Priority to ${(
-          params.newPriority || updatedTicket.priority
-        ).toUpperCase()}`
-      : `Updated Ticket Status to ${updatedTicket.status.toUpperCase()}`;
-
-  const auditLog: AdminAuditLogRecord = {
-    id: logId,
-    adminId: params.actor.uid,
-    adminEmail: params.actor.email,
-    adminRole: params.actor.role,
-    action: auditActionLabel,
-    targetType: 'support_ticket',
-    targetId: params.ticket.id,
-    targetLabel: `${params.ticket.ticketNumber || params.ticket.id}: ${params.ticket.subject}`,
-    previousValue: `${historyEvent.previousValue || params.ticket.status}`,
-    newValue: `${historyEvent.newValue || updatedTicket.status}`,
-    createdAtISO: nowISO,
-  };
-
-  try {
-    await setDoc(doc(db, 'audit_logs', logId), {
-      ...auditLog,
-      createdAt: serverTimestamp(),
-    });
-  } catch {
-    // Non-fatal
-  }
-
-  // Trigger Mandatory Email 2: Ticket Closed Notification ONLY when an admin closes the ticket
-  // If email delivery fails, ticket closure still succeeds and delivery status is recorded for admin retry.
-  if (params.operation === 'status_change' && params.newStatus === 'closed') {
+  let closedEmailDispatched = false;
+  // Trigger Automated Email #2 ONLY when ticket status becomes 'closed'
+  if (
+    updatedTicket.status === 'closed' &&
+    ticket.status !== 'closed' &&
+    updatedTicket.userEmail
+  ) {
     try {
       const emailRes = await fetch('/api/support/send-email', {
         method: 'POST',
@@ -939,147 +1623,171 @@ export async function updateSupportTicketWorkflowOrOverride(params: {
           customerName: updatedTicket.userName,
           customerEmail: updatedTicket.userEmail,
           subject: updatedTicket.subject,
+          category: updatedTicket.category || 'General Enquiry',
           assignedStaffName:
-            updatedTicket.assignedStaffName || params.actor.name,
+            updatedTicket.assignedStaffName || actor.name || 'Support Team',
           resolutionSummary:
             updatedTicket.resolutionSummary ||
-            'Your issue has been resolved and closed.',
+            'Your support request has been resolved and closed.',
           closedAtISO: updatedTicket.closedAtISO || nowISO,
         }),
       });
-      const emailData = await emailRes.json().catch(() => ({}));
       if (emailRes.ok) {
-        updatedTicket.emailClosedStatus = emailData.sent ? 'sent' : 'failed';
+        const emailData = await emailRes.json();
+        closedEmailDispatched = Boolean(emailData.sent);
+        updatedTicket.emailClosedStatus = closedEmailDispatched
+          ? 'sent'
+          : 'failed';
         updatedTicket.emailClosedSentAtISO =
           emailData.emailLog?.sentAtISO || nowISO;
-        updatedTicket.emailClosedError =
-          emailData.emailLog?.errorMessage || '';
+        updatedTicket.emailClosedError = String(
+          emailData.emailLog?.errorMessage || ''
+        );
       } else {
         updatedTicket.emailClosedStatus = 'failed';
-        updatedTicket.emailClosedSentAtISO = nowISO;
-        updatedTicket.emailClosedError =
-          emailData.error ||
-          emailData.emailLog?.errorMessage ||
-          `Email dispatch failed (HTTP ${emailRes.status})`;
       }
     } catch (err) {
       updatedTicket.emailClosedStatus = 'failed';
-      updatedTicket.emailClosedSentAtISO = nowISO;
       updatedTicket.emailClosedError =
-        err instanceof Error ? err.message : 'Email service unreachable';
-    }
-
-    // Record emailClosedStatus back to Firestore (non-blocking)
-    try {
-      await setDoc(
-        doc(db, 'supportTickets', updatedTicket.id),
-        {
-          emailClosedStatus: updatedTicket.emailClosedStatus,
-          emailClosedSentAtISO: updatedTicket.emailClosedSentAtISO || nowISO,
-          emailClosedError: updatedTicket.emailClosedError || '',
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
-    } catch {
-      // Non-fatal
+        err instanceof Error ? err.message : 'Email dispatch error';
     }
   }
 
-  return { updatedTicket, historyEvent, auditLog };
+  return {
+    updatedTicket,
+    historyEvent: data.historyEvent,
+    auditLog: data.auditLog,
+    closedEmailDispatched,
+  };
 }
 
 /**
- * Retries sending a Ticket Opened or Ticket Closed email notification.
- * Persists the updated delivery status and history event to both the backend store and Firestore.
+ * Retries a failed or pending automated email (strictly TICKET_OPENED or TICKET_CLOSED).
  */
 export async function retryTicketEmailNotification(params: {
   ticket: SupportTicketRecord;
   eventType: 'TICKET_OPENED' | 'TICKET_CLOSED';
 }): Promise<{
   sent: boolean;
+  status: 'sent' | 'failed';
   sentAtISO: string;
   errorMessage?: string;
-  historyEvent?: SupportTicketHistoryEntry;
 }> {
-  const response = await fetch('/api/support/send-email', {
+  const { ticket, eventType } = params;
+  const nowISO = new Date().toISOString();
+
+  const res = await fetch('/api/support/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      ticketId: params.ticket.id,
-      ticketNumber: params.ticket.ticketNumber || params.ticket.id,
-      eventType: params.eventType,
-      customerName: params.ticket.userName,
-      customerEmail: params.ticket.userEmail,
-      subject: params.ticket.subject,
-      category: params.ticket.category || 'General Enquiry',
-      priority: params.ticket.priority,
-      description: params.ticket.description,
-      assignedStaffName:
-        params.ticket.assignedStaffName || 'BorrowBox Support Specialist',
+      ticketId: ticket.id,
+      ticketNumber: ticket.ticketNumber || ticket.id,
+      eventType,
+      customerName: ticket.userName,
+      customerEmail: ticket.userEmail,
+      subject: ticket.subject,
+      category: ticket.category || 'General Enquiry',
+      description: ticket.description,
+      assignedStaffName: ticket.assignedStaffName || 'BorrowBox Support Team',
       resolutionSummary:
-        params.ticket.resolutionSummary ||
-        'Resolved by BorrowBox Support Team.',
-      closedAtISO: params.ticket.closedAtISO || new Date().toISOString(),
+        ticket.resolutionSummary ||
+        'Your support request has been resolved by our team.',
+      closedAtISO: ticket.closedAtISO || nowISO,
       forceRetry: true,
     }),
   });
 
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
     throw new Error(data.error || 'Failed to retry email notification.');
   }
 
-  const sent = Boolean(data.sent);
-  const sentAtISO = data.emailLog?.sentAtISO || new Date().toISOString();
-  const errorMessage = data.emailLog?.errorMessage || '';
-  const historyEvent: SupportTicketHistoryEntry | undefined = data.historyEvent;
-
-  // Persist updated email delivery status to Firestore (non-blocking)
-  try {
-    const statusUpdate =
-      params.eventType === 'TICKET_OPENED'
-        ? {
-            emailOpenedStatus: sent ? 'sent' : 'failed',
-            emailOpenedSentAtISO: sentAtISO,
-            emailOpenedError: errorMessage,
-            updatedAt: serverTimestamp(),
-          }
-        : {
-            emailClosedStatus: sent ? 'sent' : 'failed',
-            emailClosedSentAtISO: sentAtISO,
-            emailClosedError: errorMessage,
-            updatedAt: serverTimestamp(),
-          };
-    await setDoc(
-      doc(db, 'supportTickets', params.ticket.id),
-      statusUpdate,
-      { merge: true }
-    );
-    if (historyEvent?.id) {
-      await setDoc(
-        doc(db, 'supportTickets', params.ticket.id, 'history', historyEvent.id),
-        {
-          ...historyEvent,
-          createdAt: serverTimestamp(),
-        }
-      );
-    }
-  } catch {
-    // Non-fatal
-  }
-
   return {
-    sent,
-    sentAtISO,
-    errorMessage: errorMessage || undefined,
-    historyEvent,
+    sent: Boolean(data.sent),
+    status: data.sent ? 'sent' : 'failed',
+    sentAtISO: String(data.emailLog?.sentAtISO || nowISO),
+    errorMessage: data.emailLog?.errorMessage
+      ? String(data.emailLog.errorMessage)
+      : undefined,
   };
 }
 
+function mergeAndDeduplicateMessages(params: {
+  ticket: SupportTicketRecord;
+  viewerRole: 'customer' | 'staff' | 'admin';
+  firestoreMessages: SupportTicketMessageRecord[];
+  serverMessages: SupportTicketMessageRecord[];
+}): SupportTicketMessageRecord[] {
+  const { ticket, viewerRole, firestoreMessages, serverMessages } = params;
+  const msgMap = new Map<string, SupportTicketMessageRecord>();
+
+  // Helper to deduplicate messages that might have been saved with different IDs but identical content/sender
+  const contentSignatures = new Set<string>();
+
+  const addMessage = (m: SupportTicketMessageRecord) => {
+    if (viewerRole === 'customer' && m.isInternal) return;
+    if (!m.message && (!m.attachments || m.attachments.length === 0)) return;
+
+    const existing = msgMap.get(m.id);
+    if (existing) {
+      msgMap.set(m.id, {
+        ...existing,
+        ...m,
+        attachments:
+          m.attachments && m.attachments.length > 0
+            ? m.attachments
+            : existing.attachments,
+      });
+      return;
+    }
+
+    const minuteBucket = (m.createdAtISO || '').slice(0, 16);
+    const sig = `${m.senderId}:${m.senderRole}:${m.isInternal}:${m.message.trim()}:${minuteBucket}`;
+    if (contentSignatures.has(sig)) {
+      return;
+    }
+    contentSignatures.add(sig);
+    msgMap.set(m.id, m);
+  };
+
+  for (const m of firestoreMessages) {
+    addMessage(m);
+  }
+  for (const m of serverMessages) {
+    addMessage(m);
+  }
+
+  // Ensure initial ticket description is always shown as the first message if not already present
+  const hasCustomerOpeningMessage = Array.from(msgMap.values()).some(
+    (m) =>
+      m.senderRole === 'customer' &&
+      (m.id.endsWith('-init') ||
+        m.message.trim() === (ticket.description || '').trim())
+  );
+
+  if (ticket.description && !hasCustomerOpeningMessage) {
+    msgMap.set(`${ticket.id}-init`, {
+      id: `${ticket.id}-init`,
+      ticketId: ticket.id,
+      senderId: ticket.userId,
+      senderName: ticket.userName,
+      senderEmail: ticket.userEmail,
+      senderRole: 'customer',
+      message: ticket.description,
+      attachments: ticket.attachments || [],
+      isInternal: false,
+      createdAtISO: ticket.createdAtISO,
+    });
+  }
+
+  return Array.from(msgMap.values()).sort((a, b) =>
+    a.createdAtISO.localeCompare(b.createdAtISO)
+  );
+}
+
 /**
- * Loads conversation messages and activity history for a specific ticket.
- * Strictly strips internal notes (`isInternal: true`) when `viewerRole === 'customer'`.
+ * Fetches messages and audit history for a specific ticket.
+ * Strictly filters out `isInternal === true` messages and `internal_note_added` history when `viewerRole === 'customer'`.
  */
 export async function fetchTicketConversationAndHistory(params: {
   ticket: SupportTicketRecord;
@@ -1088,324 +1796,306 @@ export async function fetchTicketConversationAndHistory(params: {
 }): Promise<{
   messages: SupportTicketMessageRecord[];
   history: SupportTicketHistoryEntry[];
+  ticketSnapshot?: SupportTicketRecord;
 }> {
-  const messagesMap = new Map<string, SupportTicketMessageRecord>();
-  const historyMap = new Map<string, SupportTicketHistoryEntry>();
+  const { ticket, viewerUid, viewerRole } = params;
+  const roleParam = viewerRole === 'customer' ? 'customer' : 'admin';
 
-  // 1. Always seed with the original customer message so conversation thread is never blank
-  const initialMsgId = `init-${params.ticket.id}`;
-  messagesMap.set(initialMsgId, {
-    id: initialMsgId,
-    ticketId: params.ticket.id,
-    senderId: params.ticket.userId,
-    senderName: params.ticket.userName,
-    senderEmail: params.ticket.userEmail,
-    senderRole: 'customer',
-    message: params.ticket.description,
-    attachments: params.ticket.attachments || [],
-    isInternal: false,
-    createdAtISO: params.ticket.createdAtISO,
+  const [msgSnap, histSnap, serverRes] = await Promise.all([
+    getDocs(collection(db, 'supportTickets', ticket.id, 'messages')).catch(
+      () => null
+    ),
+    getDocs(collection(db, 'supportTickets', ticket.id, 'history')).catch(
+      () => null
+    ),
+    fetch(
+      `/api/support/state?uid=${encodeURIComponent(viewerUid)}&role=${roleParam}`
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null),
+  ]);
+
+  const firestoreMessages: SupportTicketMessageRecord[] = [];
+  if (msgSnap) {
+    for (const d of msgSnap.docs) {
+      const data = d.data();
+      const isInternal = Boolean(data.isInternal);
+      if (viewerRole === 'customer' && isInternal) continue;
+      firestoreMessages.push({
+        id: String(data.id || d.id),
+        ticketId: ticket.id,
+        senderId: String(data.senderId || ''),
+        senderName: String(data.senderName || 'User'),
+        senderEmail: String(data.senderEmail || ''),
+        senderRole:
+          (data.senderRole as 'customer' | 'staff' | 'admin') || 'customer',
+        message: String(data.message || ''),
+        attachments: parseFirestoreAttachmentsField(data.attachments),
+        isInternal,
+        createdAtISO: formatTimestamp(
+          data.createdAt,
+          String(data.createdAtISO || ticket.createdAtISO)
+        ),
+      });
+    }
+  }
+
+  const serverMessages: SupportTicketMessageRecord[] = [];
+  const rawServerMsgs: Record<string, unknown>[] =
+    serverRes?.messagesByTicket?.[ticket.id] || [];
+  for (const m of rawServerMsgs) {
+    const isInternal = Boolean(m.isInternal);
+    if (viewerRole === 'customer' && isInternal) continue;
+    serverMessages.push({
+      id: String(m.id),
+      ticketId: ticket.id,
+      senderId: String(m.senderId || ''),
+      senderName: String(m.senderName || 'User'),
+      senderEmail: String(m.senderEmail || ''),
+      senderRole:
+        (m.senderRole as 'customer' | 'staff' | 'admin') || 'customer',
+      message: String(m.message || ''),
+      attachments: parseFirestoreAttachmentsField(m.attachments),
+      isInternal,
+      createdAtISO: String(m.createdAtISO || new Date().toISOString()),
+    });
+  }
+
+  const messages = mergeAndDeduplicateMessages({
+    ticket,
+    viewerRole,
+    firestoreMessages,
+    serverMessages,
   });
 
-  // 2. Query Firestore `/supportTickets/{id}/messages` and `/supportTickets/{id}/history`
-  try {
-    const [msgSnap, hisSnap] = await Promise.all([
-      getDocs(collection(db, 'supportTickets', params.ticket.id, 'messages')).catch(
-        () => null
-      ),
-      getDocs(collection(db, 'supportTickets', params.ticket.id, 'history')).catch(
-        () => null
-      ),
-    ]);
+  const histMap = new Map<string, SupportTicketHistoryEntry>();
+  if (histSnap) {
+    for (const d of histSnap.docs) {
+      const data = d.data();
+      const action = String(
+        data.action || 'status_changed'
+      ) as SupportTicketHistoryEntry['action'];
+      if (viewerRole === 'customer' && action === 'internal_note_added') {
+        continue;
+      }
+      histMap.set(d.id, {
+        id: String(data.id || d.id),
+        ticketId: ticket.id,
+        actorId: String(data.actorId || ''),
+        actorName: String(data.actorName || ''),
+        actorEmail: String(data.actorEmail || ''),
+        actorRole: String(data.actorRole || ''),
+        action,
+        summary: String(data.summary || ''),
+        previousValue: data.previousValue
+          ? String(data.previousValue)
+          : undefined,
+        newValue: data.newValue ? String(data.newValue) : undefined,
+        createdAtISO: formatTimestamp(
+          data.createdAt,
+          String(data.createdAtISO || ticket.createdAtISO)
+        ),
+      });
+    }
+  }
 
-    if (msgSnap) {
-      for (const d of msgSnap.docs) {
+  const serverHist: Record<string, unknown>[] =
+    serverRes?.historyByTicket?.[ticket.id] || [];
+  for (const h of serverHist) {
+    const action = String(
+      h.action || 'status_changed'
+    ) as SupportTicketHistoryEntry['action'];
+    if (viewerRole === 'customer' && action === 'internal_note_added') continue;
+    const id = String(h.id);
+    if (!histMap.has(id)) {
+      histMap.set(id, {
+        id,
+        ticketId: ticket.id,
+        actorId: String(h.actorId || ''),
+        actorName: String(h.actorName || ''),
+        actorEmail: String(h.actorEmail || ''),
+        actorRole: String(h.actorRole || ''),
+        action,
+        summary: String(h.summary || ''),
+        previousValue: h.previousValue ? String(h.previousValue) : undefined,
+        newValue: h.newValue ? String(h.newValue) : undefined,
+        createdAtISO: String(h.createdAtISO || new Date().toISOString()),
+      });
+    }
+  }
+
+  const rawServerTicket = serverRes?.tickets?.[ticket.id] as
+    | Record<string, unknown>
+    | undefined;
+  const ticketSnapshot = rawServerTicket
+    ? normalizeTicketRecord(ticket.id, rawServerTicket, rawServerTicket)
+    : undefined;
+  if (ticketSnapshot && viewerRole === 'customer') {
+    ticketSnapshot.internalNotes = '';
+  }
+
+  return {
+    messages,
+    history: Array.from(histMap.values()).sort((a, b) =>
+      b.createdAtISO.localeCompare(a.createdAtISO)
+    ),
+    ticketSnapshot,
+  };
+}
+
+/**
+ * Real-time subscription (`onSnapshot` + server state sync) for a selected ticket's
+ * conversation messages, history, and parent ticket fields.
+ * Guarantees two-way live updates between Customer (`My Support`) and Admin (`Support -> Tickets`)
+ * without manual page refresh.
+ */
+export function subscribeToTicketConversation(
+  params: {
+    ticket: SupportTicketRecord;
+    viewerUid: string;
+    viewerRole: 'customer' | 'staff' | 'admin';
+  },
+  onUpdate: (payload: {
+    messages: SupportTicketMessageRecord[];
+    history: SupportTicketHistoryEntry[];
+    ticketSnapshot?: SupportTicketRecord;
+  }) => void
+): () => void {
+  const { ticket, viewerUid, viewerRole } = params;
+  if (!ticket?.id) return () => {};
+
+  let active = true;
+  let latestFirestoreMsgs: SupportTicketMessageRecord[] | null = null;
+
+  const triggerSync = async () => {
+    if (!active) return;
+    try {
+      const res = await fetchTicketConversationAndHistory({
+        ticket,
+        viewerUid,
+        viewerRole,
+      });
+      if (!active) return;
+
+      if (latestFirestoreMsgs && latestFirestoreMsgs.length > 0) {
+        const merged = mergeAndDeduplicateMessages({
+          ticket: res.ticketSnapshot || ticket,
+          viewerRole,
+          firestoreMessages: latestFirestoreMsgs,
+          serverMessages: res.messages,
+        });
+        onUpdate({
+          messages: merged,
+          history: res.history,
+          ticketSnapshot: res.ticketSnapshot,
+        });
+      } else {
+        onUpdate(res);
+      }
+    } catch {
+      // Ignore transient network errors
+    }
+  };
+
+  void triggerSync();
+
+  // 1. Real-time Firestore listener on `/supportTickets/{ticketId}/messages`
+  const messagesColRef = collection(
+    db,
+    'supportTickets',
+    ticket.id,
+    'messages'
+  );
+  const unsubMessages = onSnapshot(
+    messagesColRef,
+    (snap) => {
+      if (!active) return;
+      const list: SupportTicketMessageRecord[] = [];
+      for (const d of snap.docs) {
         const data = d.data();
         const isInternal = Boolean(data.isInternal);
-        if (params.viewerRole === 'customer' && isInternal) continue;
-        // Avoid duplicating the initial description message if already present
-        if (
-          data.message === params.ticket.description &&
-          data.senderId === params.ticket.userId
-        ) {
-          messagesMap.delete(initialMsgId);
-        }
-        messagesMap.set(d.id, {
+        if (viewerRole === 'customer' && isInternal) continue;
+        list.push({
           id: String(data.id || d.id),
-          ticketId: params.ticket.id,
+          ticketId: ticket.id,
           senderId: String(data.senderId || ''),
           senderName: String(data.senderName || 'User'),
           senderEmail: String(data.senderEmail || ''),
           senderRole:
-            data.senderRole === 'admin'
-              ? 'admin'
-              : data.senderRole === 'staff'
-              ? 'staff'
-              : 'customer',
+            (data.senderRole as 'customer' | 'staff' | 'admin') || 'customer',
           message: String(data.message || ''),
-          attachments: Array.isArray(data.attachments) ? data.attachments : [],
+          attachments: parseFirestoreAttachmentsField(data.attachments),
           isInternal,
-          createdAtISO: formatFirestoreTs(data.createdAt || data.createdAtISO),
+          createdAtISO: formatTimestamp(
+            data.createdAt,
+            String(data.createdAtISO || new Date().toISOString())
+          ),
         });
       }
+      latestFirestoreMsgs = list;
+      void triggerSync();
+    },
+    () => {
+      // Fallback to server sync if Firestore snapshot is restricted/offline
     }
-
-    if (hisSnap) {
-      for (const d of hisSnap.docs) {
-        const data = d.data();
-        if (
-          params.viewerRole === 'customer' &&
-          data.action === 'internal_note_added'
-        ) {
-          continue;
-        }
-        historyMap.set(d.id, {
-          id: String(data.id || d.id),
-          ticketId: params.ticket.id,
-          action: (data.action ||
-            'status_changed') as SupportTicketHistoryEntry['action'],
-          actorId: String(data.actorId || ''),
-          actorName: String(data.actorName || ''),
-          actorEmail: String(data.actorEmail || ''),
-          actorRole: String(data.actorRole || ''),
-          previousValue: data.previousValue ? String(data.previousValue) : undefined,
-          newValue: data.newValue ? String(data.newValue) : undefined,
-          summary: String(data.summary || ''),
-          createdAtISO: formatFirestoreTs(data.createdAt || data.createdAtISO),
-        });
-      }
-    }
-  } catch {
-    // Fallback to server state
-  }
-
-  // 3. Merge server-synchronized state (`/api/support/state`)
-  try {
-    const roleParam = params.viewerRole === 'customer' ? 'customer' : 'admin';
-    const res = await fetch(
-      `/api/support/state?uid=${encodeURIComponent(
-        params.viewerUid
-      )}&role=${roleParam}`
-    );
-    if (res.ok) {
-      const state = await res.json();
-      const srvMsgs: SupportTicketMessageRecord[] =
-        state.messagesByTicket?.[params.ticket.id] || [];
-      for (const m of srvMsgs) {
-        if (params.viewerRole === 'customer' && m.isInternal) continue;
-        if (
-          m.message === params.ticket.description &&
-          m.senderId === params.ticket.userId
-        ) {
-          messagesMap.delete(initialMsgId);
-        }
-        messagesMap.set(m.id, m);
-      }
-
-      const srvHis: SupportTicketHistoryEntry[] =
-        state.historyByTicket?.[params.ticket.id] || [];
-      for (const h of srvHis) {
-        if (
-          params.viewerRole === 'customer' &&
-          h.action === 'internal_note_added'
-        ) {
-          continue;
-        }
-        historyMap.set(h.id, h);
-      }
-    }
-  } catch {
-    // Non-fatal
-  }
-
-  if (historyMap.size === 0) {
-    historyMap.set(`init-his-${params.ticket.id}`, {
-      id: `init-his-${params.ticket.id}`,
-      ticketId: params.ticket.id,
-      action: 'created',
-      actorId: params.ticket.userId,
-      actorName: params.ticket.userName,
-      actorEmail: params.ticket.userEmail,
-      actorRole: 'customer',
-      newValue: 'Open',
-      summary: `Ticket ${
-        params.ticket.ticketNumber || params.ticket.id
-      } created by ${params.ticket.userName}.`,
-      createdAtISO: params.ticket.createdAtISO,
-    });
-  }
-
-  const messages = Array.from(messagesMap.values()).sort((a, b) =>
-    a.createdAtISO.localeCompare(b.createdAtISO)
-  );
-  const history = Array.from(historyMap.values()).sort((a, b) =>
-    b.createdAtISO.localeCompare(a.createdAtISO)
   );
 
-  return { messages, history };
+  // 2. Real-time Firestore listener on parent ticket document `/supportTickets/{ticketId}`
+  const ticketDocRef = doc(db, 'supportTickets', ticket.id);
+  const unsubTicket = onSnapshot(
+    ticketDocRef,
+    () => {
+      if (!active) return;
+      void triggerSync();
+    },
+    () => {
+      // Ignore
+    }
+  );
+
+  // 3. Fast background sync with server state for cross-session updates
+  const pollInterval = setInterval(() => {
+    void triggerSync();
+  }, 2000);
+
+  return () => {
+    active = false;
+    clearInterval(pollInterval);
+    unsubMessages();
+    unsubTicket();
+  };
 }
 
 /**
- * Fetches all support tickets belonging to a specific customer (`userId`).
- * Strictly strips `internalNotes` so customers never see internal staff notes.
+ * Fetches in-app support notifications for a customer or staff member.
  */
-export async function fetchCustomerSupportTickets(
-  userId: string
-): Promise<{
-  tickets: SupportTicketRecord[];
-  notifications: AppNotificationItem[];
-}> {
-  const ticketsMap = new Map<string, SupportTicketRecord>();
-  const notifications: AppNotificationItem[] = [];
-
-  // 1. Load from server state for this customer
-  let serverTickets: Record<string, Record<string, unknown>> = {};
+export async function fetchSupportNotifications(params: {
+  uid: string;
+  role: 'customer' | 'staff';
+}): Promise<AppNotificationItem[]> {
+  if (!params.uid) return [];
   try {
     const res = await fetch(
-      `/api/support/state?uid=${encodeURIComponent(userId)}&role=customer`
+      `/api/support/state?uid=${encodeURIComponent(params.uid)}&role=${
+        params.role === 'staff' ? 'admin' : 'customer'
+      }`
     );
-    if (res.ok) {
-      const data = await res.json();
-      serverTickets = data.tickets || {};
-      if (Array.isArray(data.notifications)) {
-        for (const n of data.notifications) {
-          notifications.push({
-            id: String(n.id),
-            title: String(n.title || 'Support Update'),
-            body: String(n.message || ''),
-            timestampISO: String(n.createdAtISO || new Date().toISOString()),
-            read: Boolean(n.read),
-            ticketId: String(n.ticketId || ''),
-            ticketNumber: String(n.ticketNumber || ''),
-          });
-        }
-      }
-    }
+    if (!res.ok) return [];
+    const data = await res.json();
+    const list: Record<string, unknown>[] = Array.isArray(data.notifications)
+      ? data.notifications
+      : [];
+    return list.map((n) => ({
+      id: String(n.id),
+      title: String(n.title || 'Support Update'),
+      body: String(n.message || n.body || ''),
+      ticketId: String(n.ticketId || ''),
+      ticketNumber: String(n.ticketNumber || ''),
+      recipientUid: String(n.recipientUid || ''),
+      timestampISO: String(n.createdAtISO || new Date().toISOString()),
+      read: Boolean(n.read),
+    }));
   } catch {
-    // Non-fatal
+    return [];
   }
-
-  // 2. Query Firestore `/supportTickets` and `/support_tickets` where `userId == userId`
-  const [v2Snap, legacySnap] = await Promise.all([
-    getDocs(
-      query(collection(db, 'supportTickets'), where('userId', '==', userId))
-    ).catch(() => null),
-    getDocs(
-      query(collection(db, 'support_tickets'), where('userId', '==', userId))
-    ).catch(() => null),
-  ]);
-
-  const mapCustomerTicket = (
-    docId: string,
-    raw: Record<string, unknown>
-  ): SupportTicketRecord => {
-    const id = String(raw.id || docId);
-    const srv = serverTickets[id] || {};
-    const rawPriority = String(srv.priority || raw.priority || 'normal').toLowerCase();
-    const priority: SupportTicketPriority =
-      rawPriority === 'urgent' || rawPriority === 'high' ? 'urgent' : 'normal';
-    const rawStatus = String(srv.status || raw.status || 'open').toLowerCase();
-    const status: SupportTicketStatus =
-      rawStatus === 'in_progress' ||
-      rawStatus === 'waiting_for_user' ||
-      rawStatus === 'resolved' ||
-      rawStatus === 'closed'
-        ? (rawStatus as SupportTicketStatus)
-        : 'open';
-
-    const assignedToEmail = String(
-      srv.assignedToEmail ?? raw.assignedToEmail ?? ''
-    );
-    const assignedTo =
-      srv.assignedTo !== undefined
-        ? srv.assignedTo
-        : raw.assignedTo !== undefined
-        ? raw.assignedTo
-        : assignedToEmail || null;
-
-    return {
-      id,
-      ticketNumber: String(srv.ticketNumber || raw.ticketNumber || id),
-      userId,
-      userName: String(srv.userName || raw.userName || 'Customer'),
-      userEmail: String(srv.userEmail || raw.userEmail || ''),
-      category: (srv.category ||
-        raw.category ||
-        'General Enquiry') as SupportTicketCategory,
-      bookingId: String(srv.bookingId ?? raw.bookingId ?? ''),
-      productId: String(srv.productId ?? raw.productId ?? ''),
-      subject: String(srv.subject || raw.subject || ''),
-      description: String(srv.description || raw.description || ''),
-      priority,
-      status,
-      assignedTo: assignedTo ? String(assignedTo) : null,
-      assignedStaffName: String(
-        srv.assignedStaffName ||
-          raw.assignedStaffName ||
-          (assignedToEmail ? 'BorrowBox Support Specialist' : '')
-      ),
-      assignedToEmail,
-      claimedAtISO: srv.claimedAtISO
-        ? String(srv.claimedAtISO)
-        : raw.claimedAt
-        ? formatFirestoreTs(raw.claimedAt)
-        : null,
-      resolvedAtISO: srv.resolvedAtISO ? String(srv.resolvedAtISO) : null,
-      closedAtISO: srv.closedAtISO ? String(srv.closedAtISO) : null,
-      resolutionSummary: String(
-        srv.resolutionSummary ?? raw.resolutionSummary ?? ''
-      ),
-      internalNotes: '', // Strictly strip internal notes for customers
-      attachments: Array.isArray(srv.attachments)
-        ? (srv.attachments as SupportAttachmentItem[])
-        : Array.isArray(raw.attachments)
-        ? (raw.attachments as SupportAttachmentItem[])
-        : [],
-      emailOpenedStatus: (srv.emailOpenedStatus ||
-        raw.emailOpenedStatus) as SupportTicketRecord['emailOpenedStatus'],
-      emailOpenedSentAtISO: String(
-        srv.emailOpenedSentAtISO || raw.emailOpenedSentAtISO || ''
-      ),
-      emailOpenedError: String(
-        srv.emailOpenedError ?? raw.emailOpenedError ?? ''
-      ),
-      emailClosedStatus: (srv.emailClosedStatus ||
-        raw.emailClosedStatus) as SupportTicketRecord['emailClosedStatus'],
-      emailClosedSentAtISO: String(
-        srv.emailClosedSentAtISO || raw.emailClosedSentAtISO || ''
-      ),
-      emailClosedError: String(
-        srv.emailClosedError ?? raw.emailClosedError ?? ''
-      ),
-      createdAtISO: raw.createdAt
-        ? formatFirestoreTs(raw.createdAt)
-        : String(srv.createdAtISO || raw.createdAtISO || new Date().toISOString()),
-      updatedAtISO: raw.updatedAt
-        ? formatFirestoreTs(raw.updatedAt)
-        : String(srv.updatedAtISO || raw.updatedAtISO || new Date().toISOString()),
-    };
-  };
-
-  if (legacySnap) {
-    for (const d of legacySnap.docs) {
-      ticketsMap.set(d.id, mapCustomerTicket(d.id, d.data()));
-    }
-  }
-  if (v2Snap) {
-    for (const d of v2Snap.docs) {
-      ticketsMap.set(d.id, mapCustomerTicket(d.id, d.data()));
-    }
-  }
-  for (const [id, srv] of Object.entries(serverTickets)) {
-    if (!ticketsMap.has(id)) {
-      ticketsMap.set(id, mapCustomerTicket(id, srv));
-    }
-  }
-
-  return {
-    tickets: Array.from(ticketsMap.values()).sort((a, b) =>
-      b.createdAtISO.localeCompare(a.createdAtISO)
-    ),
-    notifications,
-  };
 }

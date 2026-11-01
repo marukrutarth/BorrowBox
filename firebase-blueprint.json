@@ -716,7 +716,6 @@
         "bookingId",
         "subject",
         "description",
-        "priority",
         "status",
         "internalNotes",
         "assignedToEmail",
@@ -784,7 +783,7 @@
     },
     "SupportTicketV2": {
       "title": "SupportTicketV2",
-      "description": "Complete BorrowBox support ticket with staff claiming, priority, and resolution tracking.",
+      "description": "Complete BorrowBox support ticket with staff claiming and resolution tracking.",
       "type": "object",
       "properties": {
         "id": { "type": "string", "minLength": 1, "maxLength": 128 },
@@ -836,7 +835,6 @@
         "subject",
         "description",
         "category",
-        "priority",
         "status",
         "assignedStaffName",
         "assignedStaffEmail",

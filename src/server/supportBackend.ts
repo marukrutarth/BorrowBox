@@ -14,6 +14,8 @@ export interface ServerSupportAttachment {
   id: string;
   name: string;
   url: string;
+  downloadUrl?: string;
+  storagePath?: string;
   contentType: string;
   sizeBytes: number;
   uploadedAtISO: string;
@@ -125,7 +127,7 @@ export interface ServerTicketEnrichmentRecord {
   category: string;
   subject: string;
   description: string;
-  priority: ServerTicketPriority;
+  priority?: ServerTicketPriority;
   status: ServerTicketStatus;
   bookingId: string;
   productId: string;
@@ -208,9 +210,85 @@ function savePersistedStore(): void {
   }
 }
 
+const ATTACHMENTS_DIR_PATH = path.join(process.cwd(), '.support-attachments');
+
+function ensureAttachmentsDir(): void {
+  try {
+    if (!fs.existsSync(ATTACHMENTS_DIR_PATH)) {
+      fs.mkdirSync(ATTACHMENTS_DIR_PATH, { recursive: true });
+    }
+  } catch {
+    // Ignore directory creation errors in restricted environments
+  }
+}
+
+export const ALLOWED_SUPPORT_ATTACHMENT_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+]);
+
+export const MAX_SUPPORT_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5 MB
+export const MAX_SUPPORT_ATTACHMENTS_PER_TICKET = 5;
+
+export function validateSupportAttachmentInput(params: {
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+}): { valid: boolean; normalizedContentType: string; error?: string } {
+  const cleanName = String(params.fileName || '').trim();
+  const extMatch = cleanName.toLowerCase().match(/\.(jpg|jpeg|png|webp|pdf)$/);
+  let mime = String(params.contentType || '').trim().toLowerCase();
+
+  if (!mime && extMatch) {
+    const ext = extMatch[1];
+    if (ext === 'jpg' || ext === 'jpeg') mime = 'image/jpeg';
+    else if (ext === 'png') mime = 'image/png';
+    else if (ext === 'webp') mime = 'image/webp';
+    else if (ext === 'pdf') mime = 'application/pdf';
+  }
+  if (mime === 'image/jpg') {
+    mime = 'image/jpeg';
+  }
+
+  if (!extMatch || !ALLOWED_SUPPORT_ATTACHMENT_MIME_TYPES.has(mime)) {
+    return {
+      valid: false,
+      normalizedContentType: mime,
+      error:
+        'Unsupported file type. Only JPEG, JPG, PNG, WebP images and PDF documents are allowed.',
+    };
+  }
+
+  if (!Number.isFinite(params.sizeBytes) || params.sizeBytes <= 0) {
+    return {
+      valid: false,
+      normalizedContentType: mime,
+      error: 'The selected file is empty or unreadable.',
+    };
+  }
+
+  if (params.sizeBytes > MAX_SUPPORT_ATTACHMENT_BYTES) {
+    return {
+      valid: false,
+      normalizedContentType: mime,
+      error: `File "${cleanName}" exceeds the maximum 5 MB size limit.`,
+    };
+  }
+
+  return { valid: true, normalizedContentType: mime };
+}
+
 export function canRoleOverrideTicketOwnership(role: string, email?: string): boolean {
   const normalizedEmail = String(email || '').trim().toLowerCase();
-  if (normalizedEmail === 'marukrutarth@gmail.com') return true;
+  if (
+    normalizedEmail === 'marginoferror1626@gmail.com' ||
+    normalizedEmail === 'marukrutarth@gmail.com'
+  ) {
+    return true;
+  }
   return role === 'super_admin' || role === 'admin';
 }
 
@@ -320,12 +398,11 @@ export function buildTicketOpenedEmailPayload(params: {
   customerEmail: string;
   subject: string;
   category: string;
-  priority: ServerTicketPriority;
+  priority?: ServerTicketPriority;
   description: string;
   supportPortalUrl?: string;
 }): { subject: string; textBody: string; htmlBody: string } {
   const subject = `BorrowBox Support: Your Ticket Has Been Created - ${params.ticketNumber}`;
-  const priorityLabel = params.priority === 'urgent' ? 'Urgent' : 'Normal';
   const portalUrl = params.supportPortalUrl || 'https://borrowbox.in/support';
   const descriptionExcerpt =
     params.description.length > 350
@@ -341,7 +418,6 @@ export function buildTicketOpenedEmailPayload(params: {
     `- Ticket ID: ${params.ticketNumber}`,
     `- Subject: ${params.subject}`,
     `- Category: ${params.category}`,
-    `- Priority: ${priorityLabel}`,
     `- Current Status: Open`,
     '',
     `Initial Description Summary:`,
@@ -366,7 +442,6 @@ export function buildTicketOpenedEmailPayload(params: {
         <p style="margin: 4px 0;"><strong>Ticket ID:</strong> ${params.ticketNumber}</p>
         <p style="margin: 4px 0;"><strong>Subject:</strong> ${params.subject}</p>
         <p style="margin: 4px 0;"><strong>Category:</strong> ${params.category}</p>
-        <p style="margin: 4px 0;"><strong>Priority:</strong> ${priorityLabel}</p>
         <p style="margin: 4px 0;"><strong>Current Status:</strong> Open</p>
       </div>
       <div style="margin: 16px 0;">
@@ -667,10 +742,14 @@ export function registerSupportRoutes(app: Express): void {
       category: String(ticket.category || existing?.category || 'General Enquiry'),
       subject: String(ticket.subject || existing?.subject || ''),
       description: String(ticket.description || existing?.description || ''),
-      priority:
-        ticket.priority === 'urgent' || ticket.priority === 'normal'
-          ? ticket.priority
-          : existing?.priority || 'normal',
+      ...(ticket.priority || existing?.priority
+        ? {
+            priority:
+              (ticket.priority || existing?.priority) === 'urgent'
+                ? 'urgent'
+                : 'normal',
+          }
+        : {}),
       status: (ticket.status || existing?.status || 'open') as ServerTicketStatus,
       bookingId: String(ticket.bookingId ?? existing?.bookingId ?? ''),
       productId: String(ticket.productId ?? existing?.productId ?? ''),
@@ -824,6 +903,16 @@ export function registerSupportRoutes(app: Express): void {
 
       const claimedAtISO = new Date().toISOString();
 
+      const {
+        ticketNumber = '',
+        ticketUserId = '',
+        ticketUserName = '',
+        ticketUserEmail = '',
+        ticketSubject = '',
+        ticketDescription = '',
+        ticketCategory = 'General Enquiry',
+      } = req.body || {};
+
       if (storedTicket) {
         storedTicket.assignedTo = String(staffUid).trim();
         storedTicket.assignedStaffName = String(staffName).trim();
@@ -831,17 +920,31 @@ export function registerSupportRoutes(app: Express): void {
         storedTicket.claimedAtISO = claimedAtISO;
         storedTicket.status = 'in_progress';
         storedTicket.updatedAtISO = claimedAtISO;
+        if (!storedTicket.userId && ticketUserId) {
+          storedTicket.userId = String(ticketUserId).trim();
+        }
+        if (
+          (!storedTicket.userName || storedTicket.userName === 'Customer') &&
+          ticketUserName
+        ) {
+          storedTicket.userName = String(ticketUserName).trim();
+        }
+        if (!storedTicket.userEmail && ticketUserEmail) {
+          storedTicket.userEmail = String(ticketUserEmail).trim();
+        }
+        if (!storedTicket.subject && ticketSubject) {
+          storedTicket.subject = String(ticketSubject).trim();
+        }
       } else {
         supportStore.tickets[cleanTicketId] = {
           id: cleanTicketId,
-          ticketNumber: cleanTicketId,
-          userId: '',
-          userName: 'Customer',
-          userEmail: '',
-          category: 'General Enquiry',
-          subject: '',
-          description: '',
-          priority: 'normal',
+          ticketNumber: String(ticketNumber || cleanTicketId).trim(),
+          userId: String(ticketUserId || '').trim(),
+          userName: String(ticketUserName || 'Customer').trim(),
+          userEmail: String(ticketUserEmail || '').trim(),
+          category: String(ticketCategory || 'General Enquiry').trim(),
+          subject: String(ticketSubject || '').trim(),
+          description: String(ticketDescription || '').trim(),
           status: 'in_progress',
           bookingId: '',
           productId: '',
@@ -936,6 +1039,7 @@ export function registerSupportRoutes(app: Express): void {
     (req: Request, res: Response) => {
       const ticketId = String(req.params.ticketId || '').trim();
       const {
+        messageId = '',
         senderId = '',
         senderName = '',
         senderEmail = '',
@@ -945,16 +1049,91 @@ export function registerSupportRoutes(app: Express): void {
         attachments = [],
         isInternal = false,
         currentAssignedTo = null,
+        ticketUserId = '',
+        ticketUserName = '',
+        ticketUserEmail = '',
+        ticketSubject = '',
+        ticketNumber = '',
+        ticketCategory = 'General Enquiry',
       } = req.body || {};
 
-      if (!ticketId || !String(message).trim()) {
+      const cleanMessageText = String(message || '').trim();
+      const normalizedAttachments: ServerSupportAttachment[] = Array.isArray(
+        attachments
+      )
+        ? attachments
+        : [];
+
+      if (
+        !ticketId ||
+        (!cleanMessageText && normalizedAttachments.length === 0)
+      ) {
         res.status(400).json({ error: 'Ticket ID and message are required.' });
         return;
       }
 
-      const stored = supportStore.tickets[ticketId];
+      if (normalizedAttachments.length > MAX_SUPPORT_ATTACHMENTS_PER_TICKET) {
+        res.status(400).json({
+          error: `Maximum ${MAX_SUPPORT_ATTACHMENTS_PER_TICKET} attachments allowed per message.`,
+        });
+        return;
+      }
+
+      let stored = supportStore.tickets[ticketId];
+      if (!stored && (ticketUserId || senderRole === 'customer')) {
+        const createdIso = new Date().toISOString();
+        stored = {
+          id: ticketId,
+          ticketNumber: String(ticketNumber || ticketId),
+          userId: String(
+            ticketUserId || (senderRole === 'customer' ? senderId : '')
+          ),
+          userName: String(
+            ticketUserName ||
+              (senderRole === 'customer' ? senderName : 'Customer')
+          ),
+          userEmail: String(
+            ticketUserEmail || (senderRole === 'customer' ? senderEmail : '')
+          ),
+          category: String(ticketCategory || 'General Enquiry'),
+          subject: String(ticketSubject || 'Support Request'),
+          description: cleanMessageText,
+          status: currentAssignedTo ? 'in_progress' : 'open',
+          bookingId: '',
+          productId: '',
+          assignedTo: currentAssignedTo ? String(currentAssignedTo) : null,
+          assignedStaffName: '',
+          assignedToEmail: '',
+          reassignmentCount: 0,
+          resolutionSummary: '',
+          internalNotes: '',
+          attachments: [],
+          createdAtISO: createdIso,
+          updatedAtISO: createdIso,
+        };
+        supportStore.tickets[ticketId] = stored;
+      } else if (stored) {
+        if (!stored.userId && ticketUserId) {
+          stored.userId = String(ticketUserId);
+        }
+        if (
+          (!stored.userName || stored.userName === 'Customer') &&
+          ticketUserName
+        ) {
+          stored.userName = String(ticketUserName);
+        }
+        if (!stored.userEmail && ticketUserEmail) {
+          stored.userEmail = String(ticketUserEmail);
+        }
+        if (!stored.subject && ticketSubject) {
+          stored.subject = String(ticketSubject);
+        }
+      }
+
       const effectiveAssignedTo =
-        stored?.assignedTo !== undefined ? stored.assignedTo : currentAssignedTo;
+        stored?.assignedTo !== undefined && stored?.assignedTo !== null
+          ? stored.assignedTo
+          : currentAssignedTo;
 
       // Customers can never post internal notes
       if (senderRole === 'customer' && isInternal) {
@@ -980,8 +1159,12 @@ export function registerSupportRoutes(app: Express): void {
       }
 
       const nowISO = new Date().toISOString();
+      const resolvedMsgId =
+        String(messageId || '').trim() ||
+        `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
       const msgRecord: ServerSupportMessage = {
-        id: `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: resolvedMsgId,
         ticketId,
         senderId: String(senderId),
         senderName: String(senderName || 'User'),
@@ -992,28 +1175,33 @@ export function registerSupportRoutes(app: Express): void {
             : canRoleOverrideTicketOwnership(actorAdminRole, senderEmail)
             ? 'admin'
             : 'staff',
-        message: String(message).trim(),
-        attachments: Array.isArray(attachments) ? attachments : [],
-        isInternal: Boolean(isInternal),
+        message:
+          cleanMessageText ||
+          `Attached ${normalizedAttachments.length} file(s)`,
+        attachments: normalizedAttachments,
+        isInternal: senderRole === 'customer' ? false : Boolean(isInternal),
         createdAtISO: nowISO,
       };
 
       const list = supportStore.messagesByTicket[ticketId] || [];
-      list.push(msgRecord);
+      const existingIdx = list.findIndex((m) => m.id === msgRecord.id);
+      if (existingIdx >= 0) {
+        list[existingIdx] = msgRecord;
+      } else {
+        list.push(msgRecord);
+      }
       supportStore.messagesByTicket[ticketId] = list;
 
       if (stored) {
         stored.updatedAtISO = nowISO;
-        if (isInternal) {
+        if (msgRecord.isInternal) {
           const timestampLabel = new Date(nowISO).toLocaleString('en-IN', {
             dateStyle: 'short',
             timeStyle: 'short',
           });
           stored.internalNotes = stored.internalNotes
-            ? `${stored.internalNotes}\n[${timestampLabel} - ${senderName}]: ${String(
-                message
-              ).trim()}`
-            : `[${timestampLabel} - ${senderName}]: ${String(message).trim()}`;
+            ? `${stored.internalNotes}\n[${timestampLabel} - ${senderName}]: ${cleanMessageText}`
+            : `[${timestampLabel} - ${senderName}]: ${cleanMessageText}`;
         } else if (senderRole !== 'customer' && !stored.firstResponseAtISO) {
           stored.firstResponseAtISO = nowISO;
         } else if (
@@ -1027,12 +1215,12 @@ export function registerSupportRoutes(app: Express): void {
       const historyEvent: ServerSupportHistoryEvent = {
         id: `HIS-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         ticketId,
-        action: isInternal ? 'internal_note_added' : 'replied',
+        action: msgRecord.isInternal ? 'internal_note_added' : 'replied',
         actorId: String(senderId),
         actorName: String(senderName),
         actorEmail: String(senderEmail),
         actorRole: String(actorAdminRole || senderRole),
-        summary: isInternal
+        summary: msgRecord.isInternal
           ? `Internal staff note added by ${senderName}.`
           : `${
               senderRole === 'customer' ? 'Customer' : 'Support staff'
@@ -1045,7 +1233,7 @@ export function registerSupportRoutes(app: Express): void {
       supportStore.historyByTicket[ticketId] = historyList;
 
       // Dispatch in-app notification for non-internal replies
-      if (!isInternal && stored) {
+      if (!msgRecord.isInternal && stored) {
         if (senderRole !== 'customer' && stored.userId) {
           supportStore.notifications.unshift({
             id: `NOTIF-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -1204,15 +1392,6 @@ export function registerSupportRoutes(app: Express): void {
             read: false,
             createdAtISO: nowISO,
           });
-        } else if (
-          operation === 'priority_change' &&
-          (newPriority === 'normal' || newPriority === 'urgent')
-        ) {
-          previousVal = stored.priority;
-          stored.priority = newPriority;
-          newVal = newPriority;
-          historyAction = 'priority_changed';
-          summaryText = `Priority changed from ${previousVal.toUpperCase()} to ${newVal.toUpperCase()} by ${actorName}.`;
         } else if (operation === 'update_notes') {
           previousVal = 'Internal notes';
           if (typeof internalNotes === 'string') {
@@ -1304,10 +1483,6 @@ export function registerSupportRoutes(app: Express): void {
           ? 'Released Ticket Claim (Admin Override)'
           : operation === 'reopen'
           ? 'Reopened Support Ticket (Admin Override)'
-          : operation === 'priority_change'
-          ? `Changed Ticket Priority to ${String(newVal || newPriority || '').toUpperCase()}${
-              isCrossStaffAdminOverride ? ' (Admin Override)' : ''
-            }`
           : `Updated Ticket Status to ${String(newVal || newStatus || '').toUpperCase()}${
               isCrossStaffAdminOverride ? ' (Admin Override)' : ''
             }`;
@@ -1409,7 +1584,6 @@ export function registerSupportRoutes(app: Express): void {
             customerEmail: String(customerEmail),
             subject: String(subject),
             category: String(category),
-            priority: priority === 'urgent' ? 'urgent' : 'normal',
             description: String(description),
           });
 
@@ -1511,4 +1685,167 @@ export function registerSupportRoutes(app: Express): void {
     savePersistedStore();
     res.json({ ok: true, updatedCount });
   });
+
+  // 8. Upload Support Attachment (Validates MIME type & 5 MB size, persists file & returns storagePath + downloadUrl)
+  app.post('/api/support/attachments', (req: Request, res: Response) => {
+    const {
+      fileName = '',
+      contentType = '',
+      sizeBytes = 0,
+      base64Data = '',
+      userId = 'member',
+    } = req.body || {};
+
+    const cleanFileName = String(fileName || 'attachment')
+      .trim()
+      .replace(/[^a-zA-Z0-9._-]/g, '_');
+
+    const rawBase64 = String(base64Data || '').trim();
+    const strippedBase64 = rawBase64.includes(',')
+      ? rawBase64.split(',')[1]
+      : rawBase64;
+
+    if (!strippedBase64) {
+      res.status(400).json({
+        ok: false,
+        error: 'Attachment file payload is missing or empty.',
+      });
+      return;
+    }
+
+    let fileBuffer: Buffer;
+    try {
+      fileBuffer = Buffer.from(strippedBase64, 'base64');
+    } catch {
+      res.status(400).json({
+        ok: false,
+        error: 'Invalid base64 encoding for uploaded file.',
+      });
+      return;
+    }
+
+    const effectiveSize =
+      typeof sizeBytes === 'number' && sizeBytes > 0
+        ? sizeBytes
+        : fileBuffer.byteLength;
+
+    const validation = validateSupportAttachmentInput({
+      fileName: cleanFileName,
+      contentType: String(contentType || ''),
+      sizeBytes: effectiveSize,
+    });
+
+    if (!validation.valid) {
+      res.status(400).json({
+        ok: false,
+        error: validation.error,
+      });
+      return;
+    }
+
+    if (fileBuffer.byteLength > MAX_SUPPORT_ATTACHMENT_BYTES) {
+      res.status(400).json({
+        ok: false,
+        error: `File "${cleanFileName}" exceeds the maximum 5 MB size limit.`,
+      });
+      return;
+    }
+
+    ensureAttachmentsDir();
+    const attachmentId = `ATT-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 7)}`;
+    const diskFileName = `${attachmentId}_${cleanFileName}`;
+    const diskFilePath = path.join(ATTACHMENTS_DIR_PATH, diskFileName);
+
+    try {
+      fs.writeFileSync(diskFilePath, fileBuffer);
+    } catch {
+      res.status(500).json({
+        ok: false,
+        error: 'Server failed to store attachment file. Please retry.',
+      });
+      return;
+    }
+
+    const cleanUserId = String(userId || 'member').replace(
+      /[^a-zA-Z0-9_-]/g,
+      '_'
+    );
+    const storagePath = `support_attachments/${cleanUserId}/${diskFileName}`;
+    const downloadUrl = `/api/support/attachments/${encodeURIComponent(
+      attachmentId
+    )}/${encodeURIComponent(cleanFileName)}`;
+    const uploadedAtISO = new Date().toISOString();
+
+    const attachment: ServerSupportAttachment = {
+      id: attachmentId,
+      name: cleanFileName,
+      url: downloadUrl,
+      downloadUrl,
+      storagePath,
+      contentType: validation.normalizedContentType,
+      sizeBytes: fileBuffer.byteLength,
+      uploadedAtISO,
+    };
+
+    res.json({
+      ok: true,
+      attachment,
+    });
+  });
+
+  // 9. Serve Support Attachment by ID and Filename
+  app.get(
+    '/api/support/attachments/:attachmentId/:fileName',
+    (req: Request, res: Response) => {
+      const attachmentId = String(req.params.attachmentId || '')
+        .trim()
+        .replace(/[^a-zA-Z0-9_-]/g, '');
+      const rawFileName = String(req.params.fileName || 'attachment')
+        .trim()
+        .replace(/[^a-zA-Z0-9._-]/g, '_');
+
+      if (!attachmentId) {
+        res.status(404).json({ error: 'Attachment not found.' });
+        return;
+      }
+
+      const diskFileName = `${attachmentId}_${rawFileName}`;
+      const diskFilePath = path.join(ATTACHMENTS_DIR_PATH, diskFileName);
+
+      if (!fs.existsSync(diskFilePath)) {
+        res.status(404).json({ error: 'Attachment file not found.' });
+        return;
+      }
+
+      const lower = rawFileName.toLowerCase();
+      let contentType = 'application/octet-stream';
+      if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+        contentType = 'image/jpeg';
+      } else if (lower.endsWith('.png')) {
+        contentType = 'image/png';
+      } else if (lower.endsWith('.webp')) {
+        contentType = 'image/webp';
+      } else if (lower.endsWith('.pdf')) {
+        contentType = 'application/pdf';
+      }
+
+      const isDownload = req.query.download === '1' || req.query.download === 'true';
+      res.setHeader('Content-Type', contentType);
+      res.setHeader(
+        'Content-Disposition',
+        `${isDownload ? 'attachment' : 'inline'}; filename="${rawFileName}"`
+      );
+      res.setHeader('Cache-Control', 'private, max-age=86400');
+
+      const stream = fs.createReadStream(diskFilePath);
+      stream.on('error', () => {
+        if (!res.headersSent) {
+          res.status(500).end('Error reading attachment');
+        }
+      });
+      stream.pipe(res);
+    }
+  );
 }

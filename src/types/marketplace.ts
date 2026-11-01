@@ -414,6 +414,8 @@ export interface SupportAttachmentItem {
   id: string;
   name: string;
   url: string;
+  downloadUrl?: string;
+  storagePath?: string;
   contentType?: string;
   mimeType?: string;
   sizeBytes: number;
@@ -482,7 +484,7 @@ export interface SupportTicketRecord {
   subject: string;
   description: string;
   category?: SupportTicketCategory;
-  priority: SupportTicketPriority;
+  priority?: SupportTicketPriority;
   status: SupportTicketStatus;
   assignedTo?: string | null;
   assignedStaffName?: string;

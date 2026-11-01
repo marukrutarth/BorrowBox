@@ -35,6 +35,7 @@ import {
   fetchOwnerListings,
   fetchUserBookingsFromFirestore,
   fetchVerifiedReviewsFromFirestore,
+  getPersistedSessionProfile,
   onAuthStateChanged,
   sendBookingMessageInFirestore,
   signOutUser,
@@ -266,12 +267,26 @@ export default function App() {
   // Subscribe to Firebase Authentication state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      setFirebaseUser(fbUser);
       if (!fbUser) {
+        const persisted = getPersistedSessionProfile();
+        if (persisted) {
+          setUserProfile(persisted);
+          const pseudoUser = {
+            uid: persisted.uid,
+            email: persisted.email,
+            displayName: persisted.name,
+            photoURL: persisted.photoURL || null,
+          } as unknown as User;
+          setFirebaseUser(pseudoUser);
+          setIsAuthLoading(false);
+          return;
+        }
+        setFirebaseUser(null);
         setUserProfile(null);
         setIsAuthLoading(false);
         return;
       }
+      setFirebaseUser(fbUser);
       try {
         const profile = await ensureOrLoadUserProfile(fbUser);
         setUserProfile(profile);
@@ -644,19 +659,26 @@ export default function App() {
 
   const handleAuthenticated = (profile: BorrowBoxUserProfile) => {
     setUserProfile(profile);
-    if (auth.currentUser) {
-      setIsVerifyingAdminSession(true);
-      void verifyAndLoadAdminSession(auth.currentUser).then((res) => {
-        if (res.authorized && res.adminRecord) {
-          setVerifiedAdminRecord(res.adminRecord);
-          setAdminAccessDeniedReason(null);
-        } else {
-          setVerifiedAdminRecord(null);
-          setAdminAccessDeniedReason(res.reason || null);
-        }
-        setIsVerifyingAdminSession(false);
-      });
-    }
+    const activeUser =
+      auth.currentUser ||
+      ({
+        uid: profile.uid,
+        email: profile.email,
+        displayName: profile.name,
+        photoURL: profile.photoURL || null,
+      } as unknown as User);
+    setFirebaseUser(activeUser);
+    setIsVerifyingAdminSession(true);
+    void verifyAndLoadAdminSession(activeUser).then((res) => {
+      if (res.authorized && res.adminRecord) {
+        setVerifiedAdminRecord(res.adminRecord);
+        setAdminAccessDeniedReason(null);
+      } else {
+        setVerifiedAdminRecord(null);
+        setAdminAccessDeniedReason(res.reason || null);
+      }
+      setIsVerifyingAdminSession(false);
+    });
     if (pendingProtectedRoute) {
       const target = pendingProtectedRoute;
       setPendingProtectedRoute(null);

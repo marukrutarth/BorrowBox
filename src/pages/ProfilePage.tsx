@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   ArrowLeft,
   CheckCircle2,
-  LifeBuoy,
   LogOut,
   MapPin,
   Shield,
@@ -180,15 +179,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           </button>
 
           <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => onNavigate({ page: 'support' })}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#F8FAFC] bg-[#06B6D4]/15 hover:bg-[#06B6D4]/25 border border-[#06B6D4]/40 rounded-xl transition-colors cursor-pointer"
-            >
-              <LifeBuoy className="w-3.5 h-3.5 text-[#06B6D4]" />
-              <span>My Support</span>
-            </button>
-
             {shouldShowAdminPanelOption(verifiedAdminRecord) &&
               verifiedAdminRecord && (
                 <button

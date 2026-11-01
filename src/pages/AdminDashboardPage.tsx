@@ -58,7 +58,6 @@ import {
   ReportCategory,
   ReportSeverity,
   ReportStatus,
-  SupportTicketPriority,
   SupportTicketRecord,
   SupportTicketStatus,
 } from '../types/marketplace';
@@ -91,6 +90,7 @@ import { ProductImage } from '../components/ProductImage';
 import { BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH } from '../utils/introAnimation';
 import { PageRoute } from '../components/Navbar';
 import { AdminTicketsModule } from '../components/support/AdminTicketsModule';
+import { subscribeToAdminSupportTickets } from '../services/supportTicketService';
 
 interface AdminDashboardPageProps {
   firebaseUser: User | null;
@@ -237,14 +237,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     bookingId: string;
     subject: string;
     description: string;
-    priority: SupportTicketPriority;
   }>({
     userName: '',
     userEmail: '',
     bookingId: '',
     subject: '',
     description: '',
-    priority: 'normal',
   });
 
   // Administrator Management Modal State
@@ -418,6 +416,20 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       setActiveSection(accessibleSections[0].id);
     }
   }, [accessibleSections, activeSection]);
+
+  // Real-time subscription to support tickets when viewing Support -> Tickets
+  useEffect(() => {
+    if (!effectiveAdmin || activeSection !== 'support') return;
+    const unsubscribe = subscribeToAdminSupportTickets(
+      effectiveAdmin.uid,
+      (liveTickets) => {
+        setSupportTickets(liveTickets);
+      }
+    );
+    return () => {
+      unsubscribe();
+    };
+  }, [effectiveAdmin, activeSection]);
 
   // Combined Listings (Firestore Community Listings + Catalog Listings)
   const combinedListings = useMemo(() => {
@@ -980,7 +992,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       bookingId: newTicketDraft.bookingId.trim(),
       subject: newTicketDraft.subject.trim(),
       description: newTicketDraft.description.trim(),
-      priority: newTicketDraft.priority,
       status: 'open',
       internalNotes: '',
       assignedToEmail: effectiveAdmin.email,
@@ -1003,7 +1014,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         targetId: ticket.id,
         targetLabel: ticket.subject,
         previousValue: 'none',
-        newValue: `status=open, priority=${ticket.priority}`,
+        newValue: 'status=open',
       });
       setIsNewTicketModalOpen(false);
       setNewTicketDraft({
@@ -1012,7 +1023,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         bookingId: '',
         subject: '',
         description: '',
-        priority: 'normal',
       });
       showToast('success', `Support ticket ${ticket.id} created.`);
     } catch (err) {

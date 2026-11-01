@@ -7,13 +7,14 @@ import {
   resolveFormattedSenderEmail,
   resolveReplyToEmail,
   sanitizeTicketForCustomer,
+  validateSupportAttachmentInput,
   validateTicketClaimAttempt,
   validateTicketModificationAuthority,
 } from './supportBackend';
 
 test('Support Claiming System: allows authorised staff to claim an unclaimed ticket and blocks simultaneous/second claims', () => {
   const firstClaim = validateTicketClaimAttempt({
-    ticketId: 'BBX-2026-100200',
+    ticketId: 'BB-TKT-2026-1002',
     existingAssignedTo: null,
     staffUid: 'staff_1',
     staffName: 'Priya Support',
@@ -24,7 +25,7 @@ test('Support Claiming System: allows authorised staff to claim an unclaimed tic
   assert.equal(firstClaim.statusCode, 200);
 
   const secondSimultaneousClaim = validateTicketClaimAttempt({
-    ticketId: 'BBX-2026-100200',
+    ticketId: 'BB-TKT-2026-1002',
     existingAssignedTo: 'staff_1',
     existingAssignedStaffName: 'Priya Support',
     staffUid: 'staff_2',
@@ -69,15 +70,14 @@ test('Support Ownership & Admin Oversight: blocks regular staff from modifying a
 
 test('Internal Notes Privacy: sanitizeTicketForCustomer strictly strips internalNotes', () => {
   const sanitized = sanitizeTicketForCustomer({
-    id: 'BBX-2026-555111',
-    ticketNumber: 'BBX-2026-555111',
+    id: 'BB-TKT-2026-5551',
+    ticketNumber: 'BB-TKT-2026-5551',
     userId: 'cust_1',
     userName: 'Aarav Sharma',
     userEmail: 'aarav@gmail.com',
     category: 'Booking Issue',
     subject: 'Camera handover delay',
     description: 'Lender was 30 mins late',
-    priority: 'normal',
     status: 'in_progress',
     bookingId: 'BKG-1',
     productId: 'LST-1',
@@ -95,29 +95,28 @@ test('Internal Notes Privacy: sanitizeTicketForCustomer strictly strips internal
   assert.equal(sanitized.internalNotes, '');
 });
 
-test('Mandatory Customer Email Payloads: Ticket Opened & Ticket Closed subjects and content match specification', () => {
+test('Mandatory Customer Email Payloads: Ticket Opened & Ticket Closed subjects and content match specification without priority', () => {
   const openedEmail = buildTicketOpenedEmailPayload({
-    ticketNumber: 'BBX-2026-482910',
+    ticketNumber: 'BB-TKT-2026-4829',
     customerName: 'Aarav Sharma',
     customerEmail: 'aarav@gmail.com',
     subject: 'Deposit refund status',
     category: 'Payment & Deposit',
-    priority: 'urgent',
     description: 'My rental ended yesterday, checking when deposit is released.',
   });
 
   assert.equal(
     openedEmail.subject,
-    'BorrowBox Support: Your Ticket Has Been Created - BBX-2026-482910'
+    'BorrowBox Support: Your Ticket Has Been Created - BB-TKT-2026-4829'
   );
   assert.ok(openedEmail.textBody.includes('Aarav Sharma'));
-  assert.ok(openedEmail.textBody.includes('BBX-2026-482910'));
+  assert.ok(openedEmail.textBody.includes('BB-TKT-2026-4829'));
   assert.ok(openedEmail.textBody.includes('Payment & Deposit'));
-  assert.ok(openedEmail.textBody.includes('Urgent'));
+  assert.ok(!openedEmail.textBody.includes('Priority:'));
   assert.ok(openedEmail.textBody.includes('Open'));
 
   const closedEmail = buildTicketClosedEmailPayload({
-    ticketNumber: 'BBX-2026-482910',
+    ticketNumber: 'BB-TKT-2026-4829',
     customerName: 'Aarav Sharma',
     customerEmail: 'aarav@gmail.com',
     subject: 'Deposit refund status',
@@ -129,7 +128,7 @@ test('Mandatory Customer Email Payloads: Ticket Opened & Ticket Closed subjects 
 
   assert.equal(
     closedEmail.subject,
-    'BorrowBox Support: Your Ticket Has Been Resolved - BBX-2026-482910'
+    'BorrowBox Support: Your Ticket Has Been Resolved - BB-TKT-2026-4829'
   );
   assert.ok(closedEmail.textBody.includes('Priya Support'));
   assert.ok(closedEmail.textBody.includes('Closed'));
@@ -165,6 +164,40 @@ test('Strict Email Trigger Policy: allows only TICKET_OPENED and TICKET_CLOSED a
   assert.equal(isAllowedSupportEmailEvent('STATUS_RESOLVED'), false);
   assert.equal(isAllowedSupportEmailEvent(''), false);
   assert.equal(isAllowedSupportEmailEvent(undefined), false);
+});
+
+test('Attachment Upload Validation: accepts JPEG, JPG, PNG, WebP, and PDF <= 5MB and rejects invalid types or >5MB payloads', () => {
+  const validPng = validateSupportAttachmentInput({
+    fileName: 'evidence.png',
+    contentType: 'image/png',
+    sizeBytes: 120 * 1024,
+  });
+  assert.equal(validPng.valid, true);
+  assert.equal(validPng.normalizedContentType, 'image/png');
+
+  const validPdf = validateSupportAttachmentInput({
+    fileName: 'invoice.pdf',
+    contentType: 'application/pdf',
+    sizeBytes: 250 * 1024,
+  });
+  assert.equal(validPdf.valid, true);
+  assert.equal(validPdf.normalizedContentType, 'application/pdf');
+
+  const invalidType = validateSupportAttachmentInput({
+    fileName: 'malware.exe',
+    contentType: 'application/octet-stream',
+    sizeBytes: 1024,
+  });
+  assert.equal(invalidType.valid, false);
+  assert.ok(invalidType.error?.includes('Unsupported file type'));
+
+  const oversized = validateSupportAttachmentInput({
+    fileName: 'large_photo.jpg',
+    contentType: 'image/jpeg',
+    sizeBytes: 6 * 1024 * 1024,
+  });
+  assert.equal(oversized.valid, false);
+  assert.ok(oversized.error?.includes('5 MB'));
 });
 
 

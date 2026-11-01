@@ -1,0 +1,488 @@
+{
+  "tickets": {
+    "BBX-2026-783665": {
+      "id": "BBX-2026-783665",
+      "ticketNumber": "BBX-2026-783665",
+      "userId": "",
+      "userName": "Customer",
+      "userEmail": "",
+      "category": "General Enquiry",
+      "subject": "",
+      "description": "",
+      "priority": "normal",
+      "status": "in_progress",
+      "bookingId": "",
+      "productId": "",
+      "assignedTo": "UPU1jJIcosTzRUATrUd04UHcBZx1",
+      "assignedStaffName": "Krutarth Maru",
+      "assignedToEmail": "marukrutarth@gmail.com",
+      "claimedAtISO": "2026-11-01T00:18:44.853Z",
+      "reassignmentCount": 0,
+      "resolutionSummary": "",
+      "internalNotes": "",
+      "attachments": [],
+      "createdAtISO": "2026-11-01T00:18:44.853Z",
+      "updatedAtISO": "2026-11-01T00:19:00.924Z",
+      "firstResponseAtISO": "2026-11-01T00:19:00.924Z"
+    },
+    "BB-TKT-2026-7245": {
+      "id": "BB-TKT-2026-7245",
+      "ticketNumber": "BB-TKT-2026-7245",
+      "userId": "usr_aarav_e2e_customer_gmail_com",
+      "userName": "Aarav Sharma",
+      "userEmail": "aarav.e2e.customer@gmail.com",
+      "category": "General Enquiry",
+      "subject": "Sony A7IV Lens Cap Issue E2E",
+      "description": "The front lens cap latch was loose at pickup. Attached photo and receipt PDF.",
+      "status": "closed",
+      "bookingId": "",
+      "productId": "",
+      "assignedTo": "admin_marukrutarth_super_01",
+      "assignedStaffName": "Krutarth SuperAdmin",
+      "assignedToEmail": "marukrutarth@gmail.com",
+      "claimedAtISO": "2026-11-01T01:06:53.664Z",
+      "firstResponseAtISO": "2026-11-01T01:09:06.012Z",
+      "resolvedAtISO": "2026-11-01T01:10:35.589Z",
+      "closedAtISO": "2026-11-01T01:10:36.836Z",
+      "reopenedAtISO": null,
+      "reassignmentCount": 0,
+      "resolutionSummary": "Replacement Sony A7IV front lens cap provided and security deposit protected in full.",
+      "internalNotes": "[01/11/26, 1:10 am - Krutarth SuperAdmin]: INTERNAL_AUDIT_ONLY_998877: Reimburse owner Rs 250 from maintenance pool",
+      "attachments": [
+        {
+          "id": "ATT-1793494748259-b4hgs",
+          "name": "camera_damage_photo.png",
+          "url": "/api/support/attachments/ATT-1793494748259-b4hgs/camera_damage_photo.png",
+          "downloadUrl": "/api/support/attachments/ATT-1793494748259-b4hgs/camera_damage_photo.png",
+          "storagePath": "support_attachments/usr_aarav_e2e_customer_gmail_com/ATT-1793494748259-b4hgs_camera_damage_photo.png",
+          "contentType": "image/png",
+          "sizeBytes": 70,
+          "uploadedAtISO": "2026-11-01T00:59:08.259Z"
+        },
+        {
+          "id": "ATT-1793494748261-9stkw",
+          "name": "rental_receipt.pdf",
+          "url": "/api/support/attachments/ATT-1793494748261-9stkw/rental_receipt.pdf",
+          "downloadUrl": "/api/support/attachments/ATT-1793494748261-9stkw/rental_receipt.pdf",
+          "storagePath": "support_attachments/usr_aarav_e2e_customer_gmail_com/ATT-1793494748261-9stkw_rental_receipt.pdf",
+          "contentType": "application/pdf",
+          "sizeBytes": 76,
+          "uploadedAtISO": "2026-11-01T00:59:08.261Z"
+        }
+      ],
+      "emailOpenedStatus": "failed",
+      "emailOpenedSentAtISO": "2026-11-01T01:00:29.504Z",
+      "emailOpenedError": "Resend HTTP 403: {\"message\":\"You can only send testing emails to your own email address (marukrutarth@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains, and change the `from` address to an email using this domain.\"",
+      "emailClosedStatus": "failed",
+      "emailClosedSentAtISO": "2026-11-01T01:10:37.216Z",
+      "emailClosedError": "Resend HTTP 403: {\"message\":\"You can only send testing emails to your own email address (marukrutarth@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains, and change the `from` address to an email using this domain.\"",
+      "createdAtISO": "2026-11-01T01:00:28.997Z",
+      "updatedAtISO": "2026-11-01T01:10:36.836Z"
+    }
+  },
+  "messagesByTicket": {
+    "BBX-2026-783665": [
+      {
+        "id": "MSG-1793492340924-4fky",
+        "ticketId": "BBX-2026-783665",
+        "senderId": "UPU1jJIcosTzRUATrUd04UHcBZx1",
+        "senderName": "Krutarth Maru",
+        "senderEmail": "marukrutarth@gmail.com",
+        "senderRole": "admin",
+        "message": "how can i help u",
+        "attachments": [],
+        "isInternal": false,
+        "createdAtISO": "2026-11-01T00:19:00.924Z"
+      }
+    ],
+    "BB-TKT-2026-7245": [
+      {
+        "id": "MSG-1793494828997-init",
+        "ticketId": "BB-TKT-2026-7245",
+        "senderId": "usr_aarav_e2e_customer_gmail_com",
+        "senderName": "Aarav Sharma",
+        "senderEmail": "aarav.e2e.customer@gmail.com",
+        "senderRole": "customer",
+        "message": "The front lens cap latch was loose at pickup. Attached photo and receipt PDF.",
+        "attachments": [
+          {
+            "id": "ATT-1793494748259-b4hgs",
+            "name": "camera_damage_photo.png",
+            "url": "/api/support/attachments/ATT-1793494748259-b4hgs/camera_damage_photo.png",
+            "downloadUrl": "/api/support/attachments/ATT-1793494748259-b4hgs/camera_damage_photo.png",
+            "storagePath": "support_attachments/usr_aarav_e2e_customer_gmail_com/ATT-1793494748259-b4hgs_camera_damage_photo.png",
+            "contentType": "image/png",
+            "sizeBytes": 70,
+            "uploadedAtISO": "2026-11-01T00:59:08.259Z"
+          },
+          {
+            "id": "ATT-1793494748261-9stkw",
+            "name": "rental_receipt.pdf",
+            "url": "/api/support/attachments/ATT-1793494748261-9stkw/rental_receipt.pdf",
+            "downloadUrl": "/api/support/attachments/ATT-1793494748261-9stkw/rental_receipt.pdf",
+            "storagePath": "support_attachments/usr_aarav_e2e_customer_gmail_com/ATT-1793494748261-9stkw_rental_receipt.pdf",
+            "contentType": "application/pdf",
+            "sizeBytes": 76,
+            "uploadedAtISO": "2026-11-01T00:59:08.261Z"
+          }
+        ],
+        "isInternal": false,
+        "createdAtISO": "2026-11-01T01:00:28.997Z"
+      },
+      {
+        "id": "MSG-1793495346008-i38j5",
+        "ticketId": "BB-TKT-2026-7245",
+        "senderId": "admin_marukrutarth_super_01",
+        "senderName": "Krutarth SuperAdmin",
+        "senderEmail": "marukrutarth@gmail.com",
+        "senderRole": "admin",
+        "message": "Hello Aarav, we inspected the handover log and approved a replacement lens cap. Attached verification image.",
+        "attachments": [
+          {
+            "id": "ATT-1793495291400-1ekr0",
+            "name": "inspection_verified.png",
+            "url": "/api/support/attachments/ATT-1793495291400-1ekr0/inspection_verified.png",
+            "downloadUrl": "/api/support/attachments/ATT-1793495291400-1ekr0/inspection_verified.png",
+            "storagePath": "support_attachments/admin_marukrutarth_super_01/ATT-1793495291400-1ekr0_inspection_verified.png",
+            "contentType": "image/png",
+            "sizeBytes": 70,
+            "uploadedAtISO": "2026-11-01T01:08:11.400Z"
+          }
+        ],
+        "isInternal": false,
+        "createdAtISO": "2026-11-01T01:09:06.012Z"
+      },
+      {
+        "id": "MSG-1793495357174-zmxy2",
+        "ticketId": "BB-TKT-2026-7245",
+        "senderId": "usr_aarav_e2e_customer_gmail_com",
+        "senderName": "Aarav Sharma",
+        "senderEmail": "aarav.e2e.customer@gmail.com",
+        "senderRole": "customer",
+        "message": "Thank you Krutarth! I received the replacement cap confirmation.",
+        "attachments": [],
+        "isInternal": false,
+        "createdAtISO": "2026-11-01T01:09:17.177Z"
+      },
+      {
+        "id": "MSG-1793495423303-av1eh",
+        "ticketId": "BB-TKT-2026-7245",
+        "senderId": "admin_marukrutarth_super_01",
+        "senderName": "Krutarth SuperAdmin",
+        "senderEmail": "marukrutarth@gmail.com",
+        "senderRole": "admin",
+        "message": "INTERNAL_AUDIT_ONLY_998877: Reimburse owner Rs 250 from maintenance pool",
+        "attachments": [],
+        "isInternal": true,
+        "createdAtISO": "2026-11-01T01:10:23.308Z"
+      }
+    ]
+  },
+  "historyByTicket": {
+    "BBX-2026-783665": [
+      {
+        "id": "HIS-1793492340924-zqrz",
+        "ticketId": "BBX-2026-783665",
+        "action": "replied",
+        "actorId": "UPU1jJIcosTzRUATrUd04UHcBZx1",
+        "actorName": "Krutarth Maru",
+        "actorEmail": "marukrutarth@gmail.com",
+        "actorRole": "super_admin",
+        "summary": "Support staff (Krutarth Maru) posted a reply.",
+        "createdAtISO": "2026-11-01T00:19:00.924Z"
+      },
+      {
+        "id": "HIS-1793492324853-k46v",
+        "ticketId": "BBX-2026-783665",
+        "action": "claimed",
+        "actorId": "UPU1jJIcosTzRUATrUd04UHcBZx1",
+        "actorName": "Krutarth Maru",
+        "actorEmail": "marukrutarth@gmail.com",
+        "actorRole": "super_admin",
+        "previousValue": "Unclaimed (open)",
+        "newValue": "Krutarth Maru (in_progress)",
+        "summary": "Ticket claimed by Krutarth Maru (marukrutarth@gmail.com). Status changed to In Progress.",
+        "createdAtISO": "2026-11-01T00:18:44.853Z"
+      }
+    ],
+    "BB-TKT-2026-7245": [
+      {
+        "id": "HIS-1793495437216-bb5o",
+        "ticketId": "BB-TKT-2026-7245",
+        "action": "email_failed",
+        "actorId": "system_mailer",
+        "actorName": "BorrowBox Email Service",
+        "actorEmail": "BorrowBox <onboarding@resend.dev>",
+        "actorRole": "system",
+        "previousValue": "TICKET_CLOSED",
+        "newValue": "failed (resend)",
+        "summary": "Automated TICKET_CLOSED email failed for aarav.e2e.customer@gmail.com: Resend HTTP 403: {\"message\":\"You can only send testing emails to your own email address (marukrutarth@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains, and change the `from` address to an email using this domain.\"",
+        "createdAtISO": "2026-11-01T01:10:37.216Z"
+      },
+      {
+        "id": "HIS-1793495436836-pbdl",
+        "ticketId": "BB-TKT-2026-7245",
+        "action": "closed",
+        "actorId": "admin_marukrutarth_super_01",
+        "actorName": "Krutarth SuperAdmin",
+        "actorEmail": "marukrutarth@gmail.com",
+        "actorRole": "super_admin",
+        "previousValue": "resolved",
+        "newValue": "closed",
+        "summary": "Status changed from resolved to closed by Krutarth SuperAdmin.",
+        "createdAtISO": "2026-11-01T01:10:36.836Z"
+      },
+      {
+        "id": "HIS-1793495435589-tsv9",
+        "ticketId": "BB-TKT-2026-7245",
+        "action": "resolved",
+        "actorId": "admin_marukrutarth_super_01",
+        "actorName": "Krutarth SuperAdmin",
+        "actorEmail": "marukrutarth@gmail.com",
+        "actorRole": "super_admin",
+        "previousValue": "in_progress",
+        "newValue": "resolved",
+        "summary": "Status changed from in_progress to resolved by Krutarth SuperAdmin.",
+        "createdAtISO": "2026-11-01T01:10:35.589Z"
+      },
+      {
+        "id": "HIS-1793495423331-0acx",
+        "ticketId": "BB-TKT-2026-7245",
+        "action": "internal_note_added",
+        "actorId": "admin_marukrutarth_super_01",
+        "actorName": "Krutarth SuperAdmin",
+        "actorEmail": "marukrutarth@gmail.com",
+        "actorRole": "super_admin",
+        "summary": "Internal staff note added by Krutarth SuperAdmin.",
+        "createdAtISO": "2026-11-01T01:10:23.308Z"
+      },
+      {
+        "id": "HIS-1793495357177-kb7j",
+        "ticketId": "BB-TKT-2026-7245",
+        "action": "replied",
+        "actorId": "usr_aarav_e2e_customer_gmail_com",
+        "actorName": "Aarav Sharma",
+        "actorEmail": "aarav.e2e.customer@gmail.com",
+        "actorRole": "customer",
+        "summary": "Customer (Aarav Sharma) posted a reply.",
+        "createdAtISO": "2026-11-01T01:09:17.177Z"
+      },
+      {
+        "id": "HIS-1793495346012-p8tk",
+        "ticketId": "BB-TKT-2026-7245",
+        "action": "replied",
+        "actorId": "admin_marukrutarth_super_01",
+        "actorName": "Krutarth SuperAdmin",
+        "actorEmail": "marukrutarth@gmail.com",
+        "actorRole": "super_admin",
+        "summary": "Support staff (Krutarth SuperAdmin) posted a reply.",
+        "createdAtISO": "2026-11-01T01:09:06.012Z"
+      },
+      {
+        "id": "HIS-1793495213664-rxrw",
+        "ticketId": "BB-TKT-2026-7245",
+        "action": "claimed",
+        "actorId": "admin_marukrutarth_super_01",
+        "actorName": "Krutarth SuperAdmin",
+        "actorEmail": "marukrutarth@gmail.com",
+        "actorRole": "super_admin",
+        "previousValue": "Unclaimed (open)",
+        "newValue": "Krutarth SuperAdmin (in_progress)",
+        "summary": "Ticket claimed by Krutarth SuperAdmin (marukrutarth@gmail.com). Status changed to In Progress.",
+        "createdAtISO": "2026-11-01T01:06:53.664Z"
+      },
+      {
+        "id": "HIS-1793494829504-m5rt",
+        "ticketId": "BB-TKT-2026-7245",
+        "action": "email_failed",
+        "actorId": "system_mailer",
+        "actorName": "BorrowBox Email Service",
+        "actorEmail": "BorrowBox <onboarding@resend.dev>",
+        "actorRole": "system",
+        "previousValue": "TICKET_OPENED",
+        "newValue": "failed (resend)",
+        "summary": "Automated TICKET_OPENED email failed for aarav.e2e.customer@gmail.com: Resend HTTP 403: {\"message\":\"You can only send testing emails to your own email address (marukrutarth@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains, and change the `from` address to an email using this domain.\"",
+        "createdAtISO": "2026-11-01T01:00:29.504Z"
+      },
+      {
+        "id": "HIS-1793494828997-create",
+        "ticketId": "BB-TKT-2026-7245",
+        "action": "created",
+        "actorId": "usr_aarav_e2e_customer_gmail_com",
+        "actorName": "Aarav Sharma",
+        "actorEmail": "aarav.e2e.customer@gmail.com",
+        "actorRole": "customer",
+        "previousValue": "none",
+        "newValue": "open (Unclaimed)",
+        "summary": "Support ticket BB-TKT-2026-7245 created by customer Aarav Sharma (General Enquiry).",
+        "createdAtISO": "2026-11-01T01:00:28.997Z"
+      }
+    ]
+  },
+  "emailLogs": {
+    "BB-TKT-2026-7245:TICKET_OPENED": {
+      "id": "EML-1793494829504-r2v8",
+      "idempotencyKey": "BB-TKT-2026-7245:TICKET_OPENED",
+      "ticketId": "BB-TKT-2026-7245",
+      "ticketNumber": "BB-TKT-2026-7245",
+      "eventType": "TICKET_OPENED",
+      "fromEmail": "BorrowBox <onboarding@resend.dev>",
+      "replyToEmail": "borrowboxsupport@gmail.com",
+      "recipientEmail": "aarav.e2e.customer@gmail.com",
+      "recipientName": "Aarav Sharma",
+      "subject": "BorrowBox Support: Your Ticket Has Been Created - BB-TKT-2026-7245",
+      "textBody": "Hello Aarav Sharma,\n\nThank you for contacting BorrowBox Support. Your support request has been received and queued for our support team.\n\nTicket Details:\n- Ticket ID: BB-TKT-2026-7245\n- Subject: Sony A7IV Lens Cap Issue E2E\n- Category: General Enquiry\n- Current Status: Open\n\nInitial Description Summary:\n\"The front lens cap latch was loose at pickup. Attached photo and receipt PDF.\"\n\nWhat happens next:\nA dedicated BorrowBox support specialist will claim your ticket and respond shortly. You can view real-time updates, upload additional files, or reply directly from your My Support panel: https://borrowbox.in/support\n\nWarm regards,\nBorrowBox Trust & Support Team",
+      "htmlBody": "<div style=\"font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; color: #0f172a;\">\n      <div style=\"margin-bottom: 16px;\">\n        <span style=\"font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #4f46e5;\">BorrowBox Support Desk</span>\n        <h2 style=\"margin: 6px 0 0; font-size: 20px; color: #0f172a;\">Your Ticket Has Been Created</h2>\n      </div>\n      <p style=\"font-size: 14px; line-height: 1.6; color: #334155;\">Hello <strong>Aarav Sharma</strong>,</p>\n      <p style=\"font-size: 14px; line-height: 1.6; color: #334155;\">We have received your support request. A support specialist will claim your ticket and assist you shortly.</p>\n      <div style=\"background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0; font-size: 13px;\">\n        <p style=\"margin: 4px 0;\"><strong>Ticket ID:</strong> BB-TKT-2026-7245</p>\n        <p style=\"margin: 4px 0;\"><strong>Subject:</strong> Sony A7IV Lens Cap Issue E2E</p>\n        <p style=\"margin: 4px 0;\"><strong>Category:</strong> General Enquiry</p>\n        <p style=\"margin: 4px 0;\"><strong>Current Status:</strong> Open</p>\n      </div>\n      <div style=\"margin: 16px 0;\">\n        <p style=\"font-size: 12px; font-weight: 600; text-transform: uppercase; color: #64748b; margin-bottom: 6px;\">Initial Description Summary</p>\n        <blockquote style=\"margin: 0; padding: 12px; background: #ffffff; border-left: 3px solid #4f46e5; color: #475569; font-size: 13px;\">The front lens cap latch was loose at pickup. Attached photo and receipt PDF.</blockquote>\n      </div>\n      <p style=\"font-size: 13px; line-height: 1.6; color: #475569;\">Track your request and reply to our support team anytime in the <strong>My Support</strong> section of your BorrowBox account (<a href=\"https://borrowbox.in/support\" style=\"color: #4f46e5;\">https://borrowbox.in/support</a>).</p>\n    </div>",
+      "status": "failed",
+      "provider": "resend",
+      "sentAtISO": "2026-11-01T01:00:29.504Z",
+      "errorMessage": "Resend HTTP 403: {\"message\":\"You can only send testing emails to your own email address (marukrutarth@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains, and change the `from` address to an email using this domain.\"",
+      "retryCount": 0
+    },
+    "BB-TKT-2026-7245:TICKET_CLOSED": {
+      "id": "EML-1793495437216-843r",
+      "idempotencyKey": "BB-TKT-2026-7245:TICKET_CLOSED",
+      "ticketId": "BB-TKT-2026-7245",
+      "ticketNumber": "BB-TKT-2026-7245",
+      "eventType": "TICKET_CLOSED",
+      "fromEmail": "BorrowBox <onboarding@resend.dev>",
+      "replyToEmail": "borrowboxsupport@gmail.com",
+      "recipientEmail": "aarav.e2e.customer@gmail.com",
+      "recipientName": "Aarav Sharma",
+      "subject": "BorrowBox Support: Your Ticket Has Been Resolved - BB-TKT-2026-7245",
+      "textBody": "Hello Aarav Sharma,\n\nYour BorrowBox support ticket has been resolved and closed.\n\nTicket Resolution Details:\n- Ticket ID: BB-TKT-2026-7245\n- Subject: Sony A7IV Lens Cap Issue E2E\n- Assigned Support Specialist: Krutarth SuperAdmin\n- Final Status: Closed\n- Closed At: 1 Nov 2026, 1:10 am\n\nResolution Summary:\nReplacement Sony A7IV front lens cap provided and security deposit protected in full.\n\nNeed further help?\nYour full conversation history and resolution summary remain saved in your Resolved History inside the My Support panel (https://borrowbox.in/support). If you need additional assistance, you can open a follow-up ticket referencing BB-TKT-2026-7245.\n\nWarm regards,\nBorrowBox Trust & Support Team",
+      "htmlBody": "<div style=\"font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; color: #0f172a;\">\n      <div style=\"margin-bottom: 16px;\">\n        <span style=\"font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #059669;\">BorrowBox Support Desk</span>\n        <h2 style=\"margin: 6px 0 0; font-size: 20px; color: #0f172a;\">Your Ticket Has Been Resolved</h2>\n      </div>\n      <p style=\"font-size: 14px; line-height: 1.6; color: #334155;\">Hello <strong>Aarav Sharma</strong>,</p>\n      <p style=\"font-size: 14px; line-height: 1.6; color: #334155;\">Our team has completed work on your support ticket and marked it as closed.</p>\n      <div style=\"background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0; font-size: 13px;\">\n        <p style=\"margin: 4px 0;\"><strong>Ticket ID:</strong> BB-TKT-2026-7245</p>\n        <p style=\"margin: 4px 0;\"><strong>Subject:</strong> Sony A7IV Lens Cap Issue E2E</p>\n        <p style=\"margin: 4px 0;\"><strong>Assigned Staff:</strong> Krutarth SuperAdmin</p>\n        <p style=\"margin: 4px 0;\"><strong>Final Status:</strong> Closed</p>\n        <p style=\"margin: 4px 0;\"><strong>Closure Timestamp:</strong> 1 Nov 2026, 1:10 am</p>\n      </div>\n      <div style=\"margin: 16px 0;\">\n        <p style=\"font-size: 12px; font-weight: 600; text-transform: uppercase; color: #059669; margin-bottom: 6px;\">Resolution Summary</p>\n        <div style=\"padding: 12px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; color: #065f46; font-size: 13px; line-height: 1.5;\">Replacement Sony A7IV front lens cap provided and security deposit protected in full.</div>\n      </div>\n      <p style=\"font-size: 13px; line-height: 1.6; color: #475569;\">If you require further assistance, visit <strong>My Support &rarr; Resolved History</strong> (<a href=\"https://borrowbox.in/support\" style=\"color: #4f46e5;\">https://borrowbox.in/support</a>) to review the full thread or submit a follow-up enquiry.</p>\n    </div>",
+      "status": "failed",
+      "provider": "resend",
+      "sentAtISO": "2026-11-01T01:10:37.216Z",
+      "errorMessage": "Resend HTTP 403: {\"message\":\"You can only send testing emails to your own email address (marukrutarth@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains, and change the `from` address to an email using this domain.\"",
+      "retryCount": 0
+    }
+  },
+  "notifications": [
+    {
+      "id": "NOTIF-1793495436836-qwp8",
+      "recipientUid": "usr_aarav_e2e_customer_gmail_com",
+      "ticketId": "BB-TKT-2026-7245",
+      "ticketNumber": "BB-TKT-2026-7245",
+      "type": "ticket_closed",
+      "title": "Ticket Status Updated: CLOSED",
+      "message": "Your ticket BB-TKT-2026-7245 (\"Sony A7IV Lens Cap Issue E2E\") is now closed.",
+      "read": false,
+      "createdAtISO": "2026-11-01T01:10:36.836Z"
+    },
+    {
+      "id": "NOTIF-1793495435589-u9z4",
+      "recipientUid": "usr_aarav_e2e_customer_gmail_com",
+      "ticketId": "BB-TKT-2026-7245",
+      "ticketNumber": "BB-TKT-2026-7245",
+      "type": "ticket_resolved",
+      "title": "Ticket Status Updated: RESOLVED",
+      "message": "Your ticket BB-TKT-2026-7245 (\"Sony A7IV Lens Cap Issue E2E\") is now resolved.",
+      "read": false,
+      "createdAtISO": "2026-11-01T01:10:35.589Z"
+    },
+    {
+      "id": "NOTIF-1793495357177-j1a9",
+      "recipientUid": "admin_marukrutarth_super_01",
+      "ticketId": "BB-TKT-2026-7245",
+      "ticketNumber": "BB-TKT-2026-7245",
+      "type": "customer_replied",
+      "title": "Customer Replied (BB-TKT-2026-7245)",
+      "message": "Aarav Sharma replied on ticket \"Sony A7IV Lens Cap Issue E2E\".",
+      "read": false,
+      "createdAtISO": "2026-11-01T01:09:17.177Z"
+    },
+    {
+      "id": "NOTIF-1793495346012-odyh",
+      "recipientUid": "usr_aarav_e2e_customer_gmail_com",
+      "ticketId": "BB-TKT-2026-7245",
+      "ticketNumber": "BB-TKT-2026-7245",
+      "type": "staff_replied",
+      "title": "New Support Reply (BB-TKT-2026-7245)",
+      "message": "Krutarth SuperAdmin replied to your support ticket \"Sony A7IV Lens Cap Issue E2E\".",
+      "read": false,
+      "createdAtISO": "2026-11-01T01:09:06.012Z"
+    },
+    {
+      "id": "NOTIF-1793495213664-l50y",
+      "recipientUid": "usr_aarav_e2e_customer_gmail_com",
+      "ticketId": "BB-TKT-2026-7245",
+      "ticketNumber": "BB-TKT-2026-7245",
+      "type": "ticket_claimed",
+      "title": "Support Ticket Claimed",
+      "message": "Krutarth SuperAdmin has taken responsibility for your ticket (BB-TKT-2026-7245) and it is now In Progress.",
+      "read": false,
+      "createdAtISO": "2026-11-01T01:06:53.664Z"
+    },
+    {
+      "id": "NOTIF-1793494828997-create",
+      "recipientUid": "ALL_SUPPORT_STAFF",
+      "ticketId": "BB-TKT-2026-7245",
+      "ticketNumber": "BB-TKT-2026-7245",
+      "type": "ticket_created",
+      "title": "New Support Ticket (BB-TKT-2026-7245)",
+      "message": "Aarav Sharma opened \"Sony A7IV Lens Cap Issue E2E\" (General Enquiry).",
+      "read": false,
+      "createdAtISO": "2026-11-01T01:00:28.997Z"
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "AUD-1793495436836-xtr3",
+      "adminId": "admin_marukrutarth_super_01",
+      "adminEmail": "marukrutarth@gmail.com",
+      "adminRole": "super_admin",
+      "action": "Updated Ticket Status to CLOSED",
+      "targetType": "support_ticket",
+      "targetId": "BB-TKT-2026-7245",
+      "targetLabel": "BB-TKT-2026-7245: Sony A7IV Lens Cap Issue E2E",
+      "previousValue": "resolved",
+      "newValue": "closed",
+      "isOverride": false,
+      "createdAtISO": "2026-11-01T01:10:36.836Z"
+    },
+    {
+      "id": "AUD-1793495435589-9ob1",
+      "adminId": "admin_marukrutarth_super_01",
+      "adminEmail": "marukrutarth@gmail.com",
+      "adminRole": "super_admin",
+      "action": "Updated Ticket Status to RESOLVED",
+      "targetType": "support_ticket",
+      "targetId": "BB-TKT-2026-7245",
+      "targetLabel": "BB-TKT-2026-7245: Sony A7IV Lens Cap Issue E2E",
+      "previousValue": "in_progress",
+      "newValue": "resolved",
+      "isOverride": false,
+      "createdAtISO": "2026-11-01T01:10:35.589Z"
+    },
+    {
+      "id": "AUD-1793495213664-xbbo",
+      "adminId": "admin_marukrutarth_super_01",
+      "adminEmail": "marukrutarth@gmail.com",
+      "adminRole": "super_admin",
+      "action": "Claimed Support Ticket",
+      "targetType": "support_ticket",
+      "targetId": "BB-TKT-2026-7245",
+      "targetLabel": "BB-TKT-2026-7245: Sony A7IV Lens Cap Issue E2E",
+      "previousValue": "Unclaimed (open)",
+      "newValue": "Krutarth SuperAdmin (in_progress)",
+      "isOverride": false,
+      "createdAtISO": "2026-11-01T01:06:53.664Z"
+    },
+    {
+      "id": "AUD-1793492324853-a12s",
+      "adminId": "UPU1jJIcosTzRUATrUd04UHcBZx1",
+      "adminEmail": "marukrutarth@gmail.com",
+      "adminRole": "super_admin",
+      "action": "Claimed Support Ticket",
+      "targetType": "support_ticket",
+      "targetId": "BBX-2026-783665",
+      "targetLabel": "BBX-2026-783665: Support Ticket",
+      "previousValue": "Unclaimed (open)",
+      "newValue": "Krutarth Maru (in_progress)",
+      "isOverride": false,
+      "createdAtISO": "2026-11-01T00:18:44.853Z"
+    }
+  ]
+}

@@ -86,6 +86,28 @@ export const Footer: React.FC<FooterProps> = ({
               <li>
                 <button
                   type="button"
+                  onClick={() => onOpenInfoModal('contact')}
+                  className="text-[#94A3B8] hover:text-[#F8FAFC] transition-colors cursor-pointer"
+                >
+                  Contact Us
+                </button>
+              </li>
+              <li>
+                <a
+                  href="/support"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onNavigate({ page: 'support' });
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="text-[#94A3B8] hover:text-[#F8FAFC] transition-colors cursor-pointer"
+                >
+                  My Support
+                </a>
+              </li>
+              <li>
+                <button
+                  type="button"
                   onClick={() => onOpenInfoModal('help')}
                   className="text-[#94A3B8] hover:text-[#F8FAFC] transition-colors cursor-pointer"
                 >
@@ -99,15 +121,6 @@ export const Footer: React.FC<FooterProps> = ({
                   className="text-[#94A3B8] hover:text-[#F8FAFC] transition-colors cursor-pointer"
                 >
                   Safety Centre
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => onOpenInfoModal('contact')}
-                  className="text-[#94A3B8] hover:text-[#F8FAFC] transition-colors cursor-pointer"
-                >
-                  Contact
                 </button>
               </li>
               <li>

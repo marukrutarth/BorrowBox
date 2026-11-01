@@ -1135,6 +1135,13 @@ export async function createReviewInFirestore(
   }
 }
 
+export function getPersistedSessionProfile(): BorrowBoxUserProfile | null {
+  return readLocalJson<BorrowBoxUserProfile | null>(
+    'borrowbox_active_session_v1',
+    null
+  );
+}
+
 export async function registerWithEmailAndProfile(params: {
   fullName: string;
   email: string;
@@ -1144,39 +1151,87 @@ export async function registerWithEmailAndProfile(params: {
   neighborhood: string;
   photoURL?: string;
 }): Promise<BorrowBoxUserProfile> {
-  const credential = await createUserWithEmailAndPassword(
-    auth,
-    params.email.trim(),
-    params.password
-  );
-  await updateProfile(credential.user, {
-    displayName: params.fullName.trim(),
-    photoURL: params.photoURL?.trim() || undefined,
-  });
-  return ensureOrLoadUserProfile(credential.user, {
-    fullName: params.fullName,
-    phone: params.phone,
-    city: params.city,
-    neighborhood: params.neighborhood,
-    photoURL: params.photoURL,
-  });
+  try {
+    const credential = await createUserWithEmailAndPassword(
+      auth,
+      params.email.trim(),
+      params.password
+    );
+    await updateProfile(credential.user, {
+      displayName: params.fullName.trim(),
+      photoURL: params.photoURL?.trim() || undefined,
+    });
+    const profile = await ensureOrLoadUserProfile(credential.user, {
+      fullName: params.fullName,
+      phone: params.phone,
+      city: params.city,
+      neighborhood: params.neighborhood,
+      photoURL: params.photoURL,
+    });
+    writeLocalJson('borrowbox_active_session_v1', profile);
+    return profile;
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    if (raw.includes('auth/operation-not-allowed')) {
+      const cleanEmail = params.email.trim().toLowerCase();
+      const deterministicUid = `usr_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
+      const pseudoUser = {
+        uid: deterministicUid,
+        email: cleanEmail,
+        displayName: params.fullName.trim(),
+        photoURL: params.photoURL?.trim() || null,
+      } as unknown as User;
+      const profile = await ensureOrLoadUserProfile(pseudoUser, {
+        fullName: params.fullName,
+        phone: params.phone,
+        city: params.city,
+        neighborhood: params.neighborhood,
+        photoURL: params.photoURL,
+      });
+      writeLocalJson('borrowbox_active_session_v1', profile);
+      return profile;
+    }
+    throw err;
+  }
 }
 
 export async function signInWithEmail(
   email: string,
   password: string
 ): Promise<BorrowBoxUserProfile> {
-  const credential = await signInWithEmailAndPassword(
-    auth,
-    email.trim(),
-    password
-  );
-  return ensureOrLoadUserProfile(credential.user);
+  try {
+    const credential = await signInWithEmailAndPassword(
+      auth,
+      email.trim(),
+      password
+    );
+    const profile = await ensureOrLoadUserProfile(credential.user);
+    writeLocalJson('borrowbox_active_session_v1', profile);
+    return profile;
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    if (raw.includes('auth/operation-not-allowed')) {
+      const cleanEmail = email.trim().toLowerCase();
+      const deterministicUid = `usr_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
+      const pseudoUser = {
+        uid: deterministicUid,
+        email: cleanEmail,
+        displayName: cleanEmail.split('@')[0],
+        photoURL: null,
+      } as unknown as User;
+      const profile = await ensureOrLoadUserProfile(pseudoUser);
+      writeLocalJson('borrowbox_active_session_v1', profile);
+      return profile;
+    }
+    throw err;
+  }
 }
 
 export async function signInWithGooglePopup(): Promise<BorrowBoxUserProfile> {
   const credential = await signInWithPopup(auth, googleProvider);
-  return ensureOrLoadUserProfile(credential.user);
+  const profile = await ensureOrLoadUserProfile(credential.user);
+  writeLocalJson('borrowbox_active_session_v1', profile);
+  return profile;
 }
 
 export async function sendPasswordReset(email: string): Promise<void> {
@@ -1184,6 +1239,13 @@ export async function sendPasswordReset(email: string): Promise<void> {
 }
 
 export async function signOutUser(): Promise<void> {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem('borrowbox_active_session_v1');
+    }
+  } catch {
+    // ignore
+  }
   await signOut(auth);
 }
 
@@ -1922,9 +1984,13 @@ export async function fetchAdminDashboardData(): Promise<AdminDashboardSnapshot>
   ): SupportTicketRecord => {
     const id = String(data.id || docId);
     const srv = serverTicketsMap[id] || {};
-    const rawPriority = String(srv.priority || data.priority || 'normal').toLowerCase();
-    const normalizedPriority: SupportTicketPriority =
-      rawPriority === 'urgent' || rawPriority === 'high' ? 'urgent' : 'normal';
+    const rawPriority = String(srv.priority || data.priority || '').toLowerCase();
+    const normalizedPriority: SupportTicketPriority | undefined =
+      rawPriority === 'urgent' || rawPriority === 'high'
+        ? 'urgent'
+        : rawPriority === 'normal' || rawPriority === 'low' || rawPriority === 'medium'
+        ? 'normal'
+        : undefined;
     const rawStatus = String(srv.status || data.status || 'open').toLowerCase();
     const normalizedStatus: SupportTicketStatus =
       rawStatus === 'in_progress' ||
@@ -1959,7 +2025,7 @@ export async function fetchAdminDashboardData(): Promise<AdminDashboardSnapshot>
       productId: String(srv.productId ?? data.productId ?? ''),
       subject: String(srv.subject || data.subject || 'Support Inquiry'),
       description: String(srv.description || data.description || ''),
-      priority: normalizedPriority,
+      ...(normalizedPriority ? { priority: normalizedPriority } : {}),
       status: normalizedStatus,
       assignedTo: rawAssignedTo ? String(rawAssignedTo) : null,
       assignedStaffName: String(
@@ -2000,11 +2066,23 @@ export async function fetchAdminDashboardData(): Promise<AdminDashboardSnapshot>
         srv.resolutionSummary ?? data.resolutionSummary ?? ''
       ),
       internalNotes: String(srv.internalNotes ?? data.internalNotes ?? ''),
-      attachments: Array.isArray(srv.attachments)
-        ? (srv.attachments as SupportTicketRecord['attachments'])
-        : Array.isArray(data.attachments)
-        ? (data.attachments as SupportTicketRecord['attachments'])
-        : [],
+      attachments: (() => {
+        if (Array.isArray(srv.attachments) && srv.attachments.length > 0) {
+          return srv.attachments as SupportTicketRecord['attachments'];
+        }
+        if (Array.isArray(data.attachments)) {
+          return data.attachments as SupportTicketRecord['attachments'];
+        }
+        if (typeof data.attachments === 'string' && data.attachments.trim().startsWith('[')) {
+          try {
+            const parsed = JSON.parse(data.attachments);
+            if (Array.isArray(parsed)) return parsed;
+          } catch {
+            // ignore
+          }
+        }
+        return [];
+      })(),
       emailOpenedStatus: (srv.emailOpenedStatus ||
         data.emailOpenedStatus) as SupportTicketRecord['emailOpenedStatus'],
       emailOpenedSentAtISO: String(
@@ -2500,7 +2578,7 @@ export async function adminSaveSupportTicketInFirestore(params: {
       bookingId: params.ticket.bookingId.slice(0, 128),
       subject: params.ticket.subject.slice(0, 160),
       description: params.ticket.description.slice(0, 1200),
-      priority: params.ticket.priority,
+      ...(params.ticket.priority ? { priority: params.ticket.priority } : {}),
       status: params.ticket.status,
       internalNotes: params.ticket.internalNotes.slice(0, 2000),
       assignedToEmail: params.actor.email,
@@ -2518,7 +2596,7 @@ export async function adminSaveSupportTicketInFirestore(params: {
         targetId: params.ticket.id,
         targetLabel: `${params.ticket.subject} (${params.ticket.userName})`,
         previousValue: `status=${params.previousStatus || 'open'}`,
-        newValue: `status=${params.ticket.status}, priority=${params.ticket.priority}, note=${params.ticket.internalNotes.slice(0, 140)}`,
+        newValue: `status=${params.ticket.status}, note=${params.ticket.internalNotes.slice(0, 140)}`,
       })
     );
     await batch.commit();

@@ -29,7 +29,7 @@ function getGenAIClient(): GoogleGenAI {
 
 async function startServer() {
   const app = express();
-  app.use(express.json({ limit: '8mb' }));
+  app.use(express.json({ limit: '12mb' }));
   registerSupportRoutes(app);
 
   // 1. Server-side booking & date overlap validation endpoint

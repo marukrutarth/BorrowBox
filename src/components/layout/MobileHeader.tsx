@@ -6,7 +6,6 @@ import {
   HelpCircle,
   Home,
   LayoutDashboard,
-  LifeBuoy,
   LogOut,
   MapPin,
   Menu,
@@ -464,19 +463,6 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                             ? `Profile (${userProfile.name})`
                             : 'Profile & Settings'}
                         </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          onNavigate({ page: 'support' });
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                        className="w-full min-h-[44px] text-left px-3 py-2.5 rounded-xl text-sm font-medium text-[#F8FAFC] hover:bg-[#161E2E] flex items-center gap-3 bb-btn-interactive cursor-pointer"
-                      >
-                        <LifeBuoy className="w-4 h-4 text-[#06B6D4] shrink-0" />
-                        <span>My Support</span>
                       </button>
 
                       {/* Dynamic Admin Panel Option — strictly for verified active administrators */}
