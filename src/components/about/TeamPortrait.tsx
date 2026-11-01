@@ -58,10 +58,12 @@ export const TeamPortrait: React.FC<TeamPortraitProps> = ({
         <img
           src={currentSrc}
           alt={`${member.name} — ${member.role}`}
+          width={640}
+          height={800}
           loading={priority ? 'eager' : 'lazy'}
           decoding="async"
           onError={handleImageError}
-          className={`w-full h-full object-cover ${objectPositionClass} ${imageClassName}`}
+          className={`w-full h-full object-cover ${objectPositionClass} bb-team-portrait-img ${imageClassName}`}
         />
       ) : (
         <div

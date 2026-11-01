@@ -96,13 +96,13 @@ export const InfoModal: React.FC<InfoModalProps> = ({ infoKey, onClose }) => {
           role="dialog"
           aria-modal="true"
           aria-labelledby="info-modal-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B0F19]/80 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B0F19]/85 backdrop-blur-xs p-4"
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
-            transition={{ duration: 0.18 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             className="bg-[#161E2E] border border-white/[0.08] rounded-xl max-w-lg w-full p-6 space-y-4 shadow-2xl"
           >
             <div className="flex items-start justify-between gap-4 border-b border-white/[0.08] pb-4">
@@ -172,13 +172,13 @@ export const RequestsModal: React.FC<RequestsModalProps> = ({
           role="dialog"
           aria-modal="true"
           aria-labelledby="requests-modal-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B0F19]/80 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B0F19]/85 backdrop-blur-xs p-4"
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
-            transition={{ duration: 0.18 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             className="bg-[#161E2E] border border-white/[0.08] rounded-xl max-w-xl w-full p-6 space-y-4 max-h-[85vh] overflow-y-auto shadow-2xl"
           >
             <div className="flex items-start justify-between gap-4 border-b border-white/[0.08] pb-4">

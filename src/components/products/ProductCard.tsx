@@ -66,7 +66,7 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({
         }`}
       >
         <Heart
-          className={`w-4 h-4 transition-all duration-200 ${
+          className={`w-4 h-4 transition-transform duration-180 ${
             isFavorite ? 'fill-[#8B5CF6] text-[#8B5CF6] scale-110' : 'scale-100'
           }`}
         />

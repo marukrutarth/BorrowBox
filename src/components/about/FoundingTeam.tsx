@@ -1,34 +1,44 @@
 import React from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { TeamMember } from '../../data/teamMembers';
+import { TEAM_PAGE_CONTENT, TeamMember } from '../../data/teamMembers';
+import {
+  TEAM_VIEWPORT_CONFIG,
+  founderGridContainerVariants,
+  teamSectionRevealVariants,
+} from '../../utils/motionVariants';
 import { FounderCard } from './FounderCard';
 
 export interface FoundingTeamProps {
   sectionHeading: string;
+  supportingText?: string;
   founders: TeamMember[];
 }
 
 export const FoundingTeam: React.FC<FoundingTeamProps> = ({
   sectionHeading,
+  supportingText = TEAM_PAGE_CONTENT.sections.foundersSupportingText,
   founders,
 }) => {
   const prefersReducedMotion = useReducedMotion();
 
   return (
     <section
+      id="team-section-founding-team"
+      data-testid="team-section-founding-team"
       aria-labelledby="founding-team-heading"
-      className="py-10 sm:py-14 border-b border-white/[0.08]"
+      className="py-10 sm:py-12 lg:py-14 border-b border-white/[0.08]"
     >
+      {/* Section Heading & Supporting Text */}
       <motion.div
-        initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.3 }}
-        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-        className="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-3"
+        initial={prefersReducedMotion ? false : 'hidden'}
+        whileInView="visible"
+        viewport={TEAM_VIEWPORT_CONFIG}
+        variants={teamSectionRevealVariants}
+        className="mb-8 sm:mb-10 flex flex-col sm:flex-row sm:items-end justify-between gap-3"
       >
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#A78BFA] mb-1.5">
-            Primary Leadership · 01–04
+            Section 02 · Co-Founders
           </p>
           <h2
             id="founding-team-heading"
@@ -38,16 +48,23 @@ export const FoundingTeam: React.FC<FoundingTeamProps> = ({
           </h2>
         </div>
         <p className="text-xs sm:text-sm text-[#94A3B8] max-w-md">
-          Four co-founders establishing BorrowBox&apos;s marketplace vision,
-          community focus and everyday accessibility.
+          {supportingText}
         </p>
       </motion.div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
+      {/* All 4 Founders Visible Simultaneously: 4 columns on desktop, 2x2 on tablet, 1 column on mobile */}
+      <motion.div
+        data-testid="founders-simultaneous-grid"
+        initial={prefersReducedMotion ? false : 'hidden'}
+        whileInView="visible"
+        viewport={TEAM_VIEWPORT_CONFIG}
+        variants={founderGridContainerVariants}
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 lg:gap-6 items-stretch"
+      >
         {founders.map((founder, idx) => (
           <FounderCard key={founder.id} founder={founder} index={idx} />
         ))}
-      </div>
+      </motion.div>
     </section>
   );
 };

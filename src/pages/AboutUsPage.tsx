@@ -1,17 +1,13 @@
 import React from 'react';
 import {
   ArrowLeft,
-  ArrowRight,
-  Camera,
   Compass,
   DollarSign,
-  Heart,
   Layers,
   Leaf,
   Plus,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
   Users,
   Zap,
 } from 'lucide-react';
@@ -22,6 +18,7 @@ import { BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH } from '../utils/introAnimation
 import { TEAM_MEMBERS, TEAM_PAGE_CONTENT } from '../data/teamMembers';
 import { TeamIntroduction } from '../components/about/TeamIntroduction';
 import { TeamScrollShowcase } from '../components/about/TeamScrollShowcase';
+import { EASE_OUT_EXPO } from '../utils/motionVariants';
 
 interface AboutUsPageProps {
   onNavigate: (route: PageRoute) => void;
@@ -98,13 +95,9 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
 
   return (
     <div className="min-h-screen bg-[#0B0F19] text-[#F8FAFC] relative overflow-x-clip">
-      {/* Ambient Lighting */}
+      {/* Lightweight Radial Gradient Atmosphere (Eliminates blur-[160px] GPU overdraw) */}
       <div
-        className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[1200px] h-[400px] rounded-full bg-[#8B5CF6]/12 blur-[160px]"
-        aria-hidden="true"
-      />
-      <div
-        className="pointer-events-none absolute top-[900px] -right-40 w-[500px] h-[500px] rounded-full bg-[#06B6D4]/8 blur-[140px]"
+        className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-[1200px] h-[420px] bg-[radial-gradient(ellipse_at_top,rgba(139,92,246,0.12)_0%,rgba(11,15,25,0)_72%)]"
         aria-hidden="true"
       />
 
@@ -117,7 +110,7 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
               onNavigate({ page: 'home' });
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className="inline-flex items-center gap-2 text-xs sm:text-sm font-medium text-[#94A3B8] hover:text-[#F8FAFC] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 text-xs sm:text-sm font-medium text-[#94A3B8] hover:text-[#F8FAFC] bb-btn-interactive cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4 text-[#8B5CF6]" />
             <span>Back to Marketplace</span>
@@ -135,15 +128,17 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
             {/* Left Hero Text */}
             <motion.div
-              initial={prefersReducedMotion ? false : { opacity: 0, y: 16 }}
+              initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: 0.42, ease: EASE_OUT_EXPO }}
               className="lg:col-span-7 space-y-6"
             >
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#161E2E] border border-white/[0.08] text-xs font-semibold text-[#A78BFA]">
                 <img
                   src={BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH}
                   alt=""
+                  width={16}
+                  height={16}
                   className="w-4 h-4 object-contain"
                 />
                 <span>The Peer-to-Peer Rental Marketplace</span>
@@ -157,7 +152,8 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
               </h1>
 
               <p className="text-base sm:text-xl text-[#94A3B8] max-w-2xl leading-relaxed">
-                BorrowBox makes it easier to access the things you need and earn from the things you already own.
+                BorrowBox makes it easier to access the things you need and earn
+                from the things you already own.
               </p>
 
               <div className="flex flex-wrap items-center gap-3 pt-2">
@@ -167,7 +163,7 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
                     onNavigate({ page: 'browse' });
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs sm:text-sm font-semibold transition-all shadow-lg shadow-[#8B5CF6]/20 cursor-pointer"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs sm:text-sm font-semibold bb-glow-button cursor-pointer"
                 >
                   <Compass className="w-4 h-4" />
                   <span>Explore Items</span>
@@ -179,7 +175,7 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
                     onNavigate({ page: 'list-item' });
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#161E2E] hover:bg-[#1D293B] border border-white/[0.08] text-xs sm:text-sm font-semibold text-[#F8FAFC] transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#161E2E] hover:bg-[#1D293B] border border-white/[0.08] text-xs sm:text-sm font-semibold text-[#F8FAFC] bb-btn-interactive cursor-pointer"
                 >
                   <Plus className="w-4 h-4 text-[#8B5CF6]" />
                   <span>List Your Item</span>
@@ -189,9 +185,11 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
 
             {/* Right Hero Image Composition */}
             <motion.div
-              initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.96 }}
+              initial={
+                prefersReducedMotion ? false : { opacity: 0, scale: 0.975 }
+              }
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.6, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: 0.46, delay: 0.08, ease: EASE_OUT_EXPO }}
               className="lg:col-span-5 relative"
             >
               <div className="relative rounded-3xl bg-gradient-to-br from-[#161E2E] to-[#111827] border border-white/[0.12] p-4 shadow-2xl overflow-hidden group">
@@ -199,11 +197,14 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
                   <img
                     src={PRODUCT_IMAGES.sony_camera}
                     alt="Sony Alpha Full Frame Mirrorless Camera on BorrowBox"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                    width={640}
+                    height={480}
+                    decoding="async"
+                    className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-200 ease-out"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F19]/80 via-transparent to-transparent" />
                   <div className="absolute bottom-4 left-4 right-4">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-[#A78BFA] bg-[#0B0F19]/80 backdrop-blur-md px-2 py-0.5 rounded">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-[#A78BFA] bg-[#0B0F19]/85 px-2 py-0.5 rounded">
                       Featured Marketplace Gear
                     </span>
                     <h3 className="text-base font-bold text-[#F8FAFC] mt-1 truncate">
@@ -216,13 +217,17 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
                 </div>
 
                 {/* Overlaid Floating Feature Badge */}
-                <div className="absolute -bottom-2 -right-2 p-3 rounded-2xl bg-[#0B0F19]/90 backdrop-blur-md border border-white/[0.12] shadow-xl flex items-center gap-3">
+                <div className="absolute -bottom-2 -right-2 p-3 rounded-2xl bg-[#0B0F19]/95 border border-white/[0.12] shadow-xl flex items-center gap-3">
                   <div className="w-8 h-8 rounded-xl bg-[#8B5CF6]/20 flex items-center justify-center text-[#8B5CF6]">
                     <ShieldCheck className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-[#F8FAFC]">100% Verified</div>
-                    <div className="text-[10px] text-[#94A3B8]">Escrow Deposit Security</div>
+                    <div className="text-xs font-bold text-[#F8FAFC]">
+                      100% Verified
+                    </div>
+                    <div className="text-[10px] text-[#94A3B8]">
+                      Escrow Deposit Security
+                    </div>
                   </div>
                 </div>
               </div>
@@ -242,15 +247,21 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
                   <img
                     src={PRODUCT_IMAGES.camping_tent}
                     alt="Camping and Outdoor Gear"
+                    width={480}
+                    height={640}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F19]/60 to-transparent" />
                   <div className="absolute bottom-2.5 left-2.5 text-[11px] font-semibold text-[#F8FAFC]">
-                    Outdoor & Camping
+                    Outdoor &amp; Camping
                   </div>
                 </div>
                 <div className="p-4 rounded-2xl bg-[#161E2E] border border-white/[0.08]">
-                  <div className="text-2xl font-bold font-mono text-[#8B5CF6]">10% Off</div>
+                  <div className="text-2xl font-bold font-mono text-[#8B5CF6]">
+                    10% Off
+                  </div>
                   <div className="text-xs text-[#94A3B8] mt-0.5">
                     Weekly discounts on all 7+ day rentals
                   </div>
@@ -259,7 +270,9 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
 
               <div className="space-y-4 pt-6">
                 <div className="p-4 rounded-2xl bg-[#161E2E] border border-white/[0.08]">
-                  <div className="text-2xl font-bold font-mono text-[#22C55E]">₹ 0</div>
+                  <div className="text-2xl font-bold font-mono text-[#22C55E]">
+                    ₹ 0
+                  </div>
                   <div className="text-xs text-[#94A3B8] mt-0.5">
                     Zero listing fee for gear owners
                   </div>
@@ -268,11 +281,15 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
                   <img
                     src={PRODUCT_IMAGES.ps5_console}
                     alt="PlayStation 5 Console"
+                    width={480}
+                    height={640}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F19]/60 to-transparent" />
                   <div className="absolute bottom-2.5 left-2.5 text-[11px] font-semibold text-[#F8FAFC]">
-                    Gaming & Consoles
+                    Gaming &amp; Consoles
                   </div>
                 </div>
               </div>
@@ -289,11 +306,18 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
               </h2>
 
               <p className="text-sm sm:text-base text-[#94A3B8] leading-relaxed">
-                Think about the most capable things stored in modern homes: high-resolution mirrorless cameras bought for a single vacation, power drills used twice a year to mount wall shelves, camping tents folded in cupboards between annual treks, and high-end projectors resting in drawers.
+                Think about the most capable things stored in modern homes:
+                high-resolution mirrorless cameras bought for a single vacation,
+                power drills used twice a year to mount wall shelves, camping
+                tents folded in cupboards between annual treks, and high-end
+                projectors resting in drawers.
               </p>
 
               <p className="text-sm sm:text-base text-[#94A3B8] leading-relaxed">
-                Ownership imposes financial friction. It requires substantial upfront capital, ongoing depreciation, and space. Yet down the street, an aspiring filmmaker, student creator, or weekend DIYer is looking for that exact piece of equipment.
+                Ownership imposes financial friction. It requires substantial
+                upfront capital, ongoing depreciation, and space. Yet down the
+                street, an aspiring filmmaker, student creator, or weekend DIYer
+                is looking for that exact piece of equipment.
               </p>
 
               <div className="p-5 rounded-2xl bg-[#161E2E] border border-white/[0.08] space-y-2">
@@ -301,7 +325,10 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
                   Connecting People Who Need With People Who Own
                 </h4>
                 <p className="text-xs text-[#CBD5E1] leading-relaxed">
-                  BorrowBox bridges this gap. We provide the digital verification infrastructure, calendar booking, handover verification codes, and security deposit escrow that enable neighbors to share resources with total confidence.
+                  BorrowBox bridges this gap. We provide the digital
+                  verification infrastructure, calendar booking, handover
+                  verification codes, and security deposit escrow that enable
+                  neighbors to share resources with total confidence.
                 </p>
               </div>
             </div>
@@ -314,13 +341,14 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
         <section className="py-16 sm:py-24 border-b border-white/[0.08]">
           <div className="text-center max-w-2xl mx-auto mb-12 space-y-3">
             <span className="text-xs font-mono uppercase tracking-wider text-[#A78BFA]">
-              Purpose & Long-Term Horizon
+              Purpose &amp; Long-Term Horizon
             </span>
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-[#F8FAFC]">
               Our Mission and Vision
             </h2>
             <p className="text-sm text-[#94A3B8]">
-              Two complementary commitments guiding every feature we architect into BorrowBox.
+              Two complementary commitments guiding every feature we architect
+              into BorrowBox.
             </p>
           </div>
 
@@ -334,10 +362,14 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
                 Our Mission
               </span>
               <h3 className="text-2xl font-bold text-[#F8FAFC]">
-                Lower the Barriers to Creative & Practical Ambition
+                Lower the Barriers to Creative &amp; Practical Ambition
               </h3>
               <p className="text-sm text-[#94A3B8] leading-relaxed">
-                To unlock the latent utility of quality equipment in neighborhoods across India. We believe creative projects, video shoots, weekend hobbies, and home renovations should never be cancelled simply because high-end equipment costs too much to purchase outright.
+                To unlock the latent utility of quality equipment in
+                neighborhoods across India. We believe creative projects, video
+                shoots, weekend hobbies, and home renovations should never be
+                cancelled simply because high-end equipment costs too much to
+                purchase outright.
               </p>
             </div>
 
@@ -353,7 +385,11 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
                 A Circular, Community-Powered Sharing Economy
               </h3>
               <p className="text-sm text-[#94A3B8] leading-relaxed">
-                A sustainable future where temporary access replaces unnecessary ownership as the default instinct. A circular neighborhood network where resources flow efficiently, items are valued and preserved, and community members earn directly from the belongings they maintain.
+                A sustainable future where temporary access replaces unnecessary
+                ownership as the default instinct. A circular neighborhood
+                network where resources flow efficiently, items are valued and
+                preserved, and community members earn directly from the
+                belongings they maintain.
               </p>
             </div>
           </div>
@@ -371,7 +407,8 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
               Why Choose BorrowBox?
             </h2>
             <p className="text-sm text-[#94A3B8]">
-              Engineered from the ground up for transparent, safe, peer-to-peer equipment rentals.
+              Engineered from the ground up for transparent, safe, peer-to-peer
+              equipment rentals.
             </p>
           </div>
 
@@ -379,12 +416,14 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
             {WHY_BORROWBOX_BENEFITS.map((benefit, idx) => (
               <div
                 key={idx}
-                className="p-6 rounded-2xl bg-[#161E2E] border border-white/[0.08] hover:border-white/[0.18] transition-all space-y-3"
+                className="p-6 rounded-2xl bg-[#161E2E] border border-white/[0.08] hover:border-white/[0.16] transition-colors duration-200 space-y-3"
               >
                 <div className="w-10 h-10 rounded-xl bg-[#1D293B] border border-white/[0.06] flex items-center justify-center">
                   {benefit.icon}
                 </div>
-                <h3 className="text-base font-bold text-[#F8FAFC]">{benefit.title}</h3>
+                <h3 className="text-base font-bold text-[#F8FAFC]">
+                  {benefit.title}
+                </h3>
                 <p className="text-xs text-[#94A3B8] leading-relaxed">
                   {benefit.description}
                 </p>
@@ -397,10 +436,12 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
                 <Layers className="w-5 h-5" />
               </div>
               <h3 className="text-base font-bold text-[#F8FAFC]">
-                36 States & Union Territories
+                36 States &amp; Union Territories
               </h3>
               <p className="text-xs text-[#CBD5E1] leading-relaxed">
-                Active community peer rentals across all 28 states and 8 union territories with verified neighborhood pickup locations throughout India.
+                Active community peer rentals across all 28 states and 8 union
+                territories with verified neighborhood pickup locations
+                throughout India.
               </p>
             </div>
           </div>
@@ -418,7 +459,8 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
               Our Values
             </h2>
             <p className="text-sm text-[#94A3B8]">
-              The commitments that shape our product decisions, safety rules, and moderation policies.
+              The commitments that shape our product decisions, safety rules,
+              and moderation policies.
             </p>
           </div>
 
@@ -431,7 +473,9 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
                 <div className="text-xs font-mono font-bold text-[#8B5CF6]">
                   {val.number}
                 </div>
-                <h3 className="text-sm font-bold text-[#F8FAFC]">{val.title}</h3>
+                <h3 className="text-sm font-bold text-[#F8FAFC]">
+                  {val.title}
+                </h3>
                 <p className="text-xs text-[#94A3B8] leading-relaxed">
                   {val.description}
                 </p>
@@ -462,14 +506,15 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
         <section className="py-16 sm:py-20 text-center">
           <div className="max-w-3xl mx-auto p-8 sm:p-12 rounded-3xl bg-gradient-to-b from-[#161E2E] to-[#111827] border border-white/[0.12] space-y-6 shadow-2xl relative overflow-hidden">
             <div
-              className="pointer-events-none absolute inset-x-0 -top-24 h-48 bg-[#8B5CF6]/15 blur-3xl"
+              className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-[radial-gradient(ellipse_at_top,rgba(139,92,246,0.18)_0%,rgba(17,24,39,0)_75%)]"
               aria-hidden="true"
             />
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-[#F8FAFC]">
               Make More Possible with BorrowBox.
             </h2>
             <p className="text-sm sm:text-base text-[#94A3B8] max-w-xl mx-auto leading-relaxed">
-              Join thousands of neighbors across Indian cities discovering the freedom of temporary access and community earnings.
+              Join thousands of neighbors across Indian cities discovering the
+              freedom of temporary access and community earnings.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
               <button
@@ -478,7 +523,7 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
                   onNavigate({ page: 'browse' });
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs sm:text-sm font-semibold transition-all shadow-lg shadow-[#8B5CF6]/20 cursor-pointer"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs sm:text-sm font-semibold bb-glow-button cursor-pointer"
               >
                 <Compass className="w-4 h-4" />
                 <span>Explore Items</span>
@@ -490,7 +535,7 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
                   onNavigate({ page: 'list-item' });
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-xs sm:text-sm font-semibold text-[#F8FAFC] transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-xs sm:text-sm font-semibold text-[#F8FAFC] bb-btn-interactive cursor-pointer"
               >
                 <Plus className="w-4 h-4 text-[#8B5CF6]" />
                 <span>List Your Item</span>

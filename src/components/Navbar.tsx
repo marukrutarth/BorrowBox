@@ -83,7 +83,8 @@ const NavbarComponent: React.FC<NavbarProps> = ({
 
   useEffect(() => {
     const onScroll = () => {
-      setIsScrolled(window.scrollY > 12);
+      const next = window.scrollY > 12;
+      setIsScrolled((prev) => (prev === next ? prev : next));
     };
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -116,10 +117,8 @@ const NavbarComponent: React.FC<NavbarProps> = ({
         initial={prefersReducedMotion ? false : 'hidden'}
         animate="visible"
         variants={headerEntranceVariants}
-        className={`sticky top-0 z-40 transition-colors duration-200 border-b border-white/[0.08] ${
-          isScrolled
-            ? 'bg-[#0B0F19]/95 backdrop-blur-md'
-            : 'bg-[#0B0F19]/85 backdrop-blur-sm'
+        className={`sticky top-0 z-40 transition-colors duration-180 border-b border-white/[0.08] backdrop-blur-xs ${
+          isScrolled ? 'bg-[#0B0F19]/95' : 'bg-[#0B0F19]/88'
         }`}
       >
         <DesktopHeader

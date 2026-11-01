@@ -12,9 +12,9 @@ export interface AboutProps {
 export const About: React.FC<AboutProps> = ({ onNavigate }) => {
   return (
     <div className="relative min-h-screen bg-[#0B0F19] text-[#F8FAFC] py-8 sm:py-12 lg:py-14 px-4 sm:px-6 lg:px-8 overflow-x-clip">
-      {/* Restrained Atmospheric Illumination */}
+      {/* Lightweight GPU-friendly radial gradient atmosphere (no expensive blur overdraw) */}
       <div
-        className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[960px] h-[360px] rounded-full bg-[#8B5CF6]/10 blur-[140px]"
+        className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-[1080px] h-[380px] bg-[radial-gradient(ellipse_at_top,rgba(139,92,246,0.12)_0%,rgba(11,15,25,0)_72%)]"
         aria-hidden="true"
       />
 
@@ -27,7 +27,7 @@ export const About: React.FC<AboutProps> = ({ onNavigate }) => {
               onNavigate({ page: 'home' });
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className="inline-flex items-center gap-2 text-xs sm:text-sm font-medium text-[#94A3B8] hover:text-[#F8FAFC] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 text-xs sm:text-sm font-medium text-[#94A3B8] hover:text-[#F8FAFC] bb-btn-interactive cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4 text-[#8B5CF6]" />
             <span>Back to BorrowBox</span>
@@ -39,7 +39,7 @@ export const About: React.FC<AboutProps> = ({ onNavigate }) => {
         </div>
 
         {/* Main Team Container (#111827 secondary background, rgba(255,255,255,0.08) border) */}
-        <div className="relative rounded-2xl bg-[#111827]/70 border border-white/[0.08] px-5 sm:px-8 md:px-10 lg:px-12 py-8 sm:py-10 lg:py-12">
+        <div className="relative rounded-2xl bg-[#111827] border border-white/[0.08] px-5 sm:px-8 md:px-10 lg:px-12 py-8 sm:py-10 lg:py-12">
           <TeamIntroduction
             eyebrow={TEAM_PAGE_CONTENT.intro.eyebrow}
             heading={TEAM_PAGE_CONTENT.intro.heading}
@@ -67,7 +67,7 @@ export const About: React.FC<AboutProps> = ({ onNavigate }) => {
                   onNavigate({ page: 'about' });
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#161E2E] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-semibold text-[#F8FAFC] transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#161E2E] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-semibold text-[#F8FAFC] bb-btn-interactive cursor-pointer"
               >
                 <span>About BorrowBox</span>
               </button>
@@ -78,7 +78,7 @@ export const About: React.FC<AboutProps> = ({ onNavigate }) => {
                   onNavigate({ page: 'browse' });
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold bb-glow-button cursor-pointer"
               >
                 <Compass className="w-4 h-4" />
                 <span>Explore Marketplace</span>

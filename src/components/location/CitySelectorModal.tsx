@@ -100,17 +100,18 @@ export const CitySelectorModal: React.FC<CitySelectorModalProps> = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
         onClick={onClose}
-        className="fixed inset-0 bg-black/80 backdrop-blur-md"
+        className="fixed inset-0 bg-[#0B0F19]/85 backdrop-blur-xs"
         aria-hidden="true"
       />
 
       {/* Modal Surface */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 12 }}
+        initial={{ opacity: 0, scale: 0.97, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: 12 }}
-        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+        exit={{ opacity: 0, scale: 0.97, y: 10 }}
+        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
         className="relative w-full max-w-3xl rounded-2xl bg-[#111827] border border-white/[0.12] shadow-2xl overflow-hidden flex flex-col max-h-[88vh] z-10"
       >
         {/* Header */}

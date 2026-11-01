@@ -45,11 +45,13 @@ const ProductImageComponent: React.FC<ProductImageProps> = ({
       <img
         src={resolvedSrc}
         alt={alt}
+        width={640}
+        height={480}
         loading="lazy"
         decoding="async"
         referrerPolicy="no-referrer"
         onError={() => setHasError(true)}
-        className={`w-full h-full object-cover transition-transform duration-500 ease-out ${scaleTransform}`}
+        className={`w-full h-full object-cover transition-transform duration-200 ease-out ${scaleTransform}`}
       />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0B0F19]/40 via-transparent to-transparent" />
     </div>

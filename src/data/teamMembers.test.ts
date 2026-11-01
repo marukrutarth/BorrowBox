@@ -10,7 +10,7 @@ import {
   getTechnicalLeadMember,
 } from './teamMembers';
 
-test('TEAM_PAGE_CONTENT matches exact section introduction copy', () => {
+test('TEAM_PAGE_CONTENT matches exact section headings and supporting copy', () => {
   assert.equal(TEAM_PAGE_CONTENT.intro.eyebrow, 'OUR TEAM');
   assert.equal(
     TEAM_PAGE_CONTENT.intro.heading,
@@ -20,15 +20,27 @@ test('TEAM_PAGE_CONTENT matches exact section introduction copy', () => {
     TEAM_PAGE_CONTENT.intro.description,
     'Behind every great idea is a team working to bring it to life. Meet the people building BorrowBox.'
   );
-  assert.equal(TEAM_PAGE_CONTENT.sections.foundersHeading, 'Founders');
   assert.equal(TEAM_PAGE_CONTENT.sections.guideHeading, 'Project Guide');
+  assert.equal(TEAM_PAGE_CONTENT.sections.foundersHeading, 'The Founding Team');
+  assert.equal(
+    TEAM_PAGE_CONTENT.sections.foundersSupportingText,
+    'Four people, one shared vision. Meet the team building BorrowBox.'
+  );
   assert.equal(TEAM_PAGE_CONTENT.sections.contributorHeading, 'Technical Lead');
 });
 
-test('TEAM_MEMBERS contains all 6 profiles in exact sequence: 4 Founders -> Project Guide -> Technical Lead', () => {
+test('TEAM_MEMBERS contains all 6 profiles in exact sequence: Project Guide -> 4 Founders -> Technical Lead', () => {
   assert.equal(TEAM_MEMBERS.length, 6);
 
   const expectedSequence = [
+    {
+      id: 'guide',
+      name: 'Pradeep Kumar',
+      role: 'Project Guide',
+      image: '/guide.png',
+      bio: 'Providing academic and project-level guidance, helping the team maintain direction and approach challenges thoughtfully.',
+      category: 'guide',
+    },
     {
       id: 'founder-1',
       name: 'Bhumika Khajuria',
@@ -62,14 +74,6 @@ test('TEAM_MEMBERS contains all 6 profiles in exact sequence: 4 Founders -> Proj
       category: 'founder',
     },
     {
-      id: 'guide',
-      name: 'Pradeep Kumar',
-      role: 'Project Guide',
-      image: '/guide.png',
-      bio: 'Providing academic and project-level guidance, helping the team maintain direction and approach challenges thoughtfully.',
-      category: 'guide',
-    },
-    {
       id: 'contributor',
       name: 'Krutarth Maru',
       role: 'Technical Lead',
@@ -91,17 +95,17 @@ test('TEAM_MEMBERS contains all 6 profiles in exact sequence: 4 Founders -> Proj
     assert.equal(member.category, exp.category);
   });
 
+  const guide = getGuideMember();
+  assert.equal(guide.name, 'Pradeep Kumar');
+  assert.equal(guide.role, 'Project Guide');
+  assert.equal(guide.image, '/guide.png');
+
   const founders = getFounderMembers();
   assert.equal(founders.length, 4);
   assert.deepEqual(
     founders.map((f) => f.name),
     ['Bhumika Khajuria', 'Lipi Gupta', 'Shruti Singh', 'Gauresh Sharma']
   );
-
-  const guide = getGuideMember();
-  assert.equal(guide.name, 'Pradeep Kumar');
-  assert.equal(guide.role, 'Project Guide');
-  assert.equal(guide.image, '/guide.png');
 
   const techLead = getTechnicalLeadMember();
   assert.equal(techLead.name, 'Krutarth Maru');

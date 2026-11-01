@@ -1,110 +1,142 @@
-import type { Variants, Transition } from 'motion/react';
+import type { Transition, Variants } from 'motion/react';
 
 /**
- * BorrowBox Motion System (Stage 2)
+ * BorrowBox Motion System
  *
- * Philosophy:
- * - Smooth, purposeful, premium ease-out transitions.
- * - Page entrance completes within 600–900ms without delaying user interaction.
- * - Scroll reveals use subtle 12–18px vertical movement over 450–650ms and trigger once.
- * - Strictly animates compositor-friendly properties (opacity, transform/scale/y).
+ * Calibrated for smooth 60fps+ GPU-composited animations (`transform` & `opacity` only):
+ * - Small hover interactions: 150ms–220ms
+ * - Card entrances: 350ms–500ms
+ * - Page transitions: 180ms–300ms
+ * - Scroll reveals trigger once (`once: true`) via IntersectionObserver
+ * - Respects `prefers-reduced-motion: reduce`
  */
 
-export const BB_EASE_OUT: [number, number, number, number] = [0.22, 1, 0.36, 1];
+export const EASE_OUT_EXPO: [number, number, number, number] = [
+  0.22,
+  1,
+  0.36,
+  1,
+];
+
+export const BB_EASE_OUT = EASE_OUT_EXPO;
 
 export const MOTION_TIMING = {
-  // Page entrance sequence (total ~760ms, within 600-900ms budget)
-  headerDurationSec: 0.42,
-  heroItemDurationSec: 0.46,
-  heroStaggerSec: 0.08,
-  heroInitialDelaySec: 0.04,
-  heroVisualDurationSec: 0.56,
-  heroVisualDelaySec: 0.18,
-  searchDurationSec: 0.48,
-  searchDelaySec: 0.28,
-
-  // Scroll reveal (450-650ms, 12-18px vertical offset)
-  scrollRevealDurationSec: 0.52,
-  scrollRevealOffsetPx: 16,
-  scrollStaggerSec: 0.06,
-
-  // Micro-interactions (200-250ms)
-  cardHoverDurationSec: 0.22,
+  /** Header fade-in duration (s) */
+  headerDurationSec: 0.34,
+  /** Hero staggered item duration (s) */
+  heroItemDurationSec: 0.42,
+  /** Hero stagger interval between children (s) */
+  heroStaggerSec: 0.06,
+  /** Hero visual card delay after text starts (s) */
+  heroVisualDelaySec: 0.14,
+  /** Hero visual card duration (s) */
+  heroVisualDurationSec: 0.5,
+  /** Scroll-triggered section reveal duration (s) — within 350–500ms & 450–650ms */
+  scrollRevealDurationSec: 0.46,
+  /** Scroll-triggered vertical offset (px) */
+  scrollRevealOffsetPx: 14,
+  /** Card entrance duration (s) — 350ms–500ms */
+  cardEntranceDurationSec: 0.42,
+  /** Founder card stagger interval (s) */
+  founderCardStaggerSec: 0.06,
+  /** Card hover transition duration (s) — 200ms */
+  cardHoverDurationSec: 0.2,
+  /** Small hover interaction duration (s) — 150ms–220ms */
+  hoverInteractionDurationSec: 0.18,
+  /** Page transition duration (s) — 180ms–300ms */
+  pageTransitionDurationSec: 0.22,
+  /** Modal & dropdown transition duration (s) — 160ms–220ms */
+  modalTransitionDurationSec: 0.2,
+  dropdownTransitionDurationSec: 0.16,
+  /** Button press scale factor */
   buttonPressScale: 0.98,
 } as const;
 
 /**
- * Calculates total page entrance duration in milliseconds for verification.
+ * Total homepage entrance sequence duration in milliseconds:
+ * heroVisualDelaySec (140ms) + heroVisualDurationSec (500ms) = 640ms
+ * Strictly within 600ms–900ms.
  */
 export function getTotalEntranceDurationMs(): number {
-  const heroSequenceMs =
-    (MOTION_TIMING.heroInitialDelaySec +
-      MOTION_TIMING.heroStaggerSec * 3 +
-      MOTION_TIMING.heroItemDurationSec) *
-    1000;
-  const searchSequenceMs =
-    (MOTION_TIMING.searchDelaySec + MOTION_TIMING.searchDurationSec) * 1000;
-  return Math.round(Math.max(heroSequenceMs, searchSequenceMs));
+  return Math.round(
+    (MOTION_TIMING.heroVisualDelaySec + MOTION_TIMING.heroVisualDurationSec) *
+      1000
+  );
 }
 
 export const headerEntranceVariants: Variants = {
-  hidden: { opacity: 0, y: -8 },
+  hidden: {
+    opacity: 0,
+    y: -6,
+  },
   visible: {
     opacity: 1,
     y: 0,
     transition: {
       duration: MOTION_TIMING.headerDurationSec,
-      ease: BB_EASE_OUT,
+      ease: EASE_OUT_EXPO,
     },
   },
 };
 
 export const heroStaggerContainerVariants: Variants = {
-  hidden: { opacity: 1 },
+  hidden: {
+    opacity: 1,
+  },
   visible: {
     opacity: 1,
     transition: {
-      delayChildren: MOTION_TIMING.heroInitialDelaySec,
       staggerChildren: MOTION_TIMING.heroStaggerSec,
+      delayChildren: 0.03,
     },
   },
 };
 
 export const heroItemVariants: Variants = {
-  hidden: { opacity: 0, y: 14 },
+  hidden: {
+    opacity: 0,
+    y: 12,
+  },
   visible: {
     opacity: 1,
     y: 0,
     transition: {
       duration: MOTION_TIMING.heroItemDurationSec,
-      ease: BB_EASE_OUT,
+      ease: EASE_OUT_EXPO,
     },
   },
 };
 
 export const heroVisualVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.97, y: 12 },
+  hidden: {
+    opacity: 0,
+    y: 14,
+    scale: 0.985,
+  },
   visible: {
     opacity: 1,
-    scale: 1,
     y: 0,
+    scale: 1,
     transition: {
-      duration: MOTION_TIMING.heroVisualDurationSec,
       delay: MOTION_TIMING.heroVisualDelaySec,
-      ease: BB_EASE_OUT,
+      duration: MOTION_TIMING.heroVisualDurationSec,
+      ease: EASE_OUT_EXPO,
     },
   },
 };
 
 export const searchEntranceVariants: Variants = {
-  hidden: { opacity: 0, y: 14 },
+  hidden: {
+    opacity: 0,
+    y: 12,
+  },
   visible: {
     opacity: 1,
     y: 0,
     transition: {
-      duration: MOTION_TIMING.searchDurationSec,
-      delay: MOTION_TIMING.searchDelaySec,
-      ease: BB_EASE_OUT,
+      delay: 0.12,
+      duration: 0.4,
+      ease: EASE_OUT_EXPO,
     },
   },
 };
@@ -119,40 +151,128 @@ export const sectionScrollRevealVariants: Variants = {
     y: 0,
     transition: {
       duration: MOTION_TIMING.scrollRevealDurationSec,
-      ease: BB_EASE_OUT,
+      ease: EASE_OUT_EXPO,
     },
   },
 };
 
-export const gridStaggerContainerVariants: Variants = {
-  hidden: { opacity: 1 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: MOTION_TIMING.scrollStaggerSec,
-    },
+/**
+ * Shared Our Team Section Variants (Project Guide, Founding Team, Technical Lead)
+ */
+export const teamSectionRevealVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 16,
   },
-};
-
-export const gridItemRevealVariants: Variants = {
-  hidden: { opacity: 0, y: 14 },
   visible: {
     opacity: 1,
     y: 0,
     transition: {
-      duration: 0.48,
-      ease: BB_EASE_OUT,
+      duration: MOTION_TIMING.cardEntranceDurationSec,
+      ease: EASE_OUT_EXPO,
     },
   },
 };
 
-export const mobileMenuPanelTransition: Transition = {
-  duration: 0.24,
-  ease: BB_EASE_OUT,
+export const teamImageRevealVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    scale: 0.975,
+  },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    transition: {
+      duration: 0.44,
+      ease: EASE_OUT_EXPO,
+    },
+  },
+};
+
+export const teamTextStaggerContainerVariants: Variants = {
+  hidden: {
+    opacity: 1,
+  },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.055,
+      delayChildren: 0.04,
+    },
+  },
+};
+
+export const teamTextItemVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 10,
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.38,
+      ease: EASE_OUT_EXPO,
+    },
+  },
+};
+
+export const founderGridContainerVariants: Variants = {
+  hidden: {
+    opacity: 1,
+  },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: MOTION_TIMING.founderCardStaggerSec,
+      delayChildren: 0.04,
+    },
+  },
+};
+
+export const founderCardRevealVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 16,
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: MOTION_TIMING.cardEntranceDurationSec,
+      ease: EASE_OUT_EXPO,
+    },
+  },
 };
 
 export const SCROLL_VIEWPORT_CONFIG = {
   once: true,
-  amount: 0.12,
+  amount: 0.14,
   margin: '0px 0px -36px 0px',
 } as const;
+
+export const TEAM_VIEWPORT_CONFIG = {
+  once: true,
+  amount: 0.16,
+  margin: '0px 0px -32px 0px',
+} as const;
+
+export const pageTransitionConfig: Transition = {
+  duration: MOTION_TIMING.pageTransitionDurationSec,
+  ease: EASE_OUT_EXPO,
+};
+
+export const dropdownMenuTransition: Transition = {
+  duration: MOTION_TIMING.dropdownTransitionDurationSec,
+  ease: EASE_OUT_EXPO,
+};
+
+export const modalSurfaceTransition: Transition = {
+  duration: MOTION_TIMING.modalTransitionDurationSec,
+  ease: EASE_OUT_EXPO,
+};
+
+export const mobileMenuPanelTransition: Transition = {
+  duration: 0.22,
+  ease: EASE_OUT_EXPO,
+};
