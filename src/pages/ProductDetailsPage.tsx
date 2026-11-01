@@ -27,6 +27,7 @@ import {
 import { ProductImage } from '../components/ProductImage';
 import { ProductCard } from '../components/ProductCard';
 import { PageRoute } from '../components/Navbar';
+import { CheckoutModal } from '../components/checkout/CheckoutModal';
 
 interface ProductDetailsPageProps {
   listing: ProductListing | undefined;
@@ -58,6 +59,7 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedBooking, setSubmittedBooking] =
     useState<RentalBookingRecord | null>(null);
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
 
   // Phase 4 Rent-vs-Buy Calculator state
   const [plannedDaysPerYear, setPlannedDaysPerYear] = useState(6);
@@ -907,11 +909,21 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
                   )}
 
                   <button
+                    type="button"
+                    onClick={() => setIsCheckoutModalOpen(true)}
+                    disabled={!dateAvailability.available}
+                    className="w-full py-3 px-4 bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] hover:from-[#7C3AED] hover:to-[#6D28D9] disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-all bb-glow-button cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Proceed to 5-Step Secure Checkout</span>
+                  </button>
+
+                  <button
                     type="submit"
                     disabled={isSubmitting || !dateAvailability.available}
-                    className="w-full py-3 px-4 bg-[#8B5CF6] hover:bg-[#7C3AED] disabled:bg-[#1D293B] disabled:text-[#94A3B8] text-white text-sm font-semibold rounded-xl transition-all bb-glow-button cursor-pointer"
+                    className="w-full py-2.5 px-4 bg-[#161E2E] hover:bg-[#1D293B] border border-white/[0.1] disabled:bg-[#1D293B] disabled:text-[#94A3B8] text-slate-300 hover:text-white text-xs font-semibold rounded-xl transition-all cursor-pointer"
                   >
-                    {isSubmitting ? 'Submitting Request...' : 'Request Rental'}
+                    {isSubmitting ? 'Submitting Request...' : 'Quick Book with Saved Details'}
                   </button>
 
                   <div className="flex items-center justify-center gap-1.5 text-xs text-[#94A3B8] pt-1">
@@ -953,6 +965,21 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
             </div>
           </div>
         )}
+
+        {/* Checkout Modal */}
+        <CheckoutModal
+          isOpen={isCheckoutModalOpen}
+          onClose={() => setIsCheckoutModalOpen(false)}
+          listing={listing}
+          startDate={startDate}
+          endDate={endDate}
+          demoUser={demoUser}
+          existingBookings={existingBookingsForListing}
+          onBookingConfirmed={(booking) => {
+            onSubmitBooking(booking);
+            setSubmittedBooking(booking);
+          }}
+        />
       </div>
     </div>
   );

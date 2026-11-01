@@ -20,6 +20,8 @@ import {
   Upload,
   User,
   XCircle,
+  FileText,
+  Printer,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import {
@@ -43,6 +45,7 @@ import {
   isListingAvailableForDates,
 } from '../utils/rentalLogic';
 import { PageRoute } from '../components/Navbar';
+import { InvoiceModal } from '../components/billing/InvoiceModal';
 
 interface DashboardPageProps {
   userProfile: BorrowBoxUserProfile;
@@ -184,8 +187,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onMarkNotificationsRead,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'borrower' | 'lender' | 'trust'
+    'overview' | 'borrower' | 'lender' | 'trust' | 'billing'
   >(userProfile.activeMode === 'owner' ? 'lender' : 'borrower');
+
+  // Invoice modal state
+  const [selectedInvoiceBooking, setSelectedInvoiceBooking] =
+    useState<RentalBookingRecord | null>(null);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
 
   // Expanded booking panel states
   const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
@@ -565,15 +573,29 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() =>
-              onNavigate({ page: 'details', itemId: booking.listingId })
-            }
-            className="text-xs font-semibold text-[#8B5CF6] hover:text-[#A78BFA] cursor-pointer"
-          >
-            View Item Page →
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedInvoiceBooking(booking);
+                setIsInvoiceModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-medium text-[#F8FAFC] cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5 text-[#8B5CF6]" />
+              <span>Tax Invoice</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                onNavigate({ page: 'details', itemId: booking.listingId })
+              }
+              className="text-xs font-semibold text-[#8B5CF6] hover:text-[#A78BFA] cursor-pointer"
+            >
+              View Item Page →
+            </button>
+          </div>
         </div>
 
         {/* Expanded Handover, QR Verification, Condition Photos, Messaging & Review Panel */}
@@ -1099,6 +1121,26 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 ({notifications.filter((n) => !n.read).length})
               </span>
             </button>
+
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'billing'}
+              onClick={() => setActiveTab('billing')}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                activeTab === 'billing'
+                  ? 'bg-[#8B5CF6] text-white'
+                  : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#161E2E]'
+              }`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                <span>Billing & Invoices</span>
+              </span>
+              <span className="font-mono-tabular">
+                ({myBorrowerBookings.length + myLenderBookings.length})
+              </span>
+            </button>
           </aside>
 
           {/* Right Main Content Viewport */}
@@ -1500,9 +1542,112 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 </div>
               </div>
             )}
+
+            {activeTab === 'billing' && (
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/[0.08]">
+                  <div>
+                    <h2 className="text-lg font-bold text-[#F8FAFC]">
+                      Billing & Invoices
+                    </h2>
+                    <p className="text-xs text-[#94A3B8]">
+                      Complete payment records, escrow holds, and printable tax receipts for all your rentals.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 rounded-lg bg-[#8B5CF6]/15 border border-[#8B5CF6]/30 text-xs font-semibold text-[#C4B5FD]">
+                      {myBorrowerBookings.length + myLenderBookings.length} Total Transactions
+                    </span>
+                  </div>
+                </div>
+
+                {myBorrowerBookings.length + myLenderBookings.length === 0 ? (
+                  <div className="p-12 text-center rounded-xl bg-[#161E2E] border border-white/[0.08] space-y-3">
+                    <FileText className="w-10 h-10 text-[#64748B] mx-auto" />
+                    <h3 className="text-sm font-semibold text-[#F8FAFC]">
+                      No Billing History Yet
+                    </h3>
+                    <p className="text-xs text-[#94A3B8] max-w-sm mx-auto">
+                      When you rent gear or accept a rental request from another member, all itemised tax invoices and receipts will appear here.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate({ page: 'browse' })}
+                      className="px-4 py-2 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold rounded-lg cursor-pointer"
+                    >
+                      Explore Rentals
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {[...myBorrowerBookings, ...myLenderBookings]
+                      .sort(
+                        (a, b) =>
+                          new Date(b.createdAtISO).getTime() -
+                          new Date(a.createdAtISO).getTime()
+                      )
+                      .map((b) => (
+                        <div
+                          key={b.id}
+                          className="p-4 rounded-xl bg-[#161E2E] border border-white/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="font-mono font-bold text-[#F8FAFC]">
+                                {b.id}
+                              </span>
+                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 capitalize">
+                                {b.status}
+                              </span>
+                              <span className="text-[#94A3B8]">
+                                {new Date(b.createdAtISO).toLocaleDateString('en-IN')}
+                              </span>
+                            </div>
+                            <h4 className="text-sm font-semibold text-[#F8FAFC]">
+                              {b.listingTitle}
+                            </h4>
+                            <p className="text-xs text-[#94A3B8]">
+                              {b.borrowerId === userProfile.uid ? 'Rented by you' : `Rented to ${b.borrowerName}`} • {b.days} days ({b.startDate} to {b.endDate})
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
+                              <p className="text-sm font-bold text-[#8B5CF6] font-mono">
+                                {formatINR(b.totalUpfrontINR)}
+                              </p>
+                              <p className="text-[11px] text-[#94A3B8]">
+                                Incl. {formatINR(b.refundableDepositINR)} deposit
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedInvoiceBooking(b);
+                                setIsInvoiceModalOpen(true);
+                              }}
+                              className="px-3.5 py-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-xs font-semibold text-[#F8FAFC] flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              <span>View / Print Invoice</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Invoice Modal */}
+      <InvoiceModal
+        isOpen={isInvoiceModalOpen}
+        onClose={() => setIsInvoiceModalOpen(false)}
+        booking={selectedInvoiceBooking}
+      />
     </div>
   );
 };

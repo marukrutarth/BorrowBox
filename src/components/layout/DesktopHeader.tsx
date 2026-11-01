@@ -28,6 +28,7 @@ import {
 import { ALL_CATEGORIES, ALL_CITIES } from '../../utils/rentalLogic';
 import { BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH } from '../../utils/introAnimation';
 import { PageRoute } from '../Navbar';
+import { CitySelectorModal } from '../location/CitySelectorModal';
 
 export interface DesktopHeaderProps {
   currentRoute: PageRoute;
@@ -85,6 +86,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
   const [searchOpen, setSearchOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [isCityModalOpen, setIsCityModalOpen] = useState(false);
 
   const categoriesRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLDivElement | null>(null);
@@ -264,6 +266,20 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
           }`}
         >
           How It Works
+        </button>
+
+        {/* City Selector Button */}
+        <button
+          type="button"
+          onClick={() => setIsCityModalOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/[0.08] bg-[#161E2E] hover:border-[#8B5CF6]/50 text-xs text-[#E2E8F0] hover:text-[#F8FAFC] transition-colors cursor-pointer"
+          title="Select your city or region"
+        >
+          <MapPin className="w-3.5 h-3.5 text-[#8B5CF6]" />
+          <span className="font-medium max-w-[110px] truncate">
+            {selectedCity === 'All' ? 'Select your city' : selectedCity}
+          </span>
+          <ChevronDown className="w-3 h-3 text-[#64748B]" />
         </button>
       </nav>
 
@@ -743,6 +759,13 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
           </AnimatePresence>
         </div>
       </div>
+
+      <CitySelectorModal
+        isOpen={isCityModalOpen}
+        onClose={() => setIsCityModalOpen(false)}
+        selectedCity={selectedCity === 'All' ? null : selectedCity}
+        onSelectCity={(c) => onCityChange(c ? (c as IndianCity) : 'All')}
+      />
     </div>
   );
 };

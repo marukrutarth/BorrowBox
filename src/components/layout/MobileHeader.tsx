@@ -33,6 +33,7 @@ import { ALL_CATEGORIES, ALL_CITIES } from '../../utils/rentalLogic';
 import { BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH } from '../../utils/introAnimation';
 import { mobileMenuPanelTransition } from '../../utils/motionVariants';
 import { PageRoute } from '../Navbar';
+import { CitySelectorModal } from '../location/CitySelectorModal';
 
 export interface MobileHeaderProps {
   currentRoute: PageRoute;
@@ -77,6 +78,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchBarOpen, setSearchBarOpen] = useState(false);
+  const [isCityModalOpen, setIsCityModalOpen] = useState(false);
   const prefersReducedMotion = useReducedMotion();
 
   const hasVerifiedAdminAccess = shouldShowAdminPanelOption(verifiedAdminRecord);
@@ -209,26 +211,19 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
               />
             </div>
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-[#161E2E] border border-white/[0.08] rounded-xl px-3 min-h-[44px] flex-1 min-w-0">
-                <MapPin className="w-4 h-4 text-[#8B5CF6] shrink-0" />
-                <select
-                  aria-label="Mobile city selector"
-                  value={selectedCity}
-                  onChange={(e) =>
-                    onCityChange(e.target.value as IndianCity | 'All')
-                  }
-                  className="w-full bg-transparent text-xs font-medium text-[#F8FAFC] focus:outline-none truncate"
-                >
-                  <option value="All" className="bg-[#111827]">
-                    All India
-                  </option>
-                  {ALL_CITIES.map((city) => (
-                    <option key={city} value={city} className="bg-[#111827]">
-                      {city}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsCityModalOpen(true)}
+                className="flex items-center justify-between gap-1.5 bg-[#161E2E] border border-white/[0.08] hover:border-[#8B5CF6]/50 rounded-xl px-3 min-h-[44px] flex-1 min-w-0 text-left cursor-pointer"
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <MapPin className="w-4 h-4 text-[#8B5CF6] shrink-0" />
+                  <span className="text-xs font-medium text-[#F8FAFC] truncate">
+                    {selectedCity === 'All' ? 'Select your city' : selectedCity}
+                  </span>
+                </div>
+                <span className="text-[11px] text-[#8B5CF6] font-medium shrink-0">Change</span>
+              </button>
               <button
                 type="submit"
                 className="min-h-[44px] px-4 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold rounded-xl bb-glow-button cursor-pointer shrink-0"
@@ -447,6 +442,21 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                         type="button"
                         onClick={() => {
                           setMenuOpen(false);
+                          setIsCityModalOpen(true);
+                        }}
+                        className="w-full min-h-[44px] text-left px-3 py-2.5 rounded-xl text-sm font-medium flex items-center justify-between text-[#F8FAFC] hover:bg-[#161E2E] bb-btn-interactive cursor-pointer border border-white/[0.06]"
+                      >
+                        <span className="inline-flex items-center gap-3">
+                          <MapPin className="w-4 h-4 text-[#8B5CF6] shrink-0" />
+                          <span>Location: {selectedCity === 'All' ? 'All India' : selectedCity}</span>
+                        </span>
+                        <span className="text-xs text-[#8B5CF6]">Change</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false);
                           onOpenWishlist();
                         }}
                         className="w-full min-h-[44px] text-left px-3 py-2.5 rounded-xl text-sm font-medium text-[#F8FAFC] hover:bg-[#161E2E] flex items-center justify-between bb-btn-interactive cursor-pointer"
@@ -622,6 +632,13 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           </AnimatePresence>,
           document.body
         )}
+
+      <CitySelectorModal
+        isOpen={isCityModalOpen}
+        onClose={() => setIsCityModalOpen(false)}
+        selectedCity={selectedCity === 'All' ? null : selectedCity}
+        onSelectCity={(c) => onCityChange(c ? (c as IndianCity) : 'All')}
+      />
     </div>
   );
 };

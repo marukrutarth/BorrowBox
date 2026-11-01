@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   CategoryName,
   IndianCity,
@@ -11,7 +11,9 @@ import { SearchBar } from '../components/home/SearchBar';
 import { CategorySection } from '../components/home/CategorySection';
 import { FeaturedProducts } from '../components/home/FeaturedProducts';
 import { RecentlyAdded } from '../components/home/RecentlyAdded';
+import { MarketplaceBenefits } from '../components/home/MarketplaceBenefits';
 import { BecomeLender } from '../components/home/BecomeLender';
+import { CitySelectorModal } from '../components/location/CitySelectorModal';
 
 export interface HomePageProps {
   listings: ProductListing[];
@@ -32,6 +34,8 @@ export const HomePage: React.FC<HomePageProps> = ({
   onRetryListings,
   onNavigate,
 }) => {
+  const [isCityModalOpen, setIsCityModalOpen] = useState(false);
+
   // Active listings filtered by selected city (falling back to all active listings if city has none)
   const activeCityListings = useMemo(() => {
     const filtered = filterAndSortListings(listings, {
@@ -48,17 +52,16 @@ export const HomePage: React.FC<HomePageProps> = ({
     return activeCityListings[0] || listings[0];
   }, [activeCityListings, listings]);
 
-  // Popular Rentals (Top 4 featured products)
+  // 2. Featured Rental Items (Top 4 featured products)
   const popularRentals = useMemo(() => {
     return activeCityListings.slice(0, 4);
   }, [activeCityListings]);
 
-  // Just Listed (Sorted by actual availableFrom / timestamp descending, avoiding duplicating the top 4 Popular Rentals where possible)
+  // 3. Recently Listed Items (Sorted by recency, distinct from featured)
   const recentlyAddedListings = useMemo(() => {
     const popularIds = new Set(popularRentals.map((item) => item.id));
     const allActive = listings.filter((item) => item.status !== 'archived');
 
-    // Prioritize community-created listings and most recent availableFrom dates
     const sortedByRecency = [...allActive].sort((a, b) => {
       if (a.isDemoData !== b.isDemoData) {
         return a.isDemoData ? 1 : -1;
@@ -104,13 +107,15 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   return (
     <div className="bg-[#0B0F19] text-[#F8FAFC]">
-      {/* B. Hero Section */}
+      {/* 1. Hero Section with Top-Prominence Rent and List Actions */}
       <HeroSection
         featuredListing={heroFeaturedListing}
         onNavigate={onNavigate}
+        onOpenCitySelector={() => setIsCityModalOpen(true)}
+        selectedCity={selectedCity !== 'All' ? selectedCity : null}
       />
 
-      {/* C. Prominent Search Bar */}
+      {/* Prominent Search Bar */}
       <SearchBar
         selectedCity={selectedCity}
         onCityChange={onCityChange}
@@ -124,13 +129,13 @@ export const HomePage: React.FC<HomePageProps> = ({
         }}
       />
 
-      {/* D. Explore Categories */}
+      {/* 1. Explore Popular Categories */}
       <CategorySection
         listings={listings}
         onSelectCategory={handleSelectCategory}
       />
 
-      {/* E. Popular Rentals */}
+      {/* 2. Featured Rental Items */}
       <FeaturedProducts
         listings={popularRentals}
         isLoading={isLoadingListings}
@@ -140,19 +145,36 @@ export const HomePage: React.FC<HomePageProps> = ({
         onViewAll={handleViewAll}
       />
 
-      {/* F. Just Listed (Recently Added) */}
+      {/* 3. Recently Listed Items */}
       <RecentlyAdded
         listings={recentlyAddedListings}
         onSelectListing={handleSelectListing}
         onViewAll={handleViewAll}
       />
 
-      {/* G. Become a Lender */}
+      {/* 4. How BorrowBox Works + 5. Benefits of Renting + 6. Benefits of Listing Items */}
+      <MarketplaceBenefits onNavigate={onNavigate} />
+
+      {/* 7. Become a Lender CTA */}
       <BecomeLender
         spotlightListing={lenderSpotlightListing}
         onStartListing={() => {
           onNavigate({ page: 'list-item' });
           window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
+
+      {/* City Selector Modal */}
+      <CitySelectorModal
+        isOpen={isCityModalOpen}
+        onClose={() => setIsCityModalOpen(false)}
+        selectedCity={selectedCity !== 'All' ? selectedCity : null}
+        onSelectCity={(city) => {
+          if (!city) {
+            onCityChange('All');
+          } else {
+            onCityChange(city as IndianCity);
+          }
         }}
       />
     </div>

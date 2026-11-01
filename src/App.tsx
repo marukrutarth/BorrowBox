@@ -234,7 +234,27 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<
     CategoryName | 'All'
   >('All');
-  const [selectedCity, setSelectedCity] = useState<IndianCity | 'All'>('All');
+  const [selectedCity, setSelectedCity] = useState<IndianCity | 'All'>(() => {
+    try {
+      const saved = localStorage.getItem('borrowbox_selected_city');
+      return (saved as IndianCity) || 'All';
+    } catch {
+      return 'All';
+    }
+  });
+
+  const handleCityChange = (city: IndianCity | 'All') => {
+    setSelectedCity(city);
+    try {
+      if (city === 'All') {
+        localStorage.removeItem('borrowbox_selected_city');
+      } else {
+        localStorage.setItem('borrowbox_selected_city', city);
+      }
+    } catch {
+      // Storage unavailable
+    }
+  };
   const [selectedCondition, setSelectedCondition] = useState<
     ItemCondition | 'All'
   >('All');
@@ -847,7 +867,7 @@ export default function App() {
         <HomePage
           listings={listings}
           selectedCity={selectedCity}
-          onCityChange={setSelectedCity}
+          onCityChange={handleCityChange}
           isLoadingListings={isLoadingListings}
           listingsError={listingsError}
           onRetryListings={() => void loadCommunityData()}
@@ -1107,7 +1127,7 @@ export default function App() {
         rentalRequests={rentalRequests}
         onOpenRequestsModal={() => setIsRequestsModalOpen(true)}
         selectedCity={selectedCity}
-        onCityChange={setSelectedCity}
+        onCityChange={handleCityChange}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         unreadNotificationsCount={
