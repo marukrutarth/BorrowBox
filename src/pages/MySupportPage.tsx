@@ -285,7 +285,10 @@ export const MySupportPage: React.FC<MySupportPageProps> = ({
       setSelectedTicketId(created.id);
       setBanner({
         tone: 'success',
-        text: `Support ticket ${created.ticketNumber} created! A confirmation email ("BorrowBox Support: Your Ticket Has Been Created - ${created.ticketNumber}") has been sent to ${userProfile.email}.`,
+        text:
+          created.emailOpenedStatus === 'sent'
+            ? `Support ticket ${created.ticketNumber} created! A confirmation email ("BorrowBox Support: Your Ticket Has Been Created - ${created.ticketNumber}") has been sent to ${userProfile.email}.`
+            : `Support ticket ${created.ticketNumber} created! You can track your request and communicate with our support team directly here in My Support.`,
       });
     } catch (err) {
       setBanner({

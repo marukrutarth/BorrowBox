@@ -430,7 +430,11 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
       onTicketUpdated(updatedTicket, auditLog);
       onNotify(
         nextStatus === 'closed'
-          ? `Ticket closed and Resolution Email dispatched to ${updatedTicket.userEmail}.`
+          ? updatedTicket.emailClosedStatus === 'sent'
+            ? `Ticket closed and Resolution Email dispatched to ${updatedTicket.userEmail}.`
+            : `Ticket closed. Email notification could not be delivered (${
+                updatedTicket.emailClosedError || 'delivery failed'
+              }) — you can retry from Customer Email Notifications.`
           : `Ticket status updated to ${formatSupportStatusLabel(nextStatus)}.`,
         'success'
       );
@@ -590,6 +594,9 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
               emailClosedSentAtISO: res.sentAtISO,
               emailClosedError: res.errorMessage || '',
             };
+      if (res.historyEvent) {
+        setHistory((prev) => [res.historyEvent!, ...prev]);
+      }
       onTicketUpdated(nextTicket);
       onNotify(
         res.sent
@@ -1383,56 +1390,97 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
                   </h4>
                 </div>
                 <div className="space-y-2 text-xs">
-                  <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800">
-                    <div>
+                  <div className="flex items-start justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800">
+                    <div className="min-w-0 flex-1">
                       <p className="font-semibold text-slate-800 dark:text-slate-200">
                         1. Ticket Opened Email
                       </p>
                       <p className="text-[11px] text-slate-500">
                         Status:{' '}
-                        <span className="font-semibold uppercase">
-                          {selectedTicket.emailOpenedStatus || 'sent'}
+                        <span
+                          className={`font-semibold uppercase ${
+                            selectedTicket.emailOpenedStatus === 'failed'
+                              ? 'text-rose-600 dark:text-rose-400'
+                              : selectedTicket.emailOpenedStatus === 'sent'
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : ''
+                          }`}
+                        >
+                          {selectedTicket.emailOpenedStatus || 'pending'}
                         </span>
                       </p>
+                      {selectedTicket.emailOpenedStatus === 'failed' &&
+                        selectedTicket.emailOpenedError && (
+                          <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-0.5 break-words">
+                            {selectedTicket.emailOpenedError}
+                          </p>
+                        )}
                     </div>
                     <button
                       type="button"
                       disabled={retryingEmailType === 'TICKET_OPENED'}
                       onClick={() => handleRetryEmail('TICKET_OPENED')}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-white transition"
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] font-semibold shrink-0 transition ${
+                        selectedTicket.emailOpenedStatus === 'failed'
+                          ? 'border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100'
+                          : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-white'
+                      }`}
                     >
                       <RefreshCw className="w-3 h-3" />
                       {retryingEmailType === 'TICKET_OPENED'
                         ? 'Sending...'
+                        : selectedTicket.emailOpenedStatus === 'failed'
+                        ? 'Retry'
                         : 'Resend'}
                     </button>
                   </div>
 
-                  <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800">
-                    <div>
+                  <div className="flex items-start justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800">
+                    <div className="min-w-0 flex-1">
                       <p className="font-semibold text-slate-800 dark:text-slate-200">
                         2. Ticket Closed Email
                       </p>
                       <p className="text-[11px] text-slate-500">
                         Status:{' '}
-                        <span className="font-semibold uppercase">
+                        <span
+                          className={`font-semibold uppercase ${
+                            selectedTicket.emailClosedStatus === 'failed'
+                              ? 'text-rose-600 dark:text-rose-400'
+                              : selectedTicket.emailClosedStatus === 'sent'
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : ''
+                          }`}
+                        >
                           {selectedTicket.emailClosedStatus ||
                             (selectedTicket.status === 'closed'
-                              ? 'sent'
+                              ? 'pending'
                               : 'awaiting closure')}
                         </span>
                       </p>
+                      {selectedTicket.emailClosedStatus === 'failed' &&
+                        selectedTicket.emailClosedError && (
+                          <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-0.5 break-words">
+                            {selectedTicket.emailClosedError}
+                          </p>
+                        )}
                     </div>
-                    {selectedTicket.status === 'closed' && (
+                    {(selectedTicket.status === 'closed' ||
+                      selectedTicket.emailClosedStatus === 'failed') && (
                       <button
                         type="button"
                         disabled={retryingEmailType === 'TICKET_CLOSED'}
                         onClick={() => handleRetryEmail('TICKET_CLOSED')}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-white transition"
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] font-semibold shrink-0 transition ${
+                          selectedTicket.emailClosedStatus === 'failed'
+                            ? 'border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100'
+                            : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-white'
+                        }`}
                       >
                         <RefreshCw className="w-3 h-3" />
                         {retryingEmailType === 'TICKET_CLOSED'
                           ? 'Sending...'
+                          : selectedTicket.emailClosedStatus === 'failed'
+                          ? 'Retry'
                           : 'Resend'}
                       </button>
                     )}

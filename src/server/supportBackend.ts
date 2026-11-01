@@ -462,6 +462,12 @@ export function resolveReplyToEmail(): string {
   return (process.env.SUPPORT_REPLY_TO_EMAIL || '').trim();
 }
 
+export function isAllowedSupportEmailEvent(
+  eventType: unknown
+): eventType is 'TICKET_OPENED' | 'TICKET_CLOSED' {
+  return eventType === 'TICKET_OPENED' || eventType === 'TICKET_CLOSED';
+}
+
 async function dispatchTransactionalEmail(params: {
   recipientEmail: string;
   recipientName: string;
@@ -715,12 +721,18 @@ export function registerSupportRoutes(app: Express): void {
         ticket.emailOpenedStatus || existing?.emailOpenedStatus || 'pending',
       emailOpenedSentAtISO:
         ticket.emailOpenedSentAtISO || existing?.emailOpenedSentAtISO,
-      emailOpenedError: ticket.emailOpenedError || existing?.emailOpenedError,
+      emailOpenedError:
+        ticket.emailOpenedError !== undefined
+          ? String(ticket.emailOpenedError)
+          : existing?.emailOpenedError,
       emailClosedStatus:
         ticket.emailClosedStatus || existing?.emailClosedStatus,
       emailClosedSentAtISO:
         ticket.emailClosedSentAtISO || existing?.emailClosedSentAtISO,
-      emailClosedError: ticket.emailClosedError || existing?.emailClosedError,
+      emailClosedError:
+        ticket.emailClosedError !== undefined
+          ? String(ticket.emailClosedError)
+          : existing?.emailClosedError,
       createdAtISO: String(
         ticket.createdAtISO || existing?.createdAtISO || new Date().toISOString()
       ),
@@ -1328,12 +1340,12 @@ export function registerSupportRoutes(app: Express): void {
     }
   );
 
-  // 6. Mandatory Backend Email Notification Endpoint (Ticket Opened & Ticket Closed with Idempotency)
+  // 6. Mandatory Backend Email Notification Endpoint (Strictly TICKET_OPENED & TICKET_CLOSED with Idempotency & Retry)
   app.post('/api/support/send-email', async (req: Request, res: Response) => {
     const {
       ticketId = '',
       ticketNumber = '',
-      eventType = 'TICKET_OPENED', // 'TICKET_OPENED' | 'TICKET_CLOSED'
+      eventType = '', // Strictly 'TICKET_OPENED' | 'TICKET_CLOSED'
       customerName = 'Customer',
       customerEmail = '',
       subject = '',
@@ -1345,6 +1357,15 @@ export function registerSupportRoutes(app: Express): void {
       closedAtISO = new Date().toISOString(),
       forceRetry = false,
     } = req.body || {};
+
+    if (!isAllowedSupportEmailEvent(eventType)) {
+      res.status(400).json({
+        sent: false,
+        error:
+          'Invalid email eventType. Emails are only sent for TICKET_OPENED (ticket created) and TICKET_CLOSED (admin closes ticket).',
+      });
+      return;
+    }
 
     const cleanTicketId = String(ticketId || ticketNumber).trim();
     const cleanTicketNumber = String(ticketNumber || ticketId).trim();
@@ -1359,7 +1380,7 @@ export function registerSupportRoutes(app: Express): void {
     const idempotencyKey = `${cleanTicketId}:${eventType}`;
     const existingLog = supportStore.emailLogs[idempotencyKey];
 
-    // Idempotency guard: never send duplicate emails for the same ticket event
+    // Idempotency guard: never send duplicate emails for the same ticket event unless admin retries
     if (existingLog && existingLog.status === 'sent' && !forceRetry) {
       res.json({
         sent: true,
@@ -1406,8 +1427,7 @@ export function registerSupportRoutes(app: Express): void {
       idempotencyKey,
       ticketId: cleanTicketId,
       ticketNumber: cleanTicketNumber,
-      eventType:
-        eventType === 'TICKET_CLOSED' ? 'TICKET_CLOSED' : 'TICKET_OPENED',
+      eventType,
       fromEmail: dispatchResult.fromEmail,
       replyToEmail: dispatchResult.replyToEmail,
       recipientEmail: String(customerEmail).trim(),
@@ -1430,16 +1450,15 @@ export function registerSupportRoutes(app: Express): void {
       if (eventType === 'TICKET_OPENED') {
         storedTicket.emailOpenedStatus = dispatchResult.status;
         storedTicket.emailOpenedSentAtISO = nowISO;
-        storedTicket.emailOpenedError = dispatchResult.errorMessage;
+        storedTicket.emailOpenedError = dispatchResult.errorMessage || '';
       } else {
         storedTicket.emailClosedStatus = dispatchResult.status;
         storedTicket.emailClosedSentAtISO = nowISO;
-        storedTicket.emailClosedError = dispatchResult.errorMessage;
+        storedTicket.emailClosedError = dispatchResult.errorMessage || '';
       }
     }
 
-    const historyList = supportStore.historyByTicket[cleanTicketId] || [];
-    historyList.unshift({
+    const historyEvent: ServerSupportHistoryEvent = {
       id: `HIS-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       ticketId: cleanTicketId,
       action: dispatchResult.status === 'sent' ? 'email_sent' : 'email_failed',
@@ -1460,7 +1479,10 @@ export function registerSupportRoutes(app: Express): void {
             } email dispatched to ${customerEmail} (${emailPayload.subject}).`
           : `Automated ${eventType} email failed for ${customerEmail}: ${dispatchResult.errorMessage}`,
       createdAtISO: nowISO,
-    });
+    };
+
+    const historyList = supportStore.historyByTicket[cleanTicketId] || [];
+    historyList.unshift(historyEvent);
     supportStore.historyByTicket[cleanTicketId] = historyList;
 
     savePersistedStore();
@@ -1469,6 +1491,7 @@ export function registerSupportRoutes(app: Express): void {
       sent: dispatchResult.status === 'sent',
       idempotentDuplicateSkipped: false,
       emailLog: logRecord,
+      historyEvent,
     });
   });
 

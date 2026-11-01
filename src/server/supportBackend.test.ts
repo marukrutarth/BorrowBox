@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildTicketClosedEmailPayload,
   buildTicketOpenedEmailPayload,
+  isAllowedSupportEmailEvent,
   resolveFormattedSenderEmail,
   resolveReplyToEmail,
   sanitizeTicketForCustomer,
@@ -148,4 +149,22 @@ test('Resend Sender & Reply-To Normalization: preserves RFC 5322 formatted SUPPO
   const replyTo = resolveReplyToEmail();
   assert.equal(typeof replyTo, 'string');
 });
+
+test('Strict Email Trigger Policy: allows only TICKET_OPENED and TICKET_CLOSED and rejects replies, assignments, priority changes, and intermediate status changes', () => {
+  assert.equal(isAllowedSupportEmailEvent('TICKET_OPENED'), true);
+  assert.equal(isAllowedSupportEmailEvent('TICKET_CLOSED'), true);
+
+  // Forbidden intermediate/conversation email events
+  assert.equal(isAllowedSupportEmailEvent('ADMIN_REPLIED'), false);
+  assert.equal(isAllowedSupportEmailEvent('CUSTOMER_REPLIED'), false);
+  assert.equal(isAllowedSupportEmailEvent('TICKET_CLAIMED'), false);
+  assert.equal(isAllowedSupportEmailEvent('TICKET_ASSIGNED'), false);
+  assert.equal(isAllowedSupportEmailEvent('PRIORITY_CHANGED'), false);
+  assert.equal(isAllowedSupportEmailEvent('STATUS_IN_PROGRESS'), false);
+  assert.equal(isAllowedSupportEmailEvent('STATUS_WAITING_FOR_USER'), false);
+  assert.equal(isAllowedSupportEmailEvent('STATUS_RESOLVED'), false);
+  assert.equal(isAllowedSupportEmailEvent(''), false);
+  assert.equal(isAllowedSupportEmailEvent(undefined), false);
+});
+
 

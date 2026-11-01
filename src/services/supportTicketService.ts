@@ -356,6 +356,7 @@ export async function createCustomerSupportTicket(params: {
   }
 
   // 4. Trigger Mandatory Email 1: Ticket Opened Notification (after database transaction succeeds)
+  // If email delivery fails, ticket creation still succeeds and delivery status is recorded for admin retry.
   try {
     const emailRes = await fetch('/api/support/send-email', {
       method: 'POST',
@@ -372,17 +373,41 @@ export async function createCustomerSupportTicket(params: {
         description: newTicket.description,
       }),
     });
+    const emailData = await emailRes.json().catch(() => ({}));
     if (emailRes.ok) {
-      const emailData = await emailRes.json();
       newTicket.emailOpenedStatus = emailData.sent ? 'sent' : 'failed';
       newTicket.emailOpenedSentAtISO =
         emailData.emailLog?.sentAtISO || new Date().toISOString();
       newTicket.emailOpenedError = emailData.emailLog?.errorMessage || '';
+    } else {
+      newTicket.emailOpenedStatus = 'failed';
+      newTicket.emailOpenedSentAtISO = new Date().toISOString();
+      newTicket.emailOpenedError =
+        emailData.error ||
+        emailData.emailLog?.errorMessage ||
+        `Email dispatch failed (HTTP ${emailRes.status})`;
     }
   } catch (err) {
     newTicket.emailOpenedStatus = 'failed';
+    newTicket.emailOpenedSentAtISO = new Date().toISOString();
     newTicket.emailOpenedError =
       err instanceof Error ? err.message : 'Email service unreachable';
+  }
+
+  // Record emailOpenedStatus back to Firestore & server store (non-blocking)
+  try {
+    await setDoc(
+      doc(db, 'supportTickets', ticketId),
+      {
+        emailOpenedStatus: newTicket.emailOpenedStatus,
+        emailOpenedSentAtISO: newTicket.emailOpenedSentAtISO || nowISO,
+        emailOpenedError: newTicket.emailOpenedError || '',
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch {
+    // Non-fatal
   }
 
   return newTicket;
@@ -900,8 +925,9 @@ export async function updateSupportTicketWorkflowOrOverride(params: {
     // Non-fatal
   }
 
-  // Trigger Mandatory Email 2: Ticket Closed Notification when ticket is closed
-  if (params.newStatus === 'closed') {
+  // Trigger Mandatory Email 2: Ticket Closed Notification ONLY when an admin closes the ticket
+  // If email delivery fails, ticket closure still succeeds and delivery status is recorded for admin retry.
+  if (params.operation === 'status_change' && params.newStatus === 'closed') {
     try {
       const emailRes = await fetch('/api/support/send-email', {
         method: 'POST',
@@ -921,18 +947,42 @@ export async function updateSupportTicketWorkflowOrOverride(params: {
           closedAtISO: updatedTicket.closedAtISO || nowISO,
         }),
       });
+      const emailData = await emailRes.json().catch(() => ({}));
       if (emailRes.ok) {
-        const emailData = await emailRes.json();
         updatedTicket.emailClosedStatus = emailData.sent ? 'sent' : 'failed';
         updatedTicket.emailClosedSentAtISO =
           emailData.emailLog?.sentAtISO || nowISO;
         updatedTicket.emailClosedError =
           emailData.emailLog?.errorMessage || '';
+      } else {
+        updatedTicket.emailClosedStatus = 'failed';
+        updatedTicket.emailClosedSentAtISO = nowISO;
+        updatedTicket.emailClosedError =
+          emailData.error ||
+          emailData.emailLog?.errorMessage ||
+          `Email dispatch failed (HTTP ${emailRes.status})`;
       }
     } catch (err) {
       updatedTicket.emailClosedStatus = 'failed';
+      updatedTicket.emailClosedSentAtISO = nowISO;
       updatedTicket.emailClosedError =
         err instanceof Error ? err.message : 'Email service unreachable';
+    }
+
+    // Record emailClosedStatus back to Firestore (non-blocking)
+    try {
+      await setDoc(
+        doc(db, 'supportTickets', updatedTicket.id),
+        {
+          emailClosedStatus: updatedTicket.emailClosedStatus,
+          emailClosedSentAtISO: updatedTicket.emailClosedSentAtISO || nowISO,
+          emailClosedError: updatedTicket.emailClosedError || '',
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } catch {
+      // Non-fatal
     }
   }
 
@@ -941,6 +991,7 @@ export async function updateSupportTicketWorkflowOrOverride(params: {
 
 /**
  * Retries sending a Ticket Opened or Ticket Closed email notification.
+ * Persists the updated delivery status and history event to both the backend store and Firestore.
  */
 export async function retryTicketEmailNotification(params: {
   ticket: SupportTicketRecord;
@@ -949,6 +1000,7 @@ export async function retryTicketEmailNotification(params: {
   sent: boolean;
   sentAtISO: string;
   errorMessage?: string;
+  historyEvent?: SupportTicketHistoryEntry;
 }> {
   const response = await fetch('/api/support/send-email', {
     method: 'POST',
@@ -978,10 +1030,50 @@ export async function retryTicketEmailNotification(params: {
     throw new Error(data.error || 'Failed to retry email notification.');
   }
 
+  const sent = Boolean(data.sent);
+  const sentAtISO = data.emailLog?.sentAtISO || new Date().toISOString();
+  const errorMessage = data.emailLog?.errorMessage || '';
+  const historyEvent: SupportTicketHistoryEntry | undefined = data.historyEvent;
+
+  // Persist updated email delivery status to Firestore (non-blocking)
+  try {
+    const statusUpdate =
+      params.eventType === 'TICKET_OPENED'
+        ? {
+            emailOpenedStatus: sent ? 'sent' : 'failed',
+            emailOpenedSentAtISO: sentAtISO,
+            emailOpenedError: errorMessage,
+            updatedAt: serverTimestamp(),
+          }
+        : {
+            emailClosedStatus: sent ? 'sent' : 'failed',
+            emailClosedSentAtISO: sentAtISO,
+            emailClosedError: errorMessage,
+            updatedAt: serverTimestamp(),
+          };
+    await setDoc(
+      doc(db, 'supportTickets', params.ticket.id),
+      statusUpdate,
+      { merge: true }
+    );
+    if (historyEvent?.id) {
+      await setDoc(
+        doc(db, 'supportTickets', params.ticket.id, 'history', historyEvent.id),
+        {
+          ...historyEvent,
+          createdAt: serverTimestamp(),
+        }
+      );
+    }
+  } catch {
+    // Non-fatal
+  }
+
   return {
-    sent: Boolean(data.sent),
-    sentAtISO: data.emailLog?.sentAtISO || new Date().toISOString(),
-    errorMessage: data.emailLog?.errorMessage,
+    sent,
+    sentAtISO,
+    errorMessage: errorMessage || undefined,
+    historyEvent,
   };
 }
 
@@ -1274,10 +1366,16 @@ export async function fetchCustomerSupportTickets(
       emailOpenedSentAtISO: String(
         srv.emailOpenedSentAtISO || raw.emailOpenedSentAtISO || ''
       ),
+      emailOpenedError: String(
+        srv.emailOpenedError ?? raw.emailOpenedError ?? ''
+      ),
       emailClosedStatus: (srv.emailClosedStatus ||
         raw.emailClosedStatus) as SupportTicketRecord['emailClosedStatus'],
       emailClosedSentAtISO: String(
         srv.emailClosedSentAtISO || raw.emailClosedSentAtISO || ''
+      ),
+      emailClosedError: String(
+        srv.emailClosedError ?? raw.emailClosedError ?? ''
       ),
       createdAtISO: raw.createdAt
         ? formatFirestoreTs(raw.createdAt)
