@@ -134,6 +134,16 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
     selectedTicketIdFromParent || tickets[0]?.id || null
   );
 
+  // Two Distinct Panels: Active Tickets vs Ticket Log
+  const [adminPanelTab, setAdminPanelTab] = useState<
+    'active_tickets' | 'ticket_log'
+  >('active_tickets');
+  const [logSearchQuery, setLogSearchQuery] = useState('');
+  const [logCategoryFilter, setLogCategoryFilter] = useState<string>('all');
+  const [logStaffFilter, setLogStaffFilter] = useState<string>('all');
+  const [logPage, setLogPage] = useState(1);
+  const LOG_PAGE_SIZE = 10;
+
   // Real-time staff support notifications
   const [staffNotifications, setStaffNotifications] = useState<
     AppNotificationItem[]
@@ -200,13 +210,63 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
     return { total, unclaimed, myTickets, resolved };
   }, [tickets, currentAdmin]);
 
-  // Filtered tickets based on the 4 primary filters & simple search field
+  // Closed Tickets List for Ticket Log panel
+  const closedTicketsList = useMemo(() => {
+    return tickets.filter((t) => t.status === 'closed');
+  }, [tickets]);
+
+  const filteredClosedTickets = useMemo(() => {
+    const q = logSearchQuery.trim().toLowerCase();
+    return closedTicketsList
+      .filter((t) => {
+        if (logCategoryFilter !== 'all' && t.category !== logCategoryFilter) {
+          return false;
+        }
+        if (
+          logStaffFilter !== 'all' &&
+          t.assignedTo !== logStaffFilter &&
+          t.assignedStaffName !== logStaffFilter &&
+          t.assignedToEmail !== logStaffFilter
+        ) {
+          return false;
+        }
+        if (!q) return true;
+        const ticketRef = (t.ticketNumber || t.id || '').toLowerCase();
+        const customerName = (t.userName || '').toLowerCase();
+        const customerEmail = (t.userEmail || '').toLowerCase();
+        const subject = (t.subject || '').toLowerCase();
+
+        return (
+          ticketRef.includes(q) ||
+          t.id.toLowerCase().includes(q) ||
+          customerName.includes(q) ||
+          customerEmail.includes(q) ||
+          subject.includes(q)
+        );
+      })
+      .sort((a, b) => {
+        const timeA = a.closedAtISO || a.updatedAtISO || a.createdAtISO;
+        const timeB = b.closedAtISO || b.updatedAtISO || b.createdAtISO;
+        return timeB.localeCompare(timeA); // Most recently closed first
+      });
+  }, [closedTicketsList, logSearchQuery, logCategoryFilter, logStaffFilter]);
+
+  const totalLogPages =
+    Math.ceil(filteredClosedTickets.length / LOG_PAGE_SIZE) || 1;
+  const paginatedClosedTickets = useMemo(() => {
+    const start = (logPage - 1) * LOG_PAGE_SIZE;
+    return filteredClosedTickets.slice(start, start + LOG_PAGE_SIZE);
+  }, [filteredClosedTickets, logPage]);
+
+  // Filtered tickets based on the 4 primary filters & simple search field (excluding closed)
   const filteredTickets = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return tickets.filter((t) => {
+      if (t.status === 'closed') return false;
+
       // 1. Primary Filter
       if (primaryFilter === 'unclaimed') {
-        if (t.assignedTo || ['resolved', 'closed'].includes(t.status)) {
+        if (t.assignedTo || t.status === 'resolved') {
           return false;
         }
       } else if (primaryFilter === 'my_tickets') {
@@ -218,7 +278,7 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
               currentAdmin.email.toLowerCase());
         if (!isMine) return false;
       } else if (primaryFilter === 'resolved') {
-        if (!['resolved', 'closed'].includes(t.status)) return false;
+        if (t.status !== 'resolved') return false;
       }
 
       // 2. Simple Search (Ticket ID, Customer name, Customer email, Subject)
@@ -893,8 +953,291 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
       </div>
 
       {/* ====================================================================
-          1B. REAL-TIME STAFF SUPPORT NOTIFICATIONS
+          TWO DISTINCT PANELS: ACTIVE TICKETS VS TICKET LOG
          ==================================================================== */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-[#161E2E] border border-white/[0.08]">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setAdminPanelTab('active_tickets')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+              adminPanelTab === 'active_tickets'
+                ? 'bg-[#8B5CF6] text-white'
+                : 'bg-[#111827] text-[#94A3B8] hover:text-[#F8FAFC] border border-white/[0.07]'
+            }`}
+          >
+            <Inbox className="w-4 h-4" />
+            <span>
+              Active Tickets Panel ({tickets.filter((t) => t.status !== 'closed').length})
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdminPanelTab('ticket_log')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+              adminPanelTab === 'ticket_log'
+                ? 'bg-[#8B5CF6] text-white'
+                : 'bg-[#111827] text-[#94A3B8] hover:text-[#F8FAFC] border border-white/[0.07]'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>
+              Ticket Log (Historical Archive · {closedTicketsList.length})
+            </span>
+          </button>
+        </div>
+
+        <div className="text-xs text-[#94A3B8] font-mono">
+          {adminPanelTab === 'active_tickets'
+            ? 'Active queue for open, in-progress, waiting, & resolved tickets'
+            : 'Immutable archive of all closed support tickets & resolution summaries'}
+        </div>
+      </div>
+
+      {adminPanelTab === 'ticket_log' ? (
+        <div className="space-y-6">
+          {/* Ticket Log Search & Filters */}
+          <div className="p-4 rounded-2xl bg-[#161E2E] border border-white/[0.08] flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-4 h-4 text-[#94A3B8] absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="search"
+                value={logSearchQuery}
+                onChange={(e) => setLogSearchQuery(e.target.value)}
+                placeholder="Search closed tickets by ID, customer name, email, subject..."
+                className="w-full pl-9 pr-4 py-2 bg-[#111827] border border-white/[0.08] rounded-xl text-xs text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6]"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={logCategoryFilter}
+                onChange={(e) => setLogCategoryFilter(e.target.value)}
+                className="px-3 py-2 bg-[#111827] border border-white/[0.08] rounded-xl text-xs text-[#F8FAFC]"
+              >
+                <option value="all">All Categories</option>
+                <option value="Booking & Handover">Booking & Handover</option>
+                <option value="Payment & Deposit">Payment & Deposit</option>
+                <option value="Item Condition & Damage">Item Condition & Damage</option>
+                <option value="Account & Verification">Account & Verification</option>
+                <option value="Safety & Trust">Safety & Trust</option>
+                <option value="General Enquiry">General Enquiry</option>
+              </select>
+
+              <select
+                value={logStaffFilter}
+                onChange={(e) => setLogStaffFilter(e.target.value)}
+                className="px-3 py-2 bg-[#111827] border border-white/[0.08] rounded-xl text-xs text-[#F8FAFC]"
+              >
+                <option value="all">All Staff Closers</option>
+                {admins.map((adm) => (
+                  <option key={adm.id} value={adm.uid}>
+                    {adm.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Ticket Log Table */}
+          <div className="rounded-2xl bg-[#161E2E] border border-white/[0.08] overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-white/[0.08] bg-[#111827] text-[11px] font-semibold uppercase tracking-wider text-[#94A3B8]">
+                    <th className="py-3.5 px-4">Ticket ID</th>
+                    <th className="py-3.5 px-4">Customer</th>
+                    <th className="py-3.5 px-4">Subject</th>
+                    <th className="py-3.5 px-4">Category</th>
+                    <th className="py-3.5 px-4">Closed By Staff</th>
+                    <th className="py-3.5 px-4">Closure Date</th>
+                    <th className="py-3.5 px-4">Resolution Summary</th>
+                    <th className="py-3.5 px-4 text-right">Archive View</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.06] text-xs">
+                  {paginatedClosedTickets.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-[#94A3B8]">
+                        No closed tickets found in the Ticket Log matching your search or filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedClosedTickets.map((t) => (
+                      <tr
+                        key={t.id}
+                        onClick={() => setSelectedTicketId(t.id)}
+                        className={`transition-colors cursor-pointer ${
+                          selectedTicket?.id === t.id ? 'bg-[#8B5CF6]/10' : 'hover:bg-white/[0.02]'
+                        }`}
+                      >
+                        <td className="py-3.5 px-4 font-mono font-bold text-[#06B6D4] whitespace-nowrap">
+                          {t.ticketNumber || t.id}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="font-semibold text-[#F8FAFC]">{t.userName}</div>
+                          <div className="font-mono text-[11px] text-[#94A3B8]">{t.userEmail}</div>
+                        </td>
+                        <td className="py-3.5 px-4 max-w-[220px]">
+                          <div className="font-semibold text-[#F8FAFC] truncate">{t.subject}</div>
+                        </td>
+                        <td className="py-3.5 px-4 text-[#94A3B8] whitespace-nowrap">
+                          {t.category || 'General Enquiry'}
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div className="font-semibold text-[#F8FAFC]">
+                            {t.assignedStaffName || t.assignedToEmail || 'Support Staff'}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-[11px] text-[#94A3B8] whitespace-nowrap">
+                          {(t.closedAtISO || t.updatedAtISO || '').slice(0, 16).replace('T', ' ')}
+                        </td>
+                        <td className="py-3.5 px-4 max-w-[240px]">
+                          <div className="text-[11px] text-[#22C55E] italic truncate">
+                            &ldquo;{t.resolutionSummary || 'Resolved and closed'}&rdquo;
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTicketId(t.id)}
+                            className="px-3 py-1.5 rounded-lg bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-medium text-[#F8FAFC] cursor-pointer"
+                          >
+                            Open Archive &rarr;
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            {totalLogPages > 1 && (
+              <div className="flex items-center justify-between p-4 bg-[#111827] border-t border-white/[0.08] text-xs">
+                <span className="text-[#94A3B8]">
+                  Showing page {logPage} of {totalLogPages} ({filteredClosedTickets.length} closed tickets)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={logPage <= 1}
+                    onClick={() => setLogPage((p) => Math.max(1, p - 1))}
+                    className="px-3 py-1 rounded bg-[#161E2E] hover:bg-[#1D293B] disabled:opacity-40 text-[#F8FAFC] cursor-pointer"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    disabled={logPage >= totalLogPages}
+                    onClick={() => setLogPage((p) => Math.min(totalLogPages, p + 1))}
+                    className="px-3 py-1 rounded bg-[#161E2E] hover:bg-[#1D293B] disabled:opacity-40 text-[#F8FAFC] cursor-pointer"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Selected Closed Ticket Workspace Inspection Modal / Section */}
+          {selectedTicket && selectedTicket.status === 'closed' && (
+            <div className="p-6 rounded-2xl bg-[#161E2E] border border-[#22C55E]/30 space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-bold text-[#22C55E]">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>
+                    Closed Ticket Historical Archive Workspace · {selectedTicket.ticketNumber || selectedTicket.id}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTicketId(null)}
+                  className="p-1 rounded hover:bg-white/10 text-[#94A3B8] cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs bg-[#111827] p-4 rounded-xl border border-white/[0.07]">
+                <div>
+                  <span className="text-[#94A3B8]">Customer:</span>
+                  <div className="font-semibold text-[#F8FAFC]">
+                    {selectedTicket.userName} ({selectedTicket.userEmail})
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[#94A3B8]">Category:</span>
+                  <div className="font-semibold text-[#F8FAFC]">
+                    {selectedTicket.category || 'General'}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[#94A3B8]">Closed By:</span>
+                  <div className="font-semibold text-[#F8FAFC]">
+                    {selectedTicket.assignedStaffName || selectedTicket.assignedToEmail || 'Admin'}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[#94A3B8]">Closure Timestamp:</span>
+                  <div className="font-mono text-[#22C55E]">
+                    {selectedTicket.closedAtISO || selectedTicket.updatedAtISO}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-[#111827] border border-emerald-500/30 space-y-2">
+                <div className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                  Official Resolution Summary
+                </div>
+                <p className="text-xs text-[#F8FAFC] leading-relaxed italic">
+                  &ldquo;{selectedTicket.resolutionSummary || 'None provided'}&rdquo;
+                </p>
+              </div>
+
+              {/* Complete Conversation & Attachments preserved in Ticket Log */}
+              <div className="space-y-3">
+                <div className="text-xs font-bold uppercase tracking-wider text-[#94A3B8]">
+                  Complete Conversation & Attachments Archive
+                </div>
+                <div className="space-y-2.5 max-h-72 overflow-y-auto">
+                  {messages.map((m) => (
+                    <div
+                      key={m.id}
+                      className="p-3 rounded-xl bg-[#111827] border border-white/[0.07] space-y-1 text-xs"
+                    >
+                      <div className="flex items-center justify-between text-[10px] font-mono text-[#94A3B8]">
+                        <span className="font-bold text-[#06B6D4]">
+                          {m.senderName} ({m.senderRole})
+                        </span>
+                        <span>{m.createdAtISO.slice(0, 16).replace('T', ' ')}</span>
+                      </div>
+                      <p className="text-[#F8FAFC]">{m.message}</p>
+                      {renderAttachmentPreviewList(m.attachments || [], m.id)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {hasAdminOverride && (
+                <div className="pt-2 flex justify-end">
+                  <button
+                    type="button"
+                    disabled={updatingStatus}
+                    onClick={() => void handleAdminReopen()}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Reopen Closed Ticket via Admin Override</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
       {staffNotifications.length > 0 && (
         <div
           data-testid="staff-support-notifications"
@@ -1797,6 +2140,8 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );
