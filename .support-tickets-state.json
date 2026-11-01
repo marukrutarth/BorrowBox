@@ -78,6 +78,33 @@
       "emailClosedError": "Resend HTTP 403: {\"message\":\"You can only send testing emails to your own email address (marukrutarth@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains, and change the `from` address to an email using this domain.\"",
       "createdAtISO": "2026-11-01T01:00:28.997Z",
       "updatedAtISO": "2026-11-01T01:10:36.836Z"
+    },
+    "BB-TKT-2026-2131": {
+      "id": "BB-TKT-2026-2131",
+      "ticketNumber": "BB-TKT-2026-2131",
+      "userId": "cust_verify_101",
+      "userName": "Aarav Customer",
+      "userEmail": "aarav.verify@gmail.com",
+      "category": "Booking Issue",
+      "subject": "Projector lens cap missing on delivery",
+      "description": "Received the projector today but the front lens cap was not in the carry case.",
+      "status": "closed",
+      "bookingId": "BKG-901",
+      "productId": "LST-901",
+      "assignedTo": "admin_verify_1",
+      "assignedStaffName": "Krutarth Admin",
+      "assignedToEmail": "marukrutarth@gmail.com",
+      "claimedAtISO": "2026-11-01T01:39:33.575Z",
+      "firstResponseAtISO": "2026-11-01T01:39:33.611Z",
+      "resolvedAtISO": "2026-11-01T01:39:33.626Z",
+      "closedAtISO": "2026-11-01T01:39:33.626Z",
+      "reopenedAtISO": null,
+      "reassignmentCount": 0,
+      "resolutionSummary": "Logged missing lens cap in booking BKG-901 handover record; borrower deposit is fully protected.",
+      "internalNotes": "[01/11/26, 1:39 am - Krutarth Admin]: INTERNAL ONLY: Checked warehouse checklist, lens cap was left on shelf B2.",
+      "attachments": [],
+      "createdAtISO": "2026-11-01T01:39:33.561Z",
+      "updatedAtISO": "2026-11-01T01:39:33.626Z"
     }
   },
   "messagesByTicket": {
@@ -175,6 +202,44 @@
         "attachments": [],
         "isInternal": true,
         "createdAtISO": "2026-11-01T01:10:23.308Z"
+      }
+    ],
+    "BB-TKT-2026-2131": [
+      {
+        "id": "MSG-1793497173579-gd0n",
+        "ticketId": "BB-TKT-2026-2131",
+        "senderId": "admin_verify_1",
+        "senderName": "Krutarth Admin",
+        "senderEmail": "marukrutarth@gmail.com",
+        "senderRole": "admin",
+        "message": "INTERNAL ONLY: Checked warehouse checklist, lens cap was left on shelf B2.",
+        "attachments": [],
+        "isInternal": true,
+        "createdAtISO": "2026-11-01T01:39:33.579Z"
+      },
+      {
+        "id": "MSG-1793497173611-mo0k",
+        "ticketId": "BB-TKT-2026-2131",
+        "senderId": "admin_verify_1",
+        "senderName": "Krutarth Admin",
+        "senderEmail": "marukrutarth@gmail.com",
+        "senderRole": "admin",
+        "message": "Hello Aarav, we located the lens cap and have logged a note on your booking so you will not be charged.",
+        "attachments": [],
+        "isInternal": false,
+        "createdAtISO": "2026-11-01T01:39:33.611Z"
+      },
+      {
+        "id": "MSG-1793497173619-uhwz",
+        "ticketId": "BB-TKT-2026-2131",
+        "senderId": "cust_verify_101",
+        "senderName": "Aarav Customer",
+        "senderEmail": "aarav.verify@gmail.com",
+        "senderRole": "customer",
+        "message": "Thank you so much for confirming! You can close the ticket now.",
+        "attachments": [],
+        "isInternal": false,
+        "createdAtISO": "2026-11-01T01:39:33.619Z"
       }
     ]
   },
@@ -317,52 +382,135 @@
         "summary": "Support ticket BB-TKT-2026-7245 created by customer Aarav Sharma (General Enquiry).",
         "createdAtISO": "2026-11-01T01:00:28.997Z"
       }
+    ],
+    "BB-TKT-2026-2131": [
+      {
+        "id": "HIS-1793497173626-hzm0",
+        "ticketId": "BB-TKT-2026-2131",
+        "action": "closed",
+        "actorId": "admin_verify_1",
+        "actorName": "Krutarth Admin",
+        "actorEmail": "marukrutarth@gmail.com",
+        "actorRole": "super_admin",
+        "previousValue": "in_progress",
+        "newValue": "closed",
+        "summary": "Status changed from in_progress to closed by Krutarth Admin.",
+        "createdAtISO": "2026-11-01T01:39:33.626Z"
+      },
+      {
+        "id": "HIS-1793497173619-sc6d",
+        "ticketId": "BB-TKT-2026-2131",
+        "action": "replied",
+        "actorId": "cust_verify_101",
+        "actorName": "Aarav Customer",
+        "actorEmail": "aarav.verify@gmail.com",
+        "actorRole": "customer",
+        "summary": "Customer (Aarav Customer) posted a reply.",
+        "createdAtISO": "2026-11-01T01:39:33.619Z"
+      },
+      {
+        "id": "HIS-1793497173611-9eez",
+        "ticketId": "BB-TKT-2026-2131",
+        "action": "replied",
+        "actorId": "admin_verify_1",
+        "actorName": "Krutarth Admin",
+        "actorEmail": "marukrutarth@gmail.com",
+        "actorRole": "super_admin",
+        "summary": "Support staff (Krutarth Admin) posted a reply.",
+        "createdAtISO": "2026-11-01T01:39:33.611Z"
+      },
+      {
+        "id": "HIS-1793497173604-hnde",
+        "ticketId": "BB-TKT-2026-2131",
+        "action": "internal_note_added",
+        "actorId": "admin_verify_1",
+        "actorName": "Krutarth Admin",
+        "actorEmail": "marukrutarth@gmail.com",
+        "actorRole": "super_admin",
+        "summary": "Internal staff note added by Krutarth Admin.",
+        "createdAtISO": "2026-11-01T01:39:33.579Z"
+      },
+      {
+        "id": "HIS-1793497173575-zqgl",
+        "ticketId": "BB-TKT-2026-2131",
+        "action": "claimed",
+        "actorId": "admin_verify_1",
+        "actorName": "Krutarth Admin",
+        "actorEmail": "marukrutarth@gmail.com",
+        "actorRole": "super_admin",
+        "previousValue": "Unclaimed (open)",
+        "newValue": "Krutarth Admin (in_progress)",
+        "summary": "Ticket claimed by Krutarth Admin (marukrutarth@gmail.com). Status changed to In Progress.",
+        "createdAtISO": "2026-11-01T01:39:33.575Z"
+      }
     ]
-  },
-  "emailLogs": {
-    "BB-TKT-2026-7245:TICKET_OPENED": {
-      "id": "EML-1793494829504-r2v8",
-      "idempotencyKey": "BB-TKT-2026-7245:TICKET_OPENED",
-      "ticketId": "BB-TKT-2026-7245",
-      "ticketNumber": "BB-TKT-2026-7245",
-      "eventType": "TICKET_OPENED",
-      "fromEmail": "BorrowBox <onboarding@resend.dev>",
-      "replyToEmail": "borrowboxsupport@gmail.com",
-      "recipientEmail": "aarav.e2e.customer@gmail.com",
-      "recipientName": "Aarav Sharma",
-      "subject": "BorrowBox Support: Your Ticket Has Been Created - BB-TKT-2026-7245",
-      "textBody": "Hello Aarav Sharma,\n\nThank you for contacting BorrowBox Support. Your support request has been received and queued for our support team.\n\nTicket Details:\n- Ticket ID: BB-TKT-2026-7245\n- Subject: Sony A7IV Lens Cap Issue E2E\n- Category: General Enquiry\n- Current Status: Open\n\nInitial Description Summary:\n\"The front lens cap latch was loose at pickup. Attached photo and receipt PDF.\"\n\nWhat happens next:\nA dedicated BorrowBox support specialist will claim your ticket and respond shortly. You can view real-time updates, upload additional files, or reply directly from your My Support panel: https://borrowbox.in/support\n\nWarm regards,\nBorrowBox Trust & Support Team",
-      "htmlBody": "<div style=\"font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; color: #0f172a;\">\n      <div style=\"margin-bottom: 16px;\">\n        <span style=\"font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #4f46e5;\">BorrowBox Support Desk</span>\n        <h2 style=\"margin: 6px 0 0; font-size: 20px; color: #0f172a;\">Your Ticket Has Been Created</h2>\n      </div>\n      <p style=\"font-size: 14px; line-height: 1.6; color: #334155;\">Hello <strong>Aarav Sharma</strong>,</p>\n      <p style=\"font-size: 14px; line-height: 1.6; color: #334155;\">We have received your support request. A support specialist will claim your ticket and assist you shortly.</p>\n      <div style=\"background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0; font-size: 13px;\">\n        <p style=\"margin: 4px 0;\"><strong>Ticket ID:</strong> BB-TKT-2026-7245</p>\n        <p style=\"margin: 4px 0;\"><strong>Subject:</strong> Sony A7IV Lens Cap Issue E2E</p>\n        <p style=\"margin: 4px 0;\"><strong>Category:</strong> General Enquiry</p>\n        <p style=\"margin: 4px 0;\"><strong>Current Status:</strong> Open</p>\n      </div>\n      <div style=\"margin: 16px 0;\">\n        <p style=\"font-size: 12px; font-weight: 600; text-transform: uppercase; color: #64748b; margin-bottom: 6px;\">Initial Description Summary</p>\n        <blockquote style=\"margin: 0; padding: 12px; background: #ffffff; border-left: 3px solid #4f46e5; color: #475569; font-size: 13px;\">The front lens cap latch was loose at pickup. Attached photo and receipt PDF.</blockquote>\n      </div>\n      <p style=\"font-size: 13px; line-height: 1.6; color: #475569;\">Track your request and reply to our support team anytime in the <strong>My Support</strong> section of your BorrowBox account (<a href=\"https://borrowbox.in/support\" style=\"color: #4f46e5;\">https://borrowbox.in/support</a>).</p>\n    </div>",
-      "status": "failed",
-      "provider": "resend",
-      "sentAtISO": "2026-11-01T01:00:29.504Z",
-      "errorMessage": "Resend HTTP 403: {\"message\":\"You can only send testing emails to your own email address (marukrutarth@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains, and change the `from` address to an email using this domain.\"",
-      "retryCount": 0
-    },
-    "BB-TKT-2026-7245:TICKET_CLOSED": {
-      "id": "EML-1793495437216-843r",
-      "idempotencyKey": "BB-TKT-2026-7245:TICKET_CLOSED",
-      "ticketId": "BB-TKT-2026-7245",
-      "ticketNumber": "BB-TKT-2026-7245",
-      "eventType": "TICKET_CLOSED",
-      "fromEmail": "BorrowBox <onboarding@resend.dev>",
-      "replyToEmail": "borrowboxsupport@gmail.com",
-      "recipientEmail": "aarav.e2e.customer@gmail.com",
-      "recipientName": "Aarav Sharma",
-      "subject": "BorrowBox Support: Your Ticket Has Been Resolved - BB-TKT-2026-7245",
-      "textBody": "Hello Aarav Sharma,\n\nYour BorrowBox support ticket has been resolved and closed.\n\nTicket Resolution Details:\n- Ticket ID: BB-TKT-2026-7245\n- Subject: Sony A7IV Lens Cap Issue E2E\n- Assigned Support Specialist: Krutarth SuperAdmin\n- Final Status: Closed\n- Closed At: 1 Nov 2026, 1:10 am\n\nResolution Summary:\nReplacement Sony A7IV front lens cap provided and security deposit protected in full.\n\nNeed further help?\nYour full conversation history and resolution summary remain saved in your Resolved History inside the My Support panel (https://borrowbox.in/support). If you need additional assistance, you can open a follow-up ticket referencing BB-TKT-2026-7245.\n\nWarm regards,\nBorrowBox Trust & Support Team",
-      "htmlBody": "<div style=\"font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; color: #0f172a;\">\n      <div style=\"margin-bottom: 16px;\">\n        <span style=\"font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #059669;\">BorrowBox Support Desk</span>\n        <h2 style=\"margin: 6px 0 0; font-size: 20px; color: #0f172a;\">Your Ticket Has Been Resolved</h2>\n      </div>\n      <p style=\"font-size: 14px; line-height: 1.6; color: #334155;\">Hello <strong>Aarav Sharma</strong>,</p>\n      <p style=\"font-size: 14px; line-height: 1.6; color: #334155;\">Our team has completed work on your support ticket and marked it as closed.</p>\n      <div style=\"background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0; font-size: 13px;\">\n        <p style=\"margin: 4px 0;\"><strong>Ticket ID:</strong> BB-TKT-2026-7245</p>\n        <p style=\"margin: 4px 0;\"><strong>Subject:</strong> Sony A7IV Lens Cap Issue E2E</p>\n        <p style=\"margin: 4px 0;\"><strong>Assigned Staff:</strong> Krutarth SuperAdmin</p>\n        <p style=\"margin: 4px 0;\"><strong>Final Status:</strong> Closed</p>\n        <p style=\"margin: 4px 0;\"><strong>Closure Timestamp:</strong> 1 Nov 2026, 1:10 am</p>\n      </div>\n      <div style=\"margin: 16px 0;\">\n        <p style=\"font-size: 12px; font-weight: 600; text-transform: uppercase; color: #059669; margin-bottom: 6px;\">Resolution Summary</p>\n        <div style=\"padding: 12px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; color: #065f46; font-size: 13px; line-height: 1.5;\">Replacement Sony A7IV front lens cap provided and security deposit protected in full.</div>\n      </div>\n      <p style=\"font-size: 13px; line-height: 1.6; color: #475569;\">If you require further assistance, visit <strong>My Support &rarr; Resolved History</strong> (<a href=\"https://borrowbox.in/support\" style=\"color: #4f46e5;\">https://borrowbox.in/support</a>) to review the full thread or submit a follow-up enquiry.</p>\n    </div>",
-      "status": "failed",
-      "provider": "resend",
-      "sentAtISO": "2026-11-01T01:10:37.216Z",
-      "errorMessage": "Resend HTTP 403: {\"message\":\"You can only send testing emails to your own email address (marukrutarth@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains, and change the `from` address to an email using this domain.\"",
-      "retryCount": 0
-    }
   },
   "notifications": [
     {
+      "id": "NOTIF-1793497173626-5ahp",
+      "recipientUid": "cust_verify_101",
+      "recipientRole": "customer",
+      "ticketId": "BB-TKT-2026-2131",
+      "ticketNumber": "BB-TKT-2026-2131",
+      "type": "ticket_closed",
+      "title": "Ticket Closed (BB-TKT-2026-2131)",
+      "message": "Your ticket \"Projector lens cap missing on delivery\" has been closed by Krutarth Admin. Resolution Summary: Logged missing lens cap in booking BKG-901 handover record; borrower deposit is fully protected.",
+      "resolutionSummary": "Logged missing lens cap in booking BKG-901 handover record; borrower deposit is fully protected.",
+      "read": true,
+      "createdAtISO": "2026-11-01T01:39:33.626Z"
+    },
+    {
+      "id": "NOTIF-1793497173619-7enx",
+      "recipientUid": "admin_verify_1",
+      "recipientRole": "staff",
+      "ticketId": "BB-TKT-2026-2131",
+      "ticketNumber": "BB-TKT-2026-2131",
+      "type": "customer_replied",
+      "title": "Customer Replied (BB-TKT-2026-2131)",
+      "message": "Aarav Customer replied on \"Projector lens cap missing on delivery\": \"Thank you so much for confirming! You can close the ticket now.\"",
+      "read": true,
+      "createdAtISO": "2026-11-01T01:39:33.619Z"
+    },
+    {
+      "id": "NOTIF-1793497173611-hejf",
+      "recipientUid": "cust_verify_101",
+      "recipientRole": "customer",
+      "ticketId": "BB-TKT-2026-2131",
+      "ticketNumber": "BB-TKT-2026-2131",
+      "type": "staff_replied",
+      "title": "New Support Reply (BB-TKT-2026-2131)",
+      "message": "Krutarth Admin replied to \"Projector lens cap missing on delivery\": \"Hello Aarav, we located the lens cap and have logged a note on your booking so you will not be charged.\"",
+      "read": false,
+      "createdAtISO": "2026-11-01T01:39:33.611Z"
+    },
+    {
+      "id": "NOTIF-1793497173575-ygk4",
+      "recipientUid": "cust_verify_101",
+      "recipientRole": "customer",
+      "ticketId": "BB-TKT-2026-2131",
+      "ticketNumber": "BB-TKT-2026-2131",
+      "type": "ticket_claimed",
+      "title": "Ticket Claimed (BB-TKT-2026-2131)",
+      "message": "Krutarth Admin has claimed your support ticket \"Projector lens cap missing on delivery\" and it is now In Progress.",
+      "read": false,
+      "createdAtISO": "2026-11-01T01:39:33.575Z"
+    },
+    {
+      "id": "NOTIF-1793497173566-hc19",
+      "recipientUid": "ALL_SUPPORT_STAFF",
+      "recipientRole": "staff",
+      "ticketId": "BB-TKT-2026-2131",
+      "ticketNumber": "BB-TKT-2026-2131",
+      "type": "ticket_created",
+      "title": "New Support Ticket (BB-TKT-2026-2131)",
+      "message": "Aarav Customer created \"Projector lens cap missing on delivery\" (Booking Issue).",
+      "read": false,
+      "createdAtISO": "2026-11-01T01:39:33.561Z"
+    },
+    {
       "id": "NOTIF-1793495436836-qwp8",
       "recipientUid": "usr_aarav_e2e_customer_gmail_com",
+      "recipientRole": "customer",
       "ticketId": "BB-TKT-2026-7245",
       "ticketNumber": "BB-TKT-2026-7245",
       "type": "ticket_closed",
@@ -374,6 +522,7 @@
     {
       "id": "NOTIF-1793495435589-u9z4",
       "recipientUid": "usr_aarav_e2e_customer_gmail_com",
+      "recipientRole": "customer",
       "ticketId": "BB-TKT-2026-7245",
       "ticketNumber": "BB-TKT-2026-7245",
       "type": "ticket_resolved",
@@ -385,6 +534,7 @@
     {
       "id": "NOTIF-1793495357177-j1a9",
       "recipientUid": "admin_marukrutarth_super_01",
+      "recipientRole": "staff",
       "ticketId": "BB-TKT-2026-7245",
       "ticketNumber": "BB-TKT-2026-7245",
       "type": "customer_replied",
@@ -396,6 +546,7 @@
     {
       "id": "NOTIF-1793495346012-odyh",
       "recipientUid": "usr_aarav_e2e_customer_gmail_com",
+      "recipientRole": "customer",
       "ticketId": "BB-TKT-2026-7245",
       "ticketNumber": "BB-TKT-2026-7245",
       "type": "staff_replied",
@@ -407,6 +558,7 @@
     {
       "id": "NOTIF-1793495213664-l50y",
       "recipientUid": "usr_aarav_e2e_customer_gmail_com",
+      "recipientRole": "customer",
       "ticketId": "BB-TKT-2026-7245",
       "ticketNumber": "BB-TKT-2026-7245",
       "type": "ticket_claimed",
@@ -418,6 +570,7 @@
     {
       "id": "NOTIF-1793494828997-create",
       "recipientUid": "ALL_SUPPORT_STAFF",
+      "recipientRole": "staff",
       "ticketId": "BB-TKT-2026-7245",
       "ticketNumber": "BB-TKT-2026-7245",
       "type": "ticket_created",
@@ -428,6 +581,34 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": "AUD-1793497173627-8hd6",
+      "adminId": "admin_verify_1",
+      "adminEmail": "marukrutarth@gmail.com",
+      "adminRole": "super_admin",
+      "action": "Updated Ticket Status to CLOSED",
+      "targetType": "support_ticket",
+      "targetId": "BB-TKT-2026-2131",
+      "targetLabel": "BB-TKT-2026-2131: Projector lens cap missing on delivery",
+      "previousValue": "in_progress",
+      "newValue": "closed",
+      "isOverride": false,
+      "createdAtISO": "2026-11-01T01:39:33.626Z"
+    },
+    {
+      "id": "AUD-1793497173575-g6pa",
+      "adminId": "admin_verify_1",
+      "adminEmail": "marukrutarth@gmail.com",
+      "adminRole": "super_admin",
+      "action": "Claimed Support Ticket",
+      "targetType": "support_ticket",
+      "targetId": "BB-TKT-2026-2131",
+      "targetLabel": "BB-TKT-2026-2131: Projector lens cap missing on delivery",
+      "previousValue": "Unclaimed (open)",
+      "newValue": "Krutarth Admin (in_progress)",
+      "isOverride": false,
+      "createdAtISO": "2026-11-01T01:39:33.575Z"
+    },
     {
       "id": "AUD-1793495436836-xtr3",
       "adminId": "admin_marukrutarth_super_01",

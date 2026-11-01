@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import {
   AdminRegistryRecord,
+  AppNotificationItem,
   BorrowBoxUserProfile,
   IndianCity,
   RentalRequestRecord,
@@ -44,6 +45,9 @@ export interface NavbarProps {
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
   unreadNotificationsCount?: number;
+  notifications?: AppNotificationItem[];
+  onSelectNotification?: (notif: AppNotificationItem) => void;
+  onMarkAllNotificationsRead?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -62,6 +66,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   searchQuery,
   onSearchQueryChange,
   unreadNotificationsCount = 0,
+  notifications = [],
+  onSelectNotification,
+  onMarkAllNotificationsRead,
 }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [wishlistCount, setWishlistCount] = useState<number>(() =>
@@ -126,6 +133,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           searchQuery={searchQuery}
           onSearchQueryChange={onSearchQueryChange}
           unreadNotificationsCount={unreadNotificationsCount}
+          notifications={notifications}
+          onSelectNotification={onSelectNotification}
+          onMarkAllNotificationsRead={onMarkAllNotificationsRead}
         />
 
         <MobileHeader
@@ -143,6 +153,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           onCityChange={onCityChange}
           searchQuery={searchQuery}
           onSearchQueryChange={onSearchQueryChange}
+          unreadNotificationsCount={unreadNotificationsCount}
+          notifications={notifications}
+          onSelectNotification={onSelectNotification}
+          onMarkAllNotificationsRead={onMarkAllNotificationsRead}
         />
       </motion.header>
 

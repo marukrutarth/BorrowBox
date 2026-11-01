@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
+  Bell,
+  Check,
   CheckCircle2,
   Clock,
   Download,
@@ -23,6 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import {
+  AppNotificationItem,
   BorrowBoxUserProfile,
   ProductListing,
   RentalBookingRecord,
@@ -40,13 +43,13 @@ import {
   fetchCustomerSupportTickets,
   isImageAttachment,
   isPdfAttachment,
+  markSupportNotificationRead,
   postSupportTicketReplyOrNote,
   subscribeToCustomerSupportTickets,
+  subscribeToSupportNotifications,
   subscribeToTicketConversation,
   uploadSupportAttachment,
 } from '../services/supportTicketService';
-
-import { AppNotificationItem } from '../types/marketplace';
 
 interface MySupportPageProps {
   userProfile: BorrowBoxUserProfile | null;
@@ -133,6 +136,7 @@ export const MySupportPage: React.FC<MySupportPageProps> = ({
   onNavigate,
   onOpenAuthModal = () => onNavigate({ page: 'login' }),
   onNotify = () => {},
+  onNotificationsLoaded,
 }) => {
   const isAuthenticated = isAuthenticatedProp ?? Boolean(userProfile);
   const listings = listingsProp || userListings || [];
@@ -144,6 +148,15 @@ export const MySupportPage: React.FC<MySupportPageProps> = ({
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(
     initialTicketId || null
   );
+
+  // Website Confirmation Banner when Customer Creates a Ticket
+  const [createdTicketConfirmation, setCreatedTicketConfirmation] =
+    useState<SupportTicketRecord | null>(null);
+
+  // Customer In-App Support Notifications (Real-Time)
+  const [supportNotifications, setSupportNotifications] = useState<
+    AppNotificationItem[]
+  >([]);
 
   // Selected Ticket Conversation & History
   const [messages, setMessages] = useState<SupportTicketMessageRecord[]>([]);
@@ -175,6 +188,23 @@ export const MySupportPage: React.FC<MySupportPageProps> = ({
   // Lightbox Modal State for Image Attachments
   const [lightboxAttachment, setLightboxAttachment] =
     useState<SupportAttachmentItem | null>(null);
+
+  // Sync selectedTicketId & tab when initialTicketId prop changes (e.g. clicking a header notification)
+  useEffect(() => {
+    if (!initialTicketId) return;
+    setSelectedTicketId(initialTicketId);
+    const matching = tickets.find(
+      (t) => t.id === initialTicketId || t.ticketNumber === initialTicketId
+    );
+    if (matching) {
+      setSelectedTicketId(matching.id);
+      if (['resolved', 'closed'].includes(matching.status)) {
+        setActiveTab('resolved');
+      } else {
+        setActiveTab('active');
+      }
+    }
+  }, [initialTicketId, tickets]);
 
   const loadCustomerTickets = async () => {
     if (!userProfile?.uid) return;
@@ -213,6 +243,80 @@ export const MySupportPage: React.FC<MySupportPageProps> = ({
     );
     return () => unsub();
   }, [isAuthenticated, userProfile?.uid]);
+
+  // Real-time subscription to customer's in-app support notifications
+  useEffect(() => {
+    if (!isAuthenticated || !userProfile?.uid) {
+      setSupportNotifications([]);
+      return;
+    }
+    const unsub = subscribeToSupportNotifications(
+      { uid: userProfile.uid, role: 'customer' },
+      (liveNotifs) => {
+        setSupportNotifications(liveNotifs);
+        onNotificationsLoaded?.(liveNotifs);
+      }
+    );
+    return () => unsub();
+  }, [isAuthenticated, userProfile?.uid]);
+
+  const handleOpenNotificationTicket = async (notif: AppNotificationItem) => {
+    if (userProfile?.uid && !notif.read) {
+      setSupportNotifications((prev) =>
+        prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
+      );
+      await markSupportNotificationRead({
+        notificationId: notif.id,
+        recipientUid: userProfile.uid,
+        role: 'customer',
+      });
+    }
+
+    const targetTicketId = notif.ticketId || notif.ticketNumber;
+    if (!targetTicketId) return;
+
+    const targetTicket = tickets.find(
+      (t) => t.id === targetTicketId || t.ticketNumber === targetTicketId
+    );
+    if (targetTicket) {
+      setSelectedTicketId(targetTicket.id);
+      if (['resolved', 'closed'].includes(targetTicket.status)) {
+        setActiveTab('resolved');
+      } else {
+        setActiveTab('active');
+      }
+      onNavigate({ page: 'support', ticketId: targetTicket.id });
+    } else {
+      setSelectedTicketId(targetTicketId);
+      setActiveTab('active');
+      onNavigate({ page: 'support', ticketId: targetTicketId });
+    }
+  };
+
+  const handleMarkSingleNotificationRead = async (
+    e: React.MouseEvent,
+    notif: AppNotificationItem
+  ) => {
+    e.stopPropagation();
+    if (!userProfile?.uid || notif.read) return;
+    setSupportNotifications((prev) =>
+      prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
+    );
+    await markSupportNotificationRead({
+      notificationId: notif.id,
+      recipientUid: userProfile.uid,
+      role: 'customer',
+    });
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    if (!userProfile?.uid) return;
+    setSupportNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    await markSupportNotificationRead({
+      recipientUid: userProfile.uid,
+      role: 'customer',
+    });
+  };
 
   const selectedTicket = useMemo(
     () => tickets.find((t) => t.id === selectedTicketId) || null,
@@ -483,12 +587,13 @@ export const MySupportPage: React.FC<MySupportPageProps> = ({
         ...prev.filter((t) => t.id !== created.id),
       ]);
       setSelectedTicketId(created.id);
+      setCreatedTicketConfirmation(created);
       setActiveTab('active');
       setSubject('');
       setDescription('');
       setCreateUploadEntries([]);
       onNotify(
-        `Support Ticket ${created.ticketNumber} created. Confirmation email sent to ${userProfile.email}.`,
+        `Support Ticket ${created.ticketNumber} created successfully in BorrowBox.`,
         'success'
       );
     } catch (err) {
@@ -805,6 +910,145 @@ export const MySupportPage: React.FC<MySupportPageProps> = ({
         </div>
       </div>
 
+      {/* Website Ticket Creation Confirmation Banner */}
+      {createdTicketConfirmation && (
+        <div
+          data-testid="ticket-created-confirmation"
+          className="rounded-2xl bg-emerald-500/10 border border-emerald-500/35 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+        >
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <div className="text-sm font-bold text-white">
+                Support Ticket Created Successfully ·{' '}
+                <span className="font-mono text-emerald-300">
+                  {createdTicketConfirmation.ticketNumber ||
+                    createdTicketConfirmation.id}
+                </span>
+              </div>
+              <p className="text-xs text-slate-300">
+                Your support request &ldquo;{createdTicketConfirmation.subject}
+                &rdquo; ({createdTicketConfirmation.category}) is now active. Our
+                support team has been notified inside BorrowBox and you will
+                receive real-time in-app notifications here when a specialist
+                claims, replies to, or resolves your ticket.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCreatedTicketConfirmation(null)}
+            className="self-end sm:self-center p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white cursor-pointer"
+            aria-label="Dismiss ticket confirmation"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Website-Based In-App Support Notifications Panel */}
+      {supportNotifications.length > 0 && (
+        <div
+          data-testid="customer-support-notifications"
+          className="rounded-2xl bg-slate-900/90 border border-white/10 p-4 space-y-3"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-indigo-400" />
+              <h2 className="text-xs font-bold uppercase tracking-wider text-white">
+                In-App Support Notifications
+              </h2>
+              {supportNotifications.filter((n) => !n.read).length > 0 && (
+                <span
+                  data-testid="customer-unread-notif-count"
+                  className="px-2 py-0.5 rounded-md bg-indigo-600 text-white text-[10px] font-bold font-mono"
+                >
+                  {supportNotifications.filter((n) => !n.read).length} Unread
+                </span>
+              )}
+            </div>
+            {supportNotifications.some((n) => !n.read) && (
+              <button
+                type="button"
+                onClick={() => void handleMarkAllNotificationsRead()}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/10 text-[11px] font-medium text-slate-200 cursor-pointer"
+              >
+                <Check className="w-3 h-3 text-emerald-400" />
+                <span>Mark all as read</span>
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-60 overflow-y-auto pr-1">
+            {supportNotifications.slice(0, 8).map((notif) => (
+              <div
+                key={notif.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => void handleOpenNotificationTicket(notif)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    void handleOpenNotificationTicket(notif);
+                  }
+                }}
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                  notif.read
+                    ? 'bg-slate-950/60 border-white/10 text-slate-300 hover:bg-slate-900'
+                    : 'bg-indigo-500/10 border-indigo-500/40 text-white hover:bg-indigo-500/15'
+                }`}
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {!notif.read && (
+                        <span className="w-2 h-2 rounded-full bg-indigo-400 shrink-0" />
+                      )}
+                      <span className="text-xs font-bold truncate">
+                        {notif.title}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                      {notif.timestampISO.slice(0, 16).replace('T', ' ')}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    {notif.body}
+                  </p>
+                  {notif.resolutionSummary && (
+                    <div className="mt-1.5 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-200">
+                      <span className="font-bold text-emerald-300">
+                        Resolution Summary:{' '}
+                      </span>
+                      {notif.resolutionSummary}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5 text-[11px]">
+                  <span className="font-mono text-indigo-300 font-semibold">
+                    Open Ticket {notif.ticketNumber || notif.ticketId} &rarr;
+                  </span>
+                  {!notif.read ? (
+                    <button
+                      type="button"
+                      onClick={(e) =>
+                        void handleMarkSingleNotificationRead(e, notif)
+                      }
+                      className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-medium text-slate-200 cursor-pointer"
+                    >
+                      Mark Read
+                    </button>
+                  ) : (
+                    <span className="text-[10px] text-slate-500">Read</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Primary Section Tabs */}
       <div className="flex flex-wrap items-center gap-2 border-b border-white/10 pb-3">
         <button
@@ -872,11 +1116,9 @@ export const MySupportPage: React.FC<MySupportPageProps> = ({
                   Submit a Support Request
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  A confirmation email will be sent to{' '}
-                  <strong className="text-slate-200">
-                    {userProfile.email}
-                  </strong>{' '}
-                  as soon as your ticket is created.
+                  All updates, staff replies, and resolution summaries are
+                  delivered directly inside BorrowBox via real-time in-app
+                  notifications.
                 </p>
               </div>
               <button
@@ -1052,14 +1294,14 @@ export const MySupportPage: React.FC<MySupportPageProps> = ({
             <div className="space-y-3 text-xs text-slate-300 leading-relaxed">
               <div className="p-3.5 rounded-xl bg-slate-950/80 border border-white/10">
                 <div className="font-semibold text-white mb-1">
-                  1. Instant Ticket ID & Confirmation Email
+                  1. Instant Ticket ID & On-Site Confirmation
                 </div>
                 <p className="text-slate-400">
                   Every request receives a unique ticket reference (e.g.{' '}
                   <span className="font-mono text-indigo-300">
                     BB-TKT-2026-XXXX
                   </span>
-                  ) and an immediate confirmation email.
+                  ) and an immediate confirmation in My Support.
                 </p>
               </div>
               <div className="p-3.5 rounded-xl bg-slate-950/80 border border-white/10">
@@ -1073,12 +1315,12 @@ export const MySupportPage: React.FC<MySupportPageProps> = ({
               </div>
               <div className="p-3.5 rounded-xl bg-slate-950/80 border border-white/10">
                 <div className="font-semibold text-white mb-1">
-                  3. Two-Way Real-Time Conversation
+                  3. Two-Way Real-Time Conversation & Notifications
                 </div>
                 <p className="text-slate-400">
                   Reply directly in your ticket thread and share handover photos
-                  or PDF receipts. Once resolved, you receive a final Resolution
-                  Summary email.
+                  or PDF receipts. Once closed, you receive an in-app
+                  notification with the full Resolution Summary.
                 </p>
               </div>
             </div>

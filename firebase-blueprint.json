@@ -822,9 +822,7 @@
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" },
         "resolvedAt": { "type": "string", "minLength": 0, "maxLength": 64 },
-        "closedAt": { "type": "string", "minLength": 0, "maxLength": 64 },
-        "emailOpenedSentAt": { "type": "string", "minLength": 0, "maxLength": 64 },
-        "emailClosedSentAt": { "type": "string", "minLength": 0, "maxLength": 64 }
+        "closedAt": { "type": "string", "minLength": 0, "maxLength": 64 }
       },
       "required": [
         "id",
@@ -906,10 +904,12 @@
         "id": { "type": "string", "minLength": 1, "maxLength": 128 },
         "recipientUid": { "type": "string", "minLength": 1, "maxLength": 128 },
         "recipientRole": { "type": "string", "enum": ["customer", "staff"] },
+        "type": { "type": "string", "minLength": 2, "maxLength": 64 },
         "ticketId": { "type": "string", "minLength": 1, "maxLength": 128 },
         "ticketNumber": { "type": "string", "minLength": 3, "maxLength": 40 },
-        "title": { "type": "string", "minLength": 2, "maxLength": 140 },
+        "title": { "type": "string", "minLength": 2, "maxLength": 160 },
         "body": { "type": "string", "minLength": 2, "maxLength": 500 },
+        "resolutionSummary": { "type": "string", "minLength": 0, "maxLength": 2000 },
         "read": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" }
       },

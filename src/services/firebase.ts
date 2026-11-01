@@ -2083,22 +2083,6 @@ export async function fetchAdminDashboardData(): Promise<AdminDashboardSnapshot>
         }
         return [];
       })(),
-      emailOpenedStatus: (srv.emailOpenedStatus ||
-        data.emailOpenedStatus) as SupportTicketRecord['emailOpenedStatus'],
-      emailOpenedSentAtISO: String(
-        srv.emailOpenedSentAtISO || data.emailOpenedSentAtISO || ''
-      ),
-      emailOpenedError: String(
-        srv.emailOpenedError || data.emailOpenedError || ''
-      ),
-      emailClosedStatus: (srv.emailClosedStatus ||
-        data.emailClosedStatus) as SupportTicketRecord['emailClosedStatus'],
-      emailClosedSentAtISO: String(
-        srv.emailClosedSentAtISO || data.emailClosedSentAtISO || ''
-      ),
-      emailClosedError: String(
-        srv.emailClosedError || data.emailClosedError || ''
-      ),
       createdAtISO: data.createdAt
         ? formatTimestampToISO(data.createdAt)
         : String(srv.createdAtISO || data.createdAtISO || new Date().toISOString()),

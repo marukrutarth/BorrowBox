@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  Bell,
+  Check,
   Compass,
   Heart,
   HelpCircle,
@@ -18,6 +20,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   AdminRegistryRecord,
+  AppNotificationItem,
   BorrowBoxUserProfile,
   IndianCity,
   RentalRequestRecord,
@@ -46,6 +49,10 @@ export interface MobileHeaderProps {
   onCityChange: (city: IndianCity | 'All') => void;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
+  unreadNotificationsCount?: number;
+  notifications?: AppNotificationItem[];
+  onSelectNotification?: (notif: AppNotificationItem) => void;
+  onMarkAllNotificationsRead?: () => void;
 }
 
 export const MobileHeader: React.FC<MobileHeaderProps> = ({
@@ -63,6 +70,10 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
   onCityChange,
   searchQuery,
   onSearchQueryChange,
+  unreadNotificationsCount = 0,
+  notifications = [],
+  onSelectNotification,
+  onMarkAllNotificationsRead,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchBarOpen, setSearchBarOpen] = useState(false);
@@ -311,6 +322,66 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                               {adminRoleLabel}
                             </span>
                           )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Mobile In-App Notifications Section */}
+                    {userProfile && notifications.length > 0 && (
+                      <div className="p-3 rounded-xl bg-[#161E2E] border border-white/[0.08] space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-[#F8FAFC]">
+                            <Bell className="w-3.5 h-3.5 text-[#06B6D4]" />
+                            <span>Notifications</span>
+                            {unreadNotificationsCount > 0 && (
+                              <span className="px-1.5 py-0.5 rounded bg-[#8B5CF6]/20 text-[10px] font-mono text-[#C4B5FD]">
+                                {unreadNotificationsCount} new
+                              </span>
+                            )}
+                          </div>
+                          {unreadNotificationsCount > 0 &&
+                            onMarkAllNotificationsRead && (
+                              <button
+                                type="button"
+                                onClick={() => onMarkAllNotificationsRead()}
+                                className="inline-flex items-center gap-1 text-[11px] text-[#06B6D4] cursor-pointer"
+                              >
+                                <Check className="w-3 h-3" />
+                                <span>Mark read</span>
+                              </button>
+                            )}
+                        </div>
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                          {notifications.slice(0, 5).map((notif) => (
+                            <div
+                              key={notif.id}
+                              onClick={() => {
+                                setMenuOpen(false);
+                                if (onSelectNotification) {
+                                  onSelectNotification(notif);
+                                } else if (notif.ticketId) {
+                                  onNavigate({
+                                    page: 'support',
+                                    ticketId: notif.ticketId,
+                                  });
+                                } else {
+                                  onNavigate({ page: 'dashboard' });
+                                }
+                              }}
+                              className={`p-2 rounded-lg border text-xs cursor-pointer ${
+                                notif.read
+                                  ? 'bg-[#111827]/60 border-white/[0.06] text-[#94A3B8]'
+                                  : 'bg-[#8B5CF6]/10 border-[#8B5CF6]/35 text-[#F8FAFC]'
+                              }`}
+                            >
+                              <div className="font-semibold truncate">
+                                {notif.title}
+                              </div>
+                              <p className="text-[11px] text-[#CBD5E1] line-clamp-2 mt-0.5">
+                                {notif.body}
+                              </p>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}

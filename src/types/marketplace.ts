@@ -179,6 +179,8 @@ export interface AppNotificationItem {
   id: string;
   title: string;
   body: string;
+  type?: string;
+  resolutionSummary?: string;
   bookingId?: string;
   listingId?: string;
   ticketId?: string;
@@ -450,9 +452,7 @@ export type SupportTicketHistoryAction =
   | 'customer_replied'
   | 'resolved'
   | 'closed'
-  | 'reopened'
-  | 'email_sent'
-  | 'email_failed';
+  | 'reopened';
 
 export interface SupportTicketHistoryEntry {
   id: string;
@@ -467,13 +467,6 @@ export interface SupportTicketHistoryEntry {
   newValue?: string;
   createdAtISO: string;
 }
-
-export type SupportEmailDeliveryStatus =
-  | 'pending'
-  | 'not_sent'
-  | 'sent'
-  | 'failed'
-  | 'pending_provider_config';
 
 export interface SupportTicketRecord {
   id: string;
@@ -503,13 +496,6 @@ export interface SupportTicketRecord {
   attachments?: SupportAttachmentItem[];
   resolutionSummary?: string;
   internalNotes: string;
-  emailOpenedStatus?: SupportEmailDeliveryStatus;
-  emailOpenedSentAtISO?: string | null;
-  emailOpenedError?: string;
-  emailClosedStatus?: SupportEmailDeliveryStatus;
-  emailClosedSentAtISO?: string | null;
-  emailClosedError?: string;
-  emailLastError?: string;
   createdAtISO: string;
   updatedAtISO: string;
 }

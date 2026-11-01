@@ -507,24 +507,6 @@ function normalizeTicketRecord(
     resolutionSummary: String(merged.resolutionSummary || ''),
     internalNotes: String(merged.internalNotes || ''),
     attachments,
-    emailOpenedStatus:
-      (merged.emailOpenedStatus as SupportTicketRecord['emailOpenedStatus']) ||
-      (merged.emailOpenedSentAt ? 'sent' : 'pending'),
-    emailOpenedSentAtISO: merged.emailOpenedSentAtISO
-      ? String(merged.emailOpenedSentAtISO)
-      : merged.emailOpenedSentAt
-      ? String(merged.emailOpenedSentAt)
-      : null,
-    emailOpenedError: String(merged.emailOpenedError || ''),
-    emailClosedStatus:
-      (merged.emailClosedStatus as SupportTicketRecord['emailClosedStatus']) ||
-      (merged.emailClosedSentAt ? 'sent' : undefined),
-    emailClosedSentAtISO: merged.emailClosedSentAtISO
-      ? String(merged.emailClosedSentAtISO)
-      : merged.emailClosedSentAt
-      ? String(merged.emailClosedSentAt)
-      : null,
-    emailClosedError: String(merged.emailClosedError || ''),
     createdAtISO: formatTimestamp(
       raw.createdAt,
       String(merged.createdAtISO || new Date().toISOString())
@@ -538,8 +520,8 @@ function normalizeTicketRecord(
 
 /**
  * Creates a new customer support ticket (without priority), persists it to Firestore
- * (`/supportTickets/{ticketId}` and `/supportTickets/{ticketId}/messages`),
- * syncs with the backend, and triggers the automated "Ticket Opened" email.
+ * (`/supportTickets/{ticketId}`, `/supportTickets/{ticketId}/messages`, and `/supportNotifications/{notifId}`),
+ * and syncs with the backend for real-time staff notifications.
  */
 export async function createCustomerSupportTicket(params: {
   userId: string;
@@ -622,7 +604,6 @@ export async function createCustomerSupportTicket(params: {
     resolutionSummary: '',
     internalNotes: '',
     attachments,
-    emailOpenedStatus: 'pending',
     createdAtISO: nowISO,
     updatedAtISO: nowISO,
   };
@@ -654,8 +635,6 @@ export async function createCustomerSupportTicket(params: {
       internalNotes: '',
       resolvedAt: '',
       closedAt: '',
-      emailOpenedSentAt: '',
-      emailClosedSentAt: '',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       createdAtISO: nowISO,
@@ -693,10 +672,11 @@ export async function createCustomerSupportTicket(params: {
       id: notifId,
       recipientUid: 'ALL_SUPPORT_STAFF',
       recipientRole: 'staff',
+      type: 'ticket_created',
       ticketId,
       ticketNumber,
-      title: `New Support Ticket: ${ticketNumber}`,
-      body: `${params.userName} submitted "${cleanSubject}"`,
+      title: `New Support Ticket (${ticketNumber})`,
+      body: `${params.userName} opened "${cleanSubject}" (${params.category}).`,
       read: false,
       createdAt: serverTimestamp(),
       createdAtISO: nowISO,
@@ -752,6 +732,7 @@ export async function createCustomerSupportTicket(params: {
         notification: {
           id: notifId,
           recipientUid: 'ALL_SUPPORT_STAFF',
+          recipientRole: 'staff',
           ticketId,
           ticketNumber,
           type: 'ticket_created',
@@ -764,39 +745,6 @@ export async function createCustomerSupportTicket(params: {
     });
   } catch {
     // Non-fatal
-  }
-
-  // 3. Trigger Automated Email #1: Ticket Opened Email (non-blocking)
-  try {
-    const emailRes = await fetch('/api/support/send-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ticketId,
-        ticketNumber,
-        eventType: 'TICKET_OPENED',
-        customerName: params.userName,
-        customerEmail: params.userEmail,
-        subject: cleanSubject,
-        category: params.category,
-        description: cleanDescription,
-      }),
-    });
-    if (emailRes.ok) {
-      const emailData = await emailRes.json();
-      const sentSuccess = Boolean(emailData.sent);
-      const sentAtISO = emailData.emailLog?.sentAtISO || nowISO;
-      const errMsg = String(emailData.emailLog?.errorMessage || '');
-      ticketRecord.emailOpenedStatus = sentSuccess ? 'sent' : 'failed';
-      ticketRecord.emailOpenedSentAtISO = sentAtISO;
-      ticketRecord.emailOpenedError = errMsg;
-    } else {
-      ticketRecord.emailOpenedStatus = 'failed';
-    }
-  } catch (err) {
-    ticketRecord.emailOpenedStatus = 'failed';
-    ticketRecord.emailOpenedError =
-      err instanceof Error ? err.message : 'Email dispatch error';
   }
 
   return ticketRecord;
@@ -1143,6 +1091,27 @@ export async function claimSupportTicketAtomic(params: {
       assignedToEmail: staff.email.slice(0, 120),
       updatedAt: serverTimestamp(),
     });
+    if (serverData.notification?.id && ticket.userId) {
+      batch.set(doc(db, 'supportNotifications', serverData.notification.id), {
+        id: serverData.notification.id,
+        recipientUid: ticket.userId,
+        recipientRole: 'customer',
+        type: 'ticket_claimed',
+        ticketId: ticket.id,
+        ticketNumber: ticket.ticketNumber || ticket.id,
+        title: String(
+          serverData.notification.title ||
+            `Ticket Claimed (${ticket.ticketNumber || ticket.id})`
+        ).slice(0, 160),
+        body: String(
+          serverData.notification.message ||
+            `${staff.name} has claimed your support ticket.`
+        ).slice(0, 500),
+        read: false,
+        createdAt: serverTimestamp(),
+        createdAtISO: claimedAtISO,
+      });
+    }
     await batch.commit();
   } catch (err) {
     if (err instanceof Error && err.message.includes('already been claimed')) {
@@ -1413,6 +1382,36 @@ export async function postSupportTicketReplyOrNote(params: {
     } catch {
       // Ignore
     }
+
+    // Write in-app notification to Firestore `/supportNotifications/{notifId}` ONLY for public replies (never internal notes)
+    if (!isInternal && data.notification?.id) {
+      try {
+        await setDoc(doc(db, 'supportNotifications', data.notification.id), {
+          id: String(data.notification.id),
+          recipientUid: String(data.notification.recipientUid),
+          recipientRole:
+            data.notification.recipientRole === 'staff' ? 'staff' : 'customer',
+          type: String(
+            data.notification.type ||
+              (params.senderRole === 'customer'
+                ? 'customer_replied'
+                : 'staff_replied')
+          ),
+          ticketId: ticket.id,
+          ticketNumber: ticket.ticketNumber || ticket.id,
+          title: String(data.notification.title || 'Support Update').slice(
+            0,
+            160
+          ),
+          body: String(data.notification.message || '').slice(0, 500),
+          read: false,
+          createdAt: serverTimestamp(),
+          createdAtISO: nowISO,
+        });
+      } catch {
+        // Ignore if notification write is handled by server state
+      }
+    }
   } catch {
     // Non-fatal if Firestore rules/offline mode block secondary write
   }
@@ -1448,7 +1447,7 @@ export async function postSupportTicketReplyOrNote(params: {
 /**
  * Updates ticket status, resolution summary, or executes an Administrator Override
  * (reassigning staff, releasing claim to Unclaimed, or reopening a resolved/closed ticket).
- * Automatically dispatches Email #2 (TICKET_CLOSED) when status transitions to 'closed'.
+ * Persists website-based in-app notifications (including the resolution summary on closure) to Firestore.
  */
 export async function updateSupportTicketWorkflowOrOverride(params: {
   ticket: SupportTicketRecord;
@@ -1469,7 +1468,6 @@ export async function updateSupportTicketWorkflowOrOverride(params: {
   updatedTicket: SupportTicketRecord;
   historyEvent: SupportTicketHistoryEntry;
   auditLog?: AdminAuditLogRecord;
-  closedEmailDispatched?: boolean;
 }> {
   const { ticket, actor, operation } = params;
 
@@ -1591,6 +1589,35 @@ export async function updateSupportTicketWorkflowOrOverride(params: {
       );
     }
 
+    if (data.notification?.id) {
+      batch.set(doc(db, 'supportNotifications', data.notification.id), {
+        id: String(data.notification.id),
+        recipientUid: String(data.notification.recipientUid),
+        recipientRole:
+          data.notification.recipientRole === 'staff' ? 'staff' : 'customer',
+        type: String(data.notification.type || 'status_changed'),
+        ticketId: ticket.id,
+        ticketNumber: updatedTicket.ticketNumber || ticket.id,
+        title: String(data.notification.title || 'Ticket Status Updated').slice(
+          0,
+          160
+        ),
+        body: String(data.notification.message || '').slice(0, 500),
+        ...(data.notification.resolutionSummary ||
+        updatedTicket.resolutionSummary
+          ? {
+              resolutionSummary: String(
+                data.notification.resolutionSummary ||
+                  updatedTicket.resolutionSummary
+              ).slice(0, 2000),
+            }
+          : {}),
+        read: false,
+        createdAt: serverTimestamp(),
+        createdAtISO: nowISO,
+      });
+    }
+
     batch.update(doc(db, 'support_tickets', ticket.id), {
       status:
         updatedTicket.status === 'waiting_for_user'
@@ -1605,110 +1632,10 @@ export async function updateSupportTicketWorkflowOrOverride(params: {
     // Non-fatal if Firestore rules/offline mode block secondary write
   }
 
-  let closedEmailDispatched = false;
-  // Trigger Automated Email #2 ONLY when ticket status becomes 'closed'
-  if (
-    updatedTicket.status === 'closed' &&
-    ticket.status !== 'closed' &&
-    updatedTicket.userEmail
-  ) {
-    try {
-      const emailRes = await fetch('/api/support/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ticketId: updatedTicket.id,
-          ticketNumber: updatedTicket.ticketNumber || updatedTicket.id,
-          eventType: 'TICKET_CLOSED',
-          customerName: updatedTicket.userName,
-          customerEmail: updatedTicket.userEmail,
-          subject: updatedTicket.subject,
-          category: updatedTicket.category || 'General Enquiry',
-          assignedStaffName:
-            updatedTicket.assignedStaffName || actor.name || 'Support Team',
-          resolutionSummary:
-            updatedTicket.resolutionSummary ||
-            'Your support request has been resolved and closed.',
-          closedAtISO: updatedTicket.closedAtISO || nowISO,
-        }),
-      });
-      if (emailRes.ok) {
-        const emailData = await emailRes.json();
-        closedEmailDispatched = Boolean(emailData.sent);
-        updatedTicket.emailClosedStatus = closedEmailDispatched
-          ? 'sent'
-          : 'failed';
-        updatedTicket.emailClosedSentAtISO =
-          emailData.emailLog?.sentAtISO || nowISO;
-        updatedTicket.emailClosedError = String(
-          emailData.emailLog?.errorMessage || ''
-        );
-      } else {
-        updatedTicket.emailClosedStatus = 'failed';
-      }
-    } catch (err) {
-      updatedTicket.emailClosedStatus = 'failed';
-      updatedTicket.emailClosedError =
-        err instanceof Error ? err.message : 'Email dispatch error';
-    }
-  }
-
   return {
     updatedTicket,
     historyEvent: data.historyEvent,
     auditLog: data.auditLog,
-    closedEmailDispatched,
-  };
-}
-
-/**
- * Retries a failed or pending automated email (strictly TICKET_OPENED or TICKET_CLOSED).
- */
-export async function retryTicketEmailNotification(params: {
-  ticket: SupportTicketRecord;
-  eventType: 'TICKET_OPENED' | 'TICKET_CLOSED';
-}): Promise<{
-  sent: boolean;
-  status: 'sent' | 'failed';
-  sentAtISO: string;
-  errorMessage?: string;
-}> {
-  const { ticket, eventType } = params;
-  const nowISO = new Date().toISOString();
-
-  const res = await fetch('/api/support/send-email', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      ticketId: ticket.id,
-      ticketNumber: ticket.ticketNumber || ticket.id,
-      eventType,
-      customerName: ticket.userName,
-      customerEmail: ticket.userEmail,
-      subject: ticket.subject,
-      category: ticket.category || 'General Enquiry',
-      description: ticket.description,
-      assignedStaffName: ticket.assignedStaffName || 'BorrowBox Support Team',
-      resolutionSummary:
-        ticket.resolutionSummary ||
-        'Your support request has been resolved by our team.',
-      closedAtISO: ticket.closedAtISO || nowISO,
-      forceRetry: true,
-    }),
-  });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.error || 'Failed to retry email notification.');
-  }
-
-  return {
-    sent: Boolean(data.sent),
-    status: data.sent ? 'sent' : 'failed',
-    sentAtISO: String(data.emailLog?.sentAtISO || nowISO),
-    errorMessage: data.emailLog?.errorMessage
-      ? String(data.emailLog.errorMessage)
-      : undefined,
   };
 }
 
@@ -2067,35 +1994,223 @@ export function subscribeToTicketConversation(
 }
 
 /**
- * Fetches in-app support notifications for a customer or staff member.
+ * Fetches in-app support notifications for a customer or staff member from both Firestore (`/supportNotifications`)
+ * and the synchronized server state store.
  */
 export async function fetchSupportNotifications(params: {
   uid: string;
   role: 'customer' | 'staff';
 }): Promise<AppNotificationItem[]> {
   if (!params.uid) return [];
-  try {
-    const res = await fetch(
-      `/api/support/state?uid=${encodeURIComponent(params.uid)}&role=${
-        params.role === 'staff' ? 'admin' : 'customer'
+  const cleanUid = params.uid.trim();
+  const isStaff = params.role === 'staff';
+
+  const [firestoreSnap, serverRes] = await Promise.all([
+    (isStaff
+      ? getDocs(collection(db, 'supportNotifications'))
+      : getDocs(
+          query(
+            collection(db, 'supportNotifications'),
+            where('recipientUid', '==', cleanUid)
+          )
+        )
+    ).catch(() => null),
+    fetch(
+      `/api/support/state?uid=${encodeURIComponent(cleanUid)}&role=${
+        isStaff ? 'admin' : 'customer'
       }`
-    );
-    if (!res.ok) return [];
-    const data = await res.json();
-    const list: Record<string, unknown>[] = Array.isArray(data.notifications)
-      ? data.notifications
-      : [];
-    return list.map((n) => ({
-      id: String(n.id),
-      title: String(n.title || 'Support Update'),
-      body: String(n.message || n.body || ''),
-      ticketId: String(n.ticketId || ''),
-      ticketNumber: String(n.ticketNumber || ''),
-      recipientUid: String(n.recipientUid || ''),
-      timestampISO: String(n.createdAtISO || new Date().toISOString()),
-      read: Boolean(n.read),
-    }));
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null),
+  ]);
+
+  const map = new Map<string, AppNotificationItem>();
+
+  if (firestoreSnap) {
+    for (const d of firestoreSnap.docs) {
+      const n = d.data();
+      const recipientUid = String(n.recipientUid || '');
+      const recipientRole =
+        n.recipientRole === 'staff' ? 'staff' : 'customer';
+
+      if (isStaff) {
+        if (
+          recipientRole !== 'staff' ||
+          (recipientUid !== cleanUid && recipientUid !== 'ALL_SUPPORT_STAFF')
+        ) {
+          continue;
+        }
+      } else {
+        if (recipientRole !== 'customer' || recipientUid !== cleanUid) {
+          continue;
+        }
+      }
+
+      const id = String(n.id || d.id);
+      map.set(id, {
+        id,
+        title: String(n.title || 'Support Update'),
+        body: String(n.body || n.message || ''),
+        type: n.type ? String(n.type) : undefined,
+        resolutionSummary: n.resolutionSummary
+          ? String(n.resolutionSummary)
+          : undefined,
+        ticketId: String(n.ticketId || ''),
+        ticketNumber: String(n.ticketNumber || n.ticketId || ''),
+        recipientUid,
+        recipientRole,
+        timestampISO: formatTimestamp(
+          n.createdAt,
+          String(n.createdAtISO || new Date().toISOString())
+        ),
+        read: Boolean(n.read),
+      });
+    }
+  }
+
+  const serverList: Record<string, unknown>[] = Array.isArray(
+    serverRes?.notifications
+  )
+    ? serverRes.notifications
+    : [];
+
+  for (const n of serverList) {
+    const id = String(n.id || '');
+    if (!id) continue;
+    const recipientUid = String(n.recipientUid || '');
+    const recipientRole = n.recipientRole === 'staff' ? 'staff' : 'customer';
+
+    if (isStaff) {
+      if (
+        recipientRole !== 'staff' ||
+        (recipientUid !== cleanUid && recipientUid !== 'ALL_SUPPORT_STAFF')
+      ) {
+        continue;
+      }
+    } else {
+      if (recipientRole !== 'customer' || recipientUid !== cleanUid) {
+        continue;
+      }
+    }
+
+    const existing = map.get(id);
+    map.set(id, {
+      id,
+      title: String(n.title || existing?.title || 'Support Update'),
+      body: String(n.message || n.body || existing?.body || ''),
+      type: n.type ? String(n.type) : existing?.type,
+      resolutionSummary: n.resolutionSummary
+        ? String(n.resolutionSummary)
+        : existing?.resolutionSummary,
+      ticketId: String(n.ticketId || existing?.ticketId || ''),
+      ticketNumber: String(
+        n.ticketNumber || n.ticketId || existing?.ticketNumber || ''
+      ),
+      recipientUid,
+      recipientRole,
+      timestampISO: String(
+        n.createdAtISO || existing?.timestampISO || new Date().toISOString()
+      ),
+      read: Boolean(n.read || existing?.read),
+    });
+  }
+
+  return Array.from(map.values()).sort((a, b) =>
+    b.timestampISO.localeCompare(a.timestampISO)
+  );
+}
+
+/**
+ * Subscribes in real time (`onSnapshot` on `/supportNotifications` + server sync)
+ * to support notifications for a customer or staff member.
+ */
+export function subscribeToSupportNotifications(
+  params: {
+    uid: string;
+    role: 'customer' | 'staff';
+  },
+  onNotificationsChanged: (notifications: AppNotificationItem[]) => void
+): () => void {
+  const { uid, role } = params;
+  if (!uid) return () => {};
+
+  let active = true;
+  const refresh = async () => {
+    if (!active) return;
+    try {
+      const list = await fetchSupportNotifications({ uid, role });
+      if (active) {
+        onNotificationsChanged(list);
+      }
+    } catch {
+      // Ignore transient errors
+    }
+  };
+
+  void refresh();
+
+  const notifQuery =
+    role === 'staff'
+      ? collection(db, 'supportNotifications')
+      : query(
+          collection(db, 'supportNotifications'),
+          where('recipientUid', '==', uid)
+        );
+
+  const unsubFirestore = onSnapshot(
+    notifQuery,
+    () => {
+      if (active) void refresh();
+    },
+    () => {
+      // Fallback to poll if offline
+    }
+  );
+
+  const pollInterval = setInterval(() => {
+    void refresh();
+  }, 2500);
+
+  return () => {
+    active = false;
+    clearInterval(pollInterval);
+    unsubFirestore();
+  };
+}
+
+/**
+ * Marks a single support notification or all support notifications for the current user as read
+ * in both Firestore (`/supportNotifications`) and the backend store.
+ */
+export async function markSupportNotificationRead(params: {
+  notificationId?: string;
+  recipientUid: string;
+  role: 'customer' | 'staff';
+}): Promise<void> {
+  const { notificationId, recipientUid, role } = params;
+  if (!recipientUid) return;
+
+  try {
+    await fetch('/api/support/notifications/read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        notificationId: notificationId || '',
+        recipientUid,
+        role,
+      }),
+    });
   } catch {
-    return [];
+    // Non-fatal
+  }
+
+  if (notificationId) {
+    try {
+      await updateDoc(doc(db, 'supportNotifications', notificationId), {
+        read: true,
+      });
+    } catch {
+      // Ignore if notification document only existed in server store
+    }
   }
 }

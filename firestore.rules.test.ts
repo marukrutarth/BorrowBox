@@ -215,6 +215,12 @@ test('Firestore rules file enforces all 8 hardened security pillars plus Admin R
     'Must enforce customer internal-note exclusion, staff ownership/override tiers, and resolution summary on ticket closure'
   );
   assert.ok(
+    rulesSource.includes('match /supportNotifications/{notifId}') &&
+      rulesSource.includes('resource.data.recipientUid == request.auth.uid') &&
+      rulesSource.includes("resource.data.recipientRole == 'customer'"),
+    'Must enforce customer ownership and role isolation on supportNotifications'
+  );
+  assert.ok(
     rulesSource.includes('match /audit_logs/{logId}') &&
       rulesSource.includes('isValidAuditLog(incoming(), logId)'),
     'Must validate immutable audit logs'

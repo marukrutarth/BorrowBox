@@ -1,11 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildTicketClosedEmailPayload,
-  buildTicketOpenedEmailPayload,
-  isAllowedSupportEmailEvent,
-  resolveFormattedSenderEmail,
-  resolveReplyToEmail,
+  ServerSupportNotification,
+  filterNotificationsForViewer,
   sanitizeTicketForCustomer,
   validateSupportAttachmentInput,
   validateTicketClaimAttempt,
@@ -95,75 +92,104 @@ test('Internal Notes Privacy: sanitizeTicketForCustomer strictly strips internal
   assert.equal(sanitized.internalNotes, '');
 });
 
-test('Mandatory Customer Email Payloads: Ticket Opened & Ticket Closed subjects and content match specification without priority', () => {
-  const openedEmail = buildTicketOpenedEmailPayload({
-    ticketNumber: 'BB-TKT-2026-4829',
-    customerName: 'Aarav Sharma',
-    customerEmail: 'aarav@gmail.com',
-    subject: 'Deposit refund status',
-    category: 'Payment & Deposit',
-    description: 'My rental ended yesterday, checking when deposit is released.',
-  });
+test('Website-Based Notifications & Customer Access Isolation: customers only see their own customer notifications and never see other customers or staff notifications', () => {
+  const notifications: ServerSupportNotification[] = [
+    {
+      id: 'notif-1',
+      recipientUid: 'ALL_SUPPORT_STAFF',
+      recipientRole: 'staff',
+      type: 'ticket_created',
+      title: 'New Support Ticket: BB-TKT-2026-1001',
+      message: 'Aarav Sharma opened a Booking Issue ticket.',
+      ticketId: 'BB-TKT-2026-1001',
+      ticketNumber: 'BB-TKT-2026-1001',
+      read: false,
+      createdAtISO: '2026-10-31T10:00:00Z',
+    },
+    {
+      id: 'notif-2',
+      recipientUid: 'cust_1',
+      recipientRole: 'customer',
+      type: 'staff_replied',
+      title: 'Support Reply on BB-TKT-2026-1001',
+      message: 'Priya Support replied to your ticket.',
+      ticketId: 'BB-TKT-2026-1001',
+      ticketNumber: 'BB-TKT-2026-1001',
+      read: false,
+      createdAtISO: '2026-10-31T10:05:00Z',
+    },
+    {
+      id: 'notif-3',
+      recipientUid: 'cust_2',
+      recipientRole: 'customer',
+      type: 'staff_replied',
+      title: 'Support Reply on BB-TKT-2026-2002',
+      message: 'Rohan Support replied to cust_2.',
+      ticketId: 'BB-TKT-2026-2002',
+      ticketNumber: 'BB-TKT-2026-2002',
+      read: false,
+      createdAtISO: '2026-10-31T10:06:00Z',
+    },
+    {
+      id: 'notif-4',
+      recipientUid: 'staff_1',
+      recipientRole: 'staff',
+      type: 'customer_replied',
+      title: 'Customer Reply: BB-TKT-2026-1001',
+      message: 'Aarav Sharma replied.',
+      ticketId: 'BB-TKT-2026-1001',
+      ticketNumber: 'BB-TKT-2026-1001',
+      read: false,
+      createdAtISO: '2026-10-31T10:07:00Z',
+    },
+    {
+      id: 'notif-5',
+      recipientUid: 'cust_1',
+      recipientRole: 'customer',
+      type: 'ticket_closed',
+      title: 'Ticket Closed: BB-TKT-2026-1001',
+      message: 'Your ticket was closed. Resolution Summary: Full deposit refunded.',
+      ticketId: 'BB-TKT-2026-1001',
+      ticketNumber: 'BB-TKT-2026-1001',
+      resolutionSummary: 'Full deposit refunded.',
+      read: false,
+      createdAtISO: '2026-10-31T10:15:00Z',
+    },
+  ];
 
-  assert.equal(
-    openedEmail.subject,
-    'BorrowBox Support: Your Ticket Has Been Created - BB-TKT-2026-4829'
+  // Customer 1 sees only their own customer notifications (notif-2 and notif-5)
+  const cust1View = filterNotificationsForViewer(
+    notifications,
+    'cust_1',
+    'customer'
   );
-  assert.ok(openedEmail.textBody.includes('Aarav Sharma'));
-  assert.ok(openedEmail.textBody.includes('BB-TKT-2026-4829'));
-  assert.ok(openedEmail.textBody.includes('Payment & Deposit'));
-  assert.ok(!openedEmail.textBody.includes('Priority:'));
-  assert.ok(openedEmail.textBody.includes('Open'));
-
-  const closedEmail = buildTicketClosedEmailPayload({
-    ticketNumber: 'BB-TKT-2026-4829',
-    customerName: 'Aarav Sharma',
-    customerEmail: 'aarav@gmail.com',
-    subject: 'Deposit refund status',
-    assignedStaffName: 'Priya Support',
-    resolutionSummary:
-      'Security deposit of ₹5,000 has been released to your original payment method.',
-    closedAtISO: '2026-10-31T16:00:00Z',
-  });
-
-  assert.equal(
-    closedEmail.subject,
-    'BorrowBox Support: Your Ticket Has Been Resolved - BB-TKT-2026-4829'
+  assert.equal(cust1View.length, 2);
+  assert.deepEqual(
+    cust1View.map((n) => n.id),
+    ['notif-2', 'notif-5']
   );
-  assert.ok(closedEmail.textBody.includes('Priya Support'));
-  assert.ok(closedEmail.textBody.includes('Closed'));
-  assert.ok(
-    closedEmail.textBody.includes(
-      'Security deposit of ₹5,000 has been released'
-    )
+  assert.equal(cust1View[1].resolutionSummary, 'Full deposit refunded.');
+
+  // Customer 2 sees only their own customer notification (notif-3) and cannot see Customer 1's notifications
+  const cust2View = filterNotificationsForViewer(
+    notifications,
+    'cust_2',
+    'customer'
   );
-});
+  assert.equal(cust2View.length, 1);
+  assert.equal(cust2View[0].id, 'notif-3');
 
-test('Resend Sender & Reply-To Normalization: preserves RFC 5322 formatted SUPPORT_FROM_EMAIL without nested angle brackets', () => {
-  const formatted = resolveFormattedSenderEmail();
-  assert.ok(formatted.includes('<') && formatted.includes('>'));
-  assert.equal((formatted.match(/</g) || []).length, 1);
-  assert.equal((formatted.match(/>/g) || []).length, 1);
-
-  const replyTo = resolveReplyToEmail();
-  assert.equal(typeof replyTo, 'string');
-});
-
-test('Strict Email Trigger Policy: allows only TICKET_OPENED and TICKET_CLOSED and rejects replies, assignments, priority changes, and intermediate status changes', () => {
-  assert.equal(isAllowedSupportEmailEvent('TICKET_OPENED'), true);
-  assert.equal(isAllowedSupportEmailEvent('TICKET_CLOSED'), true);
-
-  // Forbidden intermediate/conversation email events
-  assert.equal(isAllowedSupportEmailEvent('ADMIN_REPLIED'), false);
-  assert.equal(isAllowedSupportEmailEvent('CUSTOMER_REPLIED'), false);
-  assert.equal(isAllowedSupportEmailEvent('TICKET_CLAIMED'), false);
-  assert.equal(isAllowedSupportEmailEvent('TICKET_ASSIGNED'), false);
-  assert.equal(isAllowedSupportEmailEvent('PRIORITY_CHANGED'), false);
-  assert.equal(isAllowedSupportEmailEvent('STATUS_IN_PROGRESS'), false);
-  assert.equal(isAllowedSupportEmailEvent('STATUS_WAITING_FOR_USER'), false);
-  assert.equal(isAllowedSupportEmailEvent('STATUS_RESOLVED'), false);
-  assert.equal(isAllowedSupportEmailEvent(''), false);
-  assert.equal(isAllowedSupportEmailEvent(undefined), false);
+  // Staff 1 sees ALL_SUPPORT_STAFF notifications and notifications assigned to staff_1 (notif-1 and notif-4), never customer notifications
+  const staff1View = filterNotificationsForViewer(
+    notifications,
+    'staff_1',
+    'staff'
+  );
+  assert.equal(staff1View.length, 2);
+  assert.deepEqual(
+    staff1View.map((n) => n.id),
+    ['notif-1', 'notif-4']
+  );
 });
 
 test('Attachment Upload Validation: accepts JPEG, JPG, PNG, WebP, and PDF <= 5MB and rejects invalid types or >5MB payloads', () => {

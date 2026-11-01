@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   AlertTriangle,
+  Bell,
+  Check,
   CheckCircle2,
   Clock,
   Download,
@@ -10,7 +12,6 @@ import {
   Image as ImageIcon,
   Inbox,
   Lock,
-  Mail,
   Maximize2,
   MessageSquare,
   Paperclip,
@@ -28,6 +29,7 @@ import {
 import {
   AdminAuditLogRecord,
   AdminRegistryRecord,
+  AppNotificationItem,
   SupportAttachmentItem,
   SupportTicketHistoryEntry,
   SupportTicketMessageRecord,
@@ -41,8 +43,9 @@ import {
   claimSupportTicketAtomic,
   isImageAttachment,
   isPdfAttachment,
+  markSupportNotificationRead,
   postSupportTicketReplyOrNote,
-  retryTicketEmailNotification,
+  subscribeToSupportNotifications,
   subscribeToTicketConversation,
   updateSupportTicketWorkflowOrOverride,
   uploadSupportAttachment,
@@ -52,6 +55,7 @@ interface AdminTicketsModuleProps {
   currentAdmin: AdminRegistryRecord;
   tickets: SupportTicketRecord[];
   admins: AdminRegistryRecord[];
+  selectedTicketIdFromParent?: string | null;
   onTicketUpdated: (
     updatedTicket: SupportTicketRecord,
     auditLog?: AdminAuditLogRecord
@@ -118,6 +122,7 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
   currentAdmin,
   tickets,
   admins,
+  selectedTicketIdFromParent = null,
   onTicketUpdated,
   onNotify,
 }) => {
@@ -126,8 +131,13 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
     useState<PrimaryTicketFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(
-    tickets[0]?.id || null
+    selectedTicketIdFromParent || tickets[0]?.id || null
   );
+
+  // Real-time staff support notifications
+  const [staffNotifications, setStaffNotifications] = useState<
+    AppNotificationItem[]
+  >([]);
 
   // Selected Ticket Thread & History
   const [messages, setMessages] = useState<SupportTicketMessageRecord[]>([]);
@@ -137,9 +147,6 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
   // Workspace Action States
   const [claimingTicketId, setClaimingTicketId] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
-  const [retryingEmailEvent, setRetryingEmailEvent] = useState<
-    'TICKET_OPENED' | 'TICKET_CLOSED' | null
-  >(null);
 
   // Composer State (Public Reply vs Internal Note)
   const [composerMode, setComposerMode] = useState<'reply' | 'internal_note'>(
@@ -235,6 +242,73 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
     () => tickets.find((t) => t.id === selectedTicketId) || null,
     [tickets, selectedTicketId]
   );
+
+  useEffect(() => {
+    if (selectedTicketIdFromParent) {
+      setPrimaryFilter('all');
+      setSelectedTicketId(selectedTicketIdFromParent);
+    }
+  }, [selectedTicketIdFromParent]);
+
+  useEffect(() => {
+    if (!currentAdmin?.uid) {
+      setStaffNotifications([]);
+      return;
+    }
+    const unsub = subscribeToSupportNotifications(
+      { uid: currentAdmin.uid, role: 'staff' },
+      (liveNotifs) => {
+        setStaffNotifications(liveNotifs);
+      }
+    );
+    return () => unsub();
+  }, [currentAdmin?.uid]);
+
+  const handleOpenStaffNotification = async (notif: AppNotificationItem) => {
+    if (currentAdmin?.uid && !notif.read) {
+      setStaffNotifications((prev) =>
+        prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
+      );
+      await markSupportNotificationRead({
+        notificationId: notif.id,
+        recipientUid: currentAdmin.uid,
+        role: 'staff',
+      });
+    }
+    const targetId = notif.ticketId || notif.ticketNumber;
+    if (targetId) {
+      setPrimaryFilter('all');
+      const match = tickets.find(
+        (t) => t.id === targetId || t.ticketNumber === targetId
+      );
+      setSelectedTicketId(match ? match.id : targetId);
+    }
+  };
+
+  const handleMarkSingleStaffNotificationRead = async (
+    e: React.MouseEvent,
+    notif: AppNotificationItem
+  ) => {
+    e.stopPropagation();
+    if (!currentAdmin?.uid || notif.read) return;
+    setStaffNotifications((prev) =>
+      prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
+    );
+    await markSupportNotificationRead({
+      notificationId: notif.id,
+      recipientUid: currentAdmin.uid,
+      role: 'staff',
+    });
+  };
+
+  const handleMarkAllStaffNotificationsRead = async () => {
+    if (!currentAdmin?.uid) return;
+    setStaffNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    await markSupportNotificationRead({
+      recipientUid: currentAdmin.uid,
+      role: 'staff',
+    });
+  };
 
   useEffect(() => {
     if (!selectedTicket && filteredTickets.length > 0) {
@@ -362,15 +436,11 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
 
       if (nextStatus === 'closed') {
         onNotify(
-          result.closedEmailDispatched
-            ? `Ticket ${
-                selectedTicket.ticketNumber || selectedTicket.id
-              } closed and Resolution Summary email sent to ${
-                selectedTicket.userEmail
-              }.`
-            : `Ticket ${
-                selectedTicket.ticketNumber || selectedTicket.id
-              } closed.`,
+          `Ticket ${
+            selectedTicket.ticketNumber || selectedTicket.id
+          } closed and Resolution Summary notification sent to ${
+            selectedTicket.userName
+          } inside BorrowBox.`,
           'success'
         );
       } else {
@@ -486,59 +556,6 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
       );
     } finally {
       setUpdatingStatus(false);
-    }
-  };
-
-  // Retry Automated Email Handler (TICKET_OPENED or TICKET_CLOSED)
-  const handleRetryEmail = async (
-    eventType: 'TICKET_OPENED' | 'TICKET_CLOSED'
-  ) => {
-    if (!selectedTicket) return;
-    setRetryingEmailEvent(eventType);
-    try {
-      const result = await retryTicketEmailNotification({
-        ticket: selectedTicket,
-        eventType,
-      });
-
-      const updatedTicket: SupportTicketRecord =
-        eventType === 'TICKET_OPENED'
-          ? {
-              ...selectedTicket,
-              emailOpenedStatus: result.status,
-              emailOpenedSentAtISO: result.sentAtISO,
-              emailOpenedError: result.errorMessage || '',
-            }
-          : {
-              ...selectedTicket,
-              emailClosedStatus: result.status,
-              emailClosedSentAtISO: result.sentAtISO,
-              emailClosedError: result.errorMessage || '',
-            };
-
-      onTicketUpdated(updatedTicket);
-      if (result.sent) {
-        onNotify(
-          `${
-            eventType === 'TICKET_OPENED' ? 'Ticket Opened' : 'Ticket Closed'
-          } email successfully delivered to ${selectedTicket.userEmail}.`,
-          'success'
-        );
-      } else {
-        onNotify(
-          `Email retry failed: ${
-            result.errorMessage || 'Check Resend configuration'
-          }`,
-          'error'
-        );
-      }
-    } catch (err) {
-      onNotify(
-        err instanceof Error ? err.message : 'Email retry failed.',
-        'error'
-      );
-    } finally {
-      setRetryingEmailEvent(null);
     }
   };
 
@@ -876,6 +893,103 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
       </div>
 
       {/* ====================================================================
+          1B. REAL-TIME STAFF SUPPORT NOTIFICATIONS
+         ==================================================================== */}
+      {staffNotifications.length > 0 && (
+        <div
+          data-testid="staff-support-notifications"
+          className="p-4 rounded-2xl bg-[#161E2E] border border-white/[0.08] space-y-3"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-[#06B6D4]" />
+              <span className="text-xs font-bold uppercase tracking-wider text-[#F8FAFC]">
+                Support Staff Notifications
+              </span>
+              {staffNotifications.filter((n) => !n.read).length > 0 && (
+                <span
+                  data-testid="staff-unread-notif-count"
+                  className="px-2 py-0.5 rounded bg-[#8B5CF6] text-white text-[10px] font-bold font-mono"
+                >
+                  {staffNotifications.filter((n) => !n.read).length} Unread
+                </span>
+              )}
+            </div>
+            {staffNotifications.some((n) => !n.read) && (
+              <button
+                type="button"
+                onClick={() => void handleMarkAllStaffNotificationsRead()}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#111827] hover:bg-[#1D293B] border border-white/[0.08] text-[11px] font-medium text-[#F8FAFC] cursor-pointer"
+              >
+                <Check className="w-3 h-3 text-[#22C55E]" />
+                <span>Mark all read</span>
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-48 overflow-y-auto pr-1">
+            {staffNotifications.slice(0, 6).map((notif) => (
+              <div
+                key={notif.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => void handleOpenStaffNotification(notif)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    void handleOpenStaffNotification(notif);
+                  }
+                }}
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                  notif.read
+                    ? 'bg-[#111827]/70 border-white/[0.07] text-[#94A3B8] hover:bg-[#111827]'
+                    : 'bg-[#8B5CF6]/10 border-[#8B5CF6]/40 text-[#F8FAFC] hover:bg-[#8B5CF6]/15'
+                }`}
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {!notif.read && (
+                        <span className="w-2 h-2 rounded-full bg-[#06B6D4] shrink-0" />
+                      )}
+                      <span className="text-xs font-bold truncate">
+                        {notif.title}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-[#94A3B8] shrink-0">
+                      {notif.timestampISO.slice(0, 16).replace('T', ' ')}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#94A3B8] line-clamp-2">
+                    {notif.body}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/[0.05] text-[10px]">
+                  <span className="font-mono text-[#06B6D4] font-semibold">
+                    Open {notif.ticketNumber || notif.ticketId} &rarr;
+                  </span>
+                  {!notif.read ? (
+                    <button
+                      type="button"
+                      onClick={(e) =>
+                        void handleMarkSingleStaffNotificationRead(e, notif)
+                      }
+                      className="px-2 py-0.5 rounded bg-[#161E2E] hover:bg-[#1D293B] border border-white/[0.08] text-[#F8FAFC] cursor-pointer"
+                    >
+                      Mark Read
+                    </button>
+                  ) : (
+                    <span className="text-[#64748B]">Read</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================================
           2. PRIMARY FILTERS (4) & SIMPLE SEARCH FIELD
          ==================================================================== */}
       <div className="p-4 rounded-2xl bg-[#161E2E] border border-white/[0.08] flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
@@ -1075,71 +1189,10 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
                     {formatStatusLabel(selectedTicket.status)}
                   </span>
                 </div>
-
-                {/* Email Delivery Verification Badges */}
-                <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                  <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border font-mono ${
-                      selectedTicket.emailOpenedStatus === 'sent'
-                        ? 'bg-[#22C55E]/10 text-[#22C55E] border-[#22C55E]/30'
-                        : selectedTicket.emailOpenedStatus === 'failed'
-                        ? 'bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/30'
-                        : 'bg-white/[0.05] text-[#94A3B8] border-white/[0.1]'
-                    }`}
-                  >
-                    <Mail className="w-3 h-3" />
-                    <span>
-                      Opened Email:{' '}
-                      {(
-                        selectedTicket.emailOpenedStatus || 'sent'
-                      ).toUpperCase()}
-                    </span>
-                  </span>
-                  {selectedTicket.emailOpenedStatus === 'failed' && (
-                    <button
-                      type="button"
-                      disabled={retryingEmailEvent === 'TICKET_OPENED'}
-                      onClick={() => void handleRetryEmail('TICKET_OPENED')}
-                      className="px-2 py-0.5 rounded bg-[#EF4444]/20 hover:bg-[#EF4444]/30 text-[#EF4444] text-[10px] font-semibold cursor-pointer"
-                    >
-                      {retryingEmailEvent === 'TICKET_OPENED'
-                        ? 'Retrying...'
-                        : 'Retry Opened Email'}
-                    </button>
-                  )}
-
-                  {selectedTicket.status === 'closed' && (
-                    <>
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border font-mono ${
-                          selectedTicket.emailClosedStatus === 'sent'
-                            ? 'bg-[#22C55E]/10 text-[#22C55E] border-[#22C55E]/30'
-                            : 'bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/30'
-                        }`}
-                      >
-                        <Mail className="w-3 h-3" />
-                        <span>
-                          Closed Email:{' '}
-                          {(
-                            selectedTicket.emailClosedStatus || 'sent'
-                          ).toUpperCase()}
-                        </span>
-                      </span>
-                      {selectedTicket.emailClosedStatus === 'failed' && (
-                        <button
-                          type="button"
-                          disabled={retryingEmailEvent === 'TICKET_CLOSED'}
-                          onClick={() => void handleRetryEmail('TICKET_CLOSED')}
-                          className="px-2 py-0.5 rounded bg-[#EF4444]/20 hover:bg-[#EF4444]/30 text-[#EF4444] text-[10px] font-semibold cursor-pointer"
-                        >
-                          {retryingEmailEvent === 'TICKET_CLOSED'
-                            ? 'Retrying...'
-                            : 'Retry Closed Email'}
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
+                <span className="text-[11px] font-mono text-[#94A3B8]">
+                  In-App Website Ticket · Opened{' '}
+                  {selectedTicket.createdAtISO.slice(0, 10)}
+                </span>
               </div>
 
               <h2 className="text-base font-bold text-[#F8FAFC]">
@@ -1550,7 +1603,7 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
                         label: 'Waiting for User',
                       },
                       { status: 'resolved', label: 'Mark Resolved' },
-                      { status: 'closed', label: 'Close & Send Email' },
+                      { status: 'closed', label: 'Close Ticket' },
                     ] as { status: SupportTicketStatus; label: string }[]
                   ).map((st) => (
                     <button
@@ -1577,7 +1630,7 @@ export const AdminTicketsModule: React.FC<AdminTicketsModuleProps> = ({
               {/* Resolution Summary (Required before Closing) */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-medium text-[#94A3B8]">
-                  Official Resolution Summary (Included in Ticket Closed Email) *
+                  Official Resolution Summary (Sent to Customer in BorrowBox Notification) *
                 </label>
                 <textarea
                   rows={3}

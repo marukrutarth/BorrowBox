@@ -66,6 +66,10 @@ import {
   detectPrefersReducedMotion,
   shouldPlayIntroAnimation,
 } from './utils/introAnimation';
+import {
+  markSupportNotificationRead,
+  subscribeToSupportNotifications,
+} from './services/supportTicketService';
 
 function parseUrlToRoute(pathname: string, search: string): PageRoute {
   const params = new URLSearchParams(search);
@@ -368,6 +372,32 @@ export default function App() {
     };
   }, [firebaseUser]);
 
+  // Real-time customer support notifications listener (accessible from anywhere in BorrowBox)
+  useEffect(() => {
+    if (!userProfile?.uid) return;
+    const unsubscribe = subscribeToSupportNotifications(
+      { uid: userProfile.uid, role: 'customer' },
+      (supportNotifs) => {
+        setNotifications((prev) => {
+          const nonSupport = prev.filter((item) => !item.ticketId);
+          const merged = [...supportNotifs, ...nonSupport];
+          const byId = new Map<string, AppNotificationItem>();
+          for (const item of merged) {
+            byId.set(item.id, item);
+          }
+          return Array.from(byId.values()).sort(
+            (a, b) =>
+              new Date(b.timestampISO || 0).getTime() -
+              new Date(a.timestampISO || 0).getTime()
+          );
+        });
+      }
+    );
+    return () => {
+      unsubscribe();
+    };
+  }, [userProfile?.uid]);
+
   // Sync browse filters if browser back/forward buttons are used
   useEffect(() => {
     const handlePopState = () => {
@@ -640,6 +670,30 @@ export default function App() {
 
   const handleMarkNotificationsRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    if (userProfile?.uid) {
+      void markSupportNotificationRead({
+        recipientUid: userProfile.uid,
+        role: 'customer',
+      });
+    }
+  };
+
+  const handleSelectNotification = (notif: AppNotificationItem) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
+    );
+    if (userProfile?.uid && notif.ticketId) {
+      void markSupportNotificationRead({
+        notificationId: notif.id,
+        recipientUid: userProfile.uid,
+        role: 'customer',
+      });
+    }
+    if (notif.ticketId) {
+      handleNavigate({ page: 'support', ticketId: notif.ticketId });
+    } else {
+      handleNavigate({ page: 'dashboard' });
+    }
   };
 
   const handleLogout = async () => {
@@ -981,6 +1035,9 @@ export default function App() {
         unreadNotificationsCount={
           notifications.filter((n) => !n.read).length
         }
+        notifications={notifications}
+        onSelectNotification={handleSelectNotification}
+        onMarkAllNotificationsRead={handleMarkNotificationsRead}
       />
 
       <main className="flex-1 relative z-10">

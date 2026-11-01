@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Bell,
+  Check,
   ChevronDown,
   Heart,
   LayoutDashboard,
@@ -13,6 +15,7 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import {
   AdminRegistryRecord,
+  AppNotificationItem,
   BorrowBoxUserProfile,
   CategoryName,
   IndianCity,
@@ -42,6 +45,9 @@ export interface DesktopHeaderProps {
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
   unreadNotificationsCount?: number;
+  notifications?: AppNotificationItem[];
+  onSelectNotification?: (notif: AppNotificationItem) => void;
+  onMarkAllNotificationsRead?: () => void;
 }
 
 const CATEGORY_DISPLAY_LABELS: Record<CategoryName, string> = {
@@ -71,13 +77,18 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
   searchQuery,
   onSearchQueryChange,
   unreadNotificationsCount = 0,
+  notifications = [],
+  onSelectNotification,
+  onMarkAllNotificationsRead,
 }) => {
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const categoriesRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLDivElement | null>(null);
+  const notificationsRef = useRef<HTMLDivElement | null>(null);
   const profileRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -100,6 +111,12 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
         !searchRef.current.contains(event.target as Node)
       ) {
         setSearchOpen(false);
+      }
+      if (
+        notificationsRef.current &&
+        !notificationsRef.current.contains(event.target as Node)
+      ) {
+        setNotificationsOpen(false);
       }
       if (
         profileRef.current &&
@@ -370,6 +387,138 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
             <Shield className="w-3.5 h-3.5 text-[#8B5CF6] shrink-0" />
             <span>Admin Panel</span>
           </a>
+        )}
+
+        {/* In-App Notifications Indicator & Dropdown */}
+        {userProfile && (
+          <div ref={notificationsRef} className="relative">
+            <button
+              type="button"
+              data-testid="header-notifications-bell"
+              aria-label={`Notifications (${unreadNotificationsCount} unread)`}
+              aria-expanded={notificationsOpen}
+              onClick={() => setNotificationsOpen((prev) => !prev)}
+              className={`relative inline-flex items-center justify-center h-9 px-2.5 rounded-lg border bb-btn-interactive cursor-pointer ${
+                notificationsOpen
+                  ? 'bg-[#1D293B] border-[#8B5CF6]/45 text-[#F8FAFC]'
+                  : 'bg-[#161E2E] border-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] hover:border-white/[0.16]'
+              }`}
+            >
+              <Bell className="w-4 h-4 text-[#06B6D4]" />
+              {unreadNotificationsCount > 0 && (
+                <span
+                  data-testid="header-unread-badge"
+                  className="ml-1.5 px-1.5 py-0.2 rounded-full bg-[#8B5CF6] text-white text-[10px] font-bold font-mono-tabular"
+                >
+                  {unreadNotificationsCount}
+                </span>
+              )}
+            </button>
+
+            <AnimatePresence>
+              {notificationsOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                  transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                  role="menu"
+                  aria-label="In-App Notifications"
+                  data-testid="header-notifications-dropdown"
+                  className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl bg-[#161E2E] border border-white/[0.08] shadow-2xl p-3 z-50"
+                >
+                  <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-white/[0.08]">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-[#F8FAFC]">
+                        Notifications
+                      </span>
+                      {unreadNotificationsCount > 0 && (
+                        <span className="px-1.5 py-0.5 rounded bg-[#8B5CF6]/20 border border-[#8B5CF6]/40 text-[10px] font-mono font-bold text-[#C4B5FD]">
+                          {unreadNotificationsCount} unread
+                        </span>
+                      )}
+                    </div>
+                    {unreadNotificationsCount > 0 &&
+                      onMarkAllNotificationsRead && (
+                        <button
+                          type="button"
+                          onClick={() => onMarkAllNotificationsRead()}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#06B6D4] hover:underline cursor-pointer"
+                        >
+                          <Check className="w-3 h-3" />
+                          <span>Mark all read</span>
+                        </button>
+                      )}
+                  </div>
+
+                  {notifications.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-[#94A3B8]">
+                      No notifications yet. Ticket replies and updates will appear here in real time.
+                    </div>
+                  ) : (
+                    <div className="mt-2 max-h-80 overflow-y-auto space-y-1.5 pr-0.5">
+                      {notifications.slice(0, 12).map((notif) => (
+                        <div
+                          key={notif.id}
+                          data-testid={`header-notification-item-${notif.id}`}
+                          onClick={() => {
+                            setNotificationsOpen(false);
+                            if (onSelectNotification) {
+                              onSelectNotification(notif);
+                            } else if (notif.ticketId) {
+                              onNavigate({
+                                page: 'support',
+                                ticketId: notif.ticketId,
+                              });
+                            } else {
+                              onNavigate({ page: 'dashboard' });
+                            }
+                          }}
+                          className={`p-2.5 rounded-lg border transition-colors cursor-pointer ${
+                            notif.read
+                              ? 'bg-[#111827]/60 border-white/[0.06] text-[#94A3B8] hover:border-white/[0.14]'
+                              : 'bg-[#8B5CF6]/10 border-[#8B5CF6]/35 text-[#F8FAFC] hover:bg-[#8B5CF6]/15'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              {!notif.read && (
+                                <span className="w-2 h-2 rounded-full bg-[#06B6D4] shrink-0" />
+                              )}
+                              <span className="text-xs font-semibold truncate">
+                                {notif.title}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-mono text-[#64748B] shrink-0">
+                              {notif.timestampISO
+                                ? new Date(
+                                    notif.timestampISO
+                                  ).toLocaleTimeString('en-IN', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })
+                                : ''}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[#CBD5E1] mt-1 line-clamp-2">
+                            {notif.body}
+                          </p>
+                          {notif.resolutionSummary && (
+                            <div className="mt-1.5 p-2 rounded bg-[#22C55E]/10 border border-[#22C55E]/25 text-[11px] text-[#DCFCE7]">
+                              <span className="font-semibold text-[#22C55E]">
+                                Resolution Summary:{' '}
+                              </span>
+                              {notif.resolutionSummary}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         )}
 
         {/* Profile / Account Control */}

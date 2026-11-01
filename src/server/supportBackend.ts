@@ -48,9 +48,7 @@ export interface ServerSupportHistoryEvent {
     | 'resolved'
     | 'closed'
     | 'reopened'
-    | 'internal_note_added'
-    | 'email_sent'
-    | 'email_failed';
+    | 'internal_note_added';
   actorId: string;
   actorName: string;
   actorEmail: string;
@@ -59,27 +57,6 @@ export interface ServerSupportHistoryEvent {
   newValue?: string;
   summary: string;
   createdAtISO: string;
-}
-
-export interface ServerEmailDeliveryLog {
-  id: string;
-  idempotencyKey: string;
-  ticketId: string;
-  ticketNumber: string;
-  eventType: 'TICKET_OPENED' | 'TICKET_CLOSED';
-  fromEmail: string;
-  replyToEmail: string;
-  recipientEmail: string;
-  recipientName: string;
-  subject: string;
-  textBody: string;
-  htmlBody: string;
-  status: 'sent' | 'failed';
-  provider: 'resend';
-  providerMessageId?: string;
-  sentAtISO: string;
-  errorMessage?: string;
-  retryCount: number;
 }
 
 export interface ServerAdminAuditLog {
@@ -100,6 +77,7 @@ export interface ServerAdminAuditLog {
 export interface ServerSupportNotification {
   id: string;
   recipientUid: string; // Customer UID, Staff UID, or 'ALL_SUPPORT_STAFF'
+  recipientRole: 'customer' | 'staff';
   ticketId: string;
   ticketNumber: string;
   type:
@@ -114,6 +92,7 @@ export interface ServerSupportNotification {
     | 'ticket_reopened';
   title: string;
   message: string;
+  resolutionSummary?: string;
   read: boolean;
   createdAtISO: string;
 }
@@ -143,12 +122,6 @@ export interface ServerTicketEnrichmentRecord {
   resolutionSummary: string;
   internalNotes: string;
   attachments: ServerSupportAttachment[];
-  emailOpenedStatus?: 'pending' | 'sent' | 'failed';
-  emailOpenedSentAtISO?: string;
-  emailOpenedError?: string;
-  emailClosedStatus?: 'pending' | 'sent' | 'failed';
-  emailClosedSentAtISO?: string;
-  emailClosedError?: string;
   createdAtISO: string;
   updatedAtISO: string;
 }
@@ -157,7 +130,6 @@ interface PersistedSupportStore {
   tickets: Record<string, ServerTicketEnrichmentRecord>;
   messagesByTicket: Record<string, ServerSupportMessage[]>;
   historyByTicket: Record<string, ServerSupportHistoryEvent[]>;
-  emailLogs: Record<string, ServerEmailDeliveryLog>;
   notifications: ServerSupportNotification[];
   auditLogs: ServerAdminAuditLog[];
 }
@@ -166,6 +138,41 @@ const STORE_FILE_PATH = path.join(process.cwd(), '.support-tickets-state.json');
 
 // Active in-flight mutex locks per ticket ID to prevent simultaneous claiming race conditions
 const activeClaimMutex = new Set<string>();
+
+function normalizeStoredNotification(
+  raw: Partial<ServerSupportNotification>
+): ServerSupportNotification {
+  const recipientUid = String(raw.recipientUid || '').trim();
+  const inferredRole: 'customer' | 'staff' =
+    raw.recipientRole === 'staff' ||
+    raw.recipientRole === 'customer'
+      ? raw.recipientRole
+      : recipientUid === 'ALL_SUPPORT_STAFF' ||
+        raw.type === 'ticket_created' ||
+        raw.type === 'customer_replied' ||
+        raw.type === 'ticket_reassigned' ||
+        raw.type === 'ticket_reopened'
+      ? 'staff'
+      : 'customer';
+
+  return {
+    id: String(
+      raw.id || `NOTIF-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    ),
+    recipientUid,
+    recipientRole: inferredRole,
+    ticketId: String(raw.ticketId || ''),
+    ticketNumber: String(raw.ticketNumber || raw.ticketId || ''),
+    type: (raw.type || 'staff_replied') as ServerSupportNotification['type'],
+    title: String(raw.title || 'Support Update'),
+    message: String(raw.message || ''),
+    ...(raw.resolutionSummary
+      ? { resolutionSummary: String(raw.resolutionSummary) }
+      : {}),
+    read: Boolean(raw.read),
+    createdAtISO: String(raw.createdAtISO || new Date().toISOString()),
+  };
+}
 
 function loadPersistedStore(): PersistedSupportStore {
   try {
@@ -176,9 +183,8 @@ function loadPersistedStore(): PersistedSupportStore {
         tickets: parsed.tickets ?? {},
         messagesByTicket: parsed.messagesByTicket ?? {},
         historyByTicket: parsed.historyByTicket ?? {},
-        emailLogs: parsed.emailLogs ?? {},
         notifications: Array.isArray(parsed.notifications)
-          ? parsed.notifications
+          ? parsed.notifications.map((n) => normalizeStoredNotification(n))
           : [],
         auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
       };
@@ -190,7 +196,6 @@ function loadPersistedStore(): PersistedSupportStore {
     tickets: {},
     messagesByTicket: {},
     historyByTicket: {},
-    emailLogs: {},
     notifications: [],
     auditLogs: [],
   };
@@ -281,7 +286,10 @@ export function validateSupportAttachmentInput(params: {
   return { valid: true, normalizedContentType: mime };
 }
 
-export function canRoleOverrideTicketOwnership(role: string, email?: string): boolean {
+export function canRoleOverrideTicketOwnership(
+  role: string,
+  email?: string
+): boolean {
   const normalizedEmail = String(email || '').trim().toLowerCase();
   if (
     normalizedEmail === 'marginoferror1626@gmail.com' ||
@@ -392,303 +400,74 @@ export function sanitizeTicketForCustomer(
   };
 }
 
-export function buildTicketOpenedEmailPayload(params: {
-  ticketNumber: string;
-  customerName: string;
-  customerEmail: string;
-  subject: string;
-  category: string;
-  priority?: ServerTicketPriority;
-  description: string;
-  supportPortalUrl?: string;
-}): { subject: string; textBody: string; htmlBody: string } {
-  const subject = `BorrowBox Support: Your Ticket Has Been Created - ${params.ticketNumber}`;
-  const portalUrl = params.supportPortalUrl || 'https://borrowbox.in/support';
-  const descriptionExcerpt =
-    params.description.length > 350
-      ? `${params.description.slice(0, 347)}...`
-      : params.description;
+export function filterNotificationsForViewer(
+  notifications: ServerSupportNotification[],
+  viewerUid: string,
+  viewerRole: string
+): ServerSupportNotification[] {
+  const cleanUid = String(viewerUid || '').trim();
+  const isStaff = [
+    'super_admin',
+    'admin',
+    'moderator',
+    'support_admin',
+    'staff',
+  ].includes(String(viewerRole || '').trim());
 
-  const textBody = [
-    `Hello ${params.customerName},`,
-    '',
-    `Thank you for contacting BorrowBox Support. Your support request has been received and queued for our support team.`,
-    '',
-    `Ticket Details:`,
-    `- Ticket ID: ${params.ticketNumber}`,
-    `- Subject: ${params.subject}`,
-    `- Category: ${params.category}`,
-    `- Current Status: Open`,
-    '',
-    `Initial Description Summary:`,
-    `"${descriptionExcerpt}"`,
-    '',
-    `What happens next:`,
-    `A dedicated BorrowBox support specialist will claim your ticket and respond shortly. You can view real-time updates, upload additional files, or reply directly from your My Support panel: ${portalUrl}`,
-    '',
-    `Warm regards,`,
-    `BorrowBox Trust & Support Team`,
-  ].join('\n');
+  if (isStaff) {
+    return notifications.filter(
+      (n) =>
+        n.recipientRole === 'staff' &&
+        (n.recipientUid === cleanUid ||
+          n.recipientUid === 'ALL_SUPPORT_STAFF' ||
+          cleanUid === 'admin')
+    );
+  }
 
-  const htmlBody = `
-    <div style="font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; color: #0f172a;">
-      <div style="margin-bottom: 16px;">
-        <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #4f46e5;">BorrowBox Support Desk</span>
-        <h2 style="margin: 6px 0 0; font-size: 20px; color: #0f172a;">Your Ticket Has Been Created</h2>
-      </div>
-      <p style="font-size: 14px; line-height: 1.6; color: #334155;">Hello <strong>${params.customerName}</strong>,</p>
-      <p style="font-size: 14px; line-height: 1.6; color: #334155;">We have received your support request. A support specialist will claim your ticket and assist you shortly.</p>
-      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0; font-size: 13px;">
-        <p style="margin: 4px 0;"><strong>Ticket ID:</strong> ${params.ticketNumber}</p>
-        <p style="margin: 4px 0;"><strong>Subject:</strong> ${params.subject}</p>
-        <p style="margin: 4px 0;"><strong>Category:</strong> ${params.category}</p>
-        <p style="margin: 4px 0;"><strong>Current Status:</strong> Open</p>
-      </div>
-      <div style="margin: 16px 0;">
-        <p style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">Initial Description Summary</p>
-        <blockquote style="margin: 0; padding: 12px; background: #ffffff; border-left: 3px solid #4f46e5; color: #475569; font-size: 13px;">${descriptionExcerpt}</blockquote>
-      </div>
-      <p style="font-size: 13px; line-height: 1.6; color: #475569;">Track your request and reply to our support team anytime in the <strong>My Support</strong> section of your BorrowBox account (<a href="${portalUrl}" style="color: #4f46e5;">${portalUrl}</a>).</p>
-    </div>
-  `.trim();
-
-  return { subject, textBody, htmlBody };
-}
-
-export function buildTicketClosedEmailPayload(params: {
-  ticketNumber: string;
-  customerName: string;
-  customerEmail: string;
-  subject: string;
-  assignedStaffName: string;
-  resolutionSummary: string;
-  closedAtISO: string;
-  supportPortalUrl?: string;
-}): { subject: string; textBody: string; htmlBody: string } {
-  const subject = `BorrowBox Support: Your Ticket Has Been Resolved - ${params.ticketNumber}`;
-  const portalUrl = params.supportPortalUrl || 'https://borrowbox.in/support';
-  const formattedClosedTime = new Date(params.closedAtISO).toLocaleString(
-    'en-IN',
-    {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    }
+  if (!cleanUid) return [];
+  return notifications.filter(
+    (n) => n.recipientRole === 'customer' && n.recipientUid === cleanUid
   );
-
-  const textBody = [
-    `Hello ${params.customerName},`,
-    '',
-    `Your BorrowBox support ticket has been resolved and closed.`,
-    '',
-    `Ticket Resolution Details:`,
-    `- Ticket ID: ${params.ticketNumber}`,
-    `- Subject: ${params.subject}`,
-    `- Assigned Support Specialist: ${params.assignedStaffName || 'BorrowBox Support Team'}`,
-    `- Final Status: Closed`,
-    `- Closed At: ${formattedClosedTime}`,
-    '',
-    `Resolution Summary:`,
-    `${params.resolutionSummary}`,
-    '',
-    `Need further help?`,
-    `Your full conversation history and resolution summary remain saved in your Resolved History inside the My Support panel (${portalUrl}). If you need additional assistance, you can open a follow-up ticket referencing ${params.ticketNumber}.`,
-    '',
-    `Warm regards,`,
-    `BorrowBox Trust & Support Team`,
-  ].join('\n');
-
-  const htmlBody = `
-    <div style="font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; color: #0f172a;">
-      <div style="margin-bottom: 16px;">
-        <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #059669;">BorrowBox Support Desk</span>
-        <h2 style="margin: 6px 0 0; font-size: 20px; color: #0f172a;">Your Ticket Has Been Resolved</h2>
-      </div>
-      <p style="font-size: 14px; line-height: 1.6; color: #334155;">Hello <strong>${params.customerName}</strong>,</p>
-      <p style="font-size: 14px; line-height: 1.6; color: #334155;">Our team has completed work on your support ticket and marked it as closed.</p>
-      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0; font-size: 13px;">
-        <p style="margin: 4px 0;"><strong>Ticket ID:</strong> ${params.ticketNumber}</p>
-        <p style="margin: 4px 0;"><strong>Subject:</strong> ${params.subject}</p>
-        <p style="margin: 4px 0;"><strong>Assigned Staff:</strong> ${params.assignedStaffName || 'BorrowBox Support Specialist'}</p>
-        <p style="margin: 4px 0;"><strong>Final Status:</strong> Closed</p>
-        <p style="margin: 4px 0;"><strong>Closure Timestamp:</strong> ${formattedClosedTime}</p>
-      </div>
-      <div style="margin: 16px 0;">
-        <p style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: #059669; margin-bottom: 6px;">Resolution Summary</p>
-        <div style="padding: 12px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; color: #065f46; font-size: 13px; line-height: 1.5;">${params.resolutionSummary}</div>
-      </div>
-      <p style="font-size: 13px; line-height: 1.6; color: #475569;">If you require further assistance, visit <strong>My Support &rarr; Resolved History</strong> (<a href="${portalUrl}" style="color: #4f46e5;">${portalUrl}</a>) to review the full thread or submit a follow-up enquiry.</p>
-    </div>
-  `.trim();
-
-  return { subject, textBody, htmlBody };
-}
-
-export function resolveFormattedSenderEmail(): string {
-  const rawFrom = (
-    process.env.SUPPORT_FROM_EMAIL || 'BorrowBox <onboarding@resend.dev>'
-  ).trim();
-  if (rawFrom.includes('<') && rawFrom.includes('>')) {
-    return rawFrom;
-  }
-  return `BorrowBox Support <${rawFrom}>`;
-}
-
-export function resolveReplyToEmail(): string {
-  return (process.env.SUPPORT_REPLY_TO_EMAIL || '').trim();
-}
-
-export function isAllowedSupportEmailEvent(
-  eventType: unknown
-): eventType is 'TICKET_OPENED' | 'TICKET_CLOSED' {
-  return eventType === 'TICKET_OPENED' || eventType === 'TICKET_CLOSED';
-}
-
-async function dispatchTransactionalEmail(params: {
-  recipientEmail: string;
-  recipientName: string;
-  subject: string;
-  textBody: string;
-  htmlBody: string;
-}): Promise<{
-  status: 'sent' | 'failed';
-  provider: 'resend';
-  fromEmail: string;
-  replyToEmail: string;
-  providerMessageId?: string;
-  errorMessage?: string;
-}> {
-  const fromEmail = resolveFormattedSenderEmail();
-  const replyToEmail = resolveReplyToEmail();
-  const resendKey = (process.env.RESEND_API_KEY || '').trim();
-
-  if (
-    !params.recipientEmail ||
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(params.recipientEmail.trim())
-  ) {
-    return {
-      status: 'failed',
-      provider: 'resend',
-      fromEmail,
-      replyToEmail,
-      errorMessage: 'Invalid customer recipient email address.',
-    };
-  }
-
-  if (!resendKey || resendKey.length <= 8) {
-    return {
-      status: 'failed',
-      provider: 'resend',
-      fromEmail,
-      replyToEmail,
-      errorMessage:
-        'RESEND_API_KEY is not configured in server environment variables.',
-    };
-  }
-
-  try {
-    const payload: Record<string, unknown> = {
-      from: fromEmail,
-      to: [params.recipientEmail.trim()],
-      subject: params.subject,
-      text: params.textBody,
-      html: params.htmlBody,
-    };
-    if (replyToEmail) {
-      payload.reply_to = replyToEmail;
-    }
-
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resendKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const responseText = await response.text();
-    if (!response.ok) {
-      return {
-        status: 'failed',
-        provider: 'resend',
-        fromEmail,
-        replyToEmail,
-        errorMessage: `Resend HTTP ${response.status}: ${responseText.slice(0, 240)}`,
-      };
-    }
-
-    let parsedId: string | undefined;
-    try {
-      const parsed = JSON.parse(responseText) as { id?: string };
-      parsedId = parsed.id;
-    } catch {
-      // Ignore non-JSON body
-    }
-
-    return {
-      status: 'sent',
-      provider: 'resend',
-      fromEmail,
-      replyToEmail,
-      providerMessageId: parsedId,
-    };
-  } catch (error) {
-    return {
-      status: 'failed',
-      provider: 'resend',
-      fromEmail,
-      replyToEmail,
-      errorMessage:
-        error instanceof Error ? error.message : 'Resend API request failed',
-    };
-  }
 }
 
 export function registerSupportRoutes(app: Express): void {
-  // 0. Backend Configuration & Provider Verification Endpoint (Never exposes secret keys)
+  // 0. Backend Support Configuration Status (Website-only in-app notifications; email removed)
   app.get('/api/support/config-status', (_req: Request, res: Response) => {
-    const resendKey = (process.env.RESEND_API_KEY || '').trim();
     const geminiKey = (process.env.GEMINI_API_KEY || '').trim();
-    const fromEmail = resolveFormattedSenderEmail();
-    const replyToEmail = resolveReplyToEmail();
     res.json({
       ok: true,
-      emailProvider: 'resend',
-      onlyResendConfigured: true,
+      notificationMode: 'in_app_firestore',
+      emailIntegrationRemoved: true,
       envConfigured: {
-        RESEND_API_KEY: Boolean(resendKey && resendKey.length > 8),
-        SUPPORT_FROM_EMAIL: Boolean(process.env.SUPPORT_FROM_EMAIL),
-        SUPPORT_REPLY_TO_EMAIL: Boolean(process.env.SUPPORT_REPLY_TO_EMAIL),
         GEMINI_API_KEY: Boolean(
           geminiKey && geminiKey.length > 10 && geminiKey !== 'MY_GEMINI_API_KEY'
         ),
       },
-      senderConfig: {
-        fromEmail,
-        replyToEmail,
-      },
     });
   });
 
-  // 1. Get synchronized server support state (filtered by role so customers never see internal notes or other users' tickets)
+  // 1. Get synchronized server support state (filtered by role so customers never see internal notes or other users' tickets/notifications)
   app.get('/api/support/state', (req: Request, res: Response) => {
     const viewerUid = String(req.query.uid || '').trim();
     const viewerRole = String(req.query.role || 'customer').trim();
-    const isStaff = ['super_admin', 'admin', 'moderator', 'support_admin'].includes(
-      viewerRole
-    );
+    const isStaff = [
+      'super_admin',
+      'admin',
+      'moderator',
+      'support_admin',
+      'staff',
+    ].includes(viewerRole);
 
     if (isStaff) {
       res.json({
         tickets: supportStore.tickets,
         messagesByTicket: supportStore.messagesByTicket,
         historyByTicket: supportStore.historyByTicket,
-        emailLogs: Object.values(supportStore.emailLogs),
         auditLogs: supportStore.auditLogs,
-        notifications: supportStore.notifications.filter(
-          (n) =>
-            n.recipientUid === viewerUid ||
-            n.recipientUid === 'ALL_SUPPORT_STAFF'
+        notifications: filterNotificationsForViewer(
+          supportStore.notifications,
+          viewerUid,
+          viewerRole
         ),
       });
       return;
@@ -715,9 +494,10 @@ export function registerSupportRoutes(app: Express): void {
       tickets: customerTickets,
       messagesByTicket: customerMessages,
       historyByTicket: customerHistory,
-      emailLogs: [],
-      notifications: supportStore.notifications.filter(
-        (n) => viewerUid && n.recipientUid === viewerUid
+      notifications: filterNotificationsForViewer(
+        supportStore.notifications,
+        viewerUid,
+        'customer'
       ),
     });
   });
@@ -735,11 +515,15 @@ export function registerSupportRoutes(app: Express): void {
     const existing = supportStore.tickets[ticketId];
     const merged: ServerTicketEnrichmentRecord = {
       id: ticketId,
-      ticketNumber: String(ticket.ticketNumber || existing?.ticketNumber || ticketId),
+      ticketNumber: String(
+        ticket.ticketNumber || existing?.ticketNumber || ticketId
+      ),
       userId: String(ticket.userId || existing?.userId || ''),
       userName: String(ticket.userName || existing?.userName || 'Customer'),
       userEmail: String(ticket.userEmail || existing?.userEmail || ''),
-      category: String(ticket.category || existing?.category || 'General Enquiry'),
+      category: String(
+        ticket.category || existing?.category || 'General Enquiry'
+      ),
       subject: String(ticket.subject || existing?.subject || ''),
       description: String(ticket.description || existing?.description || ''),
       ...(ticket.priority || existing?.priority
@@ -750,7 +534,9 @@ export function registerSupportRoutes(app: Express): void {
                 : 'normal',
           }
         : {}),
-      status: (ticket.status || existing?.status || 'open') as ServerTicketStatus,
+      status: (ticket.status ||
+        existing?.status ||
+        'open') as ServerTicketStatus,
       bookingId: String(ticket.bookingId ?? existing?.bookingId ?? ''),
       productId: String(ticket.productId ?? existing?.productId ?? ''),
       assignedTo:
@@ -796,24 +582,10 @@ export function registerSupportRoutes(app: Express): void {
       attachments: Array.isArray(ticket.attachments)
         ? ticket.attachments
         : existing?.attachments || [],
-      emailOpenedStatus:
-        ticket.emailOpenedStatus || existing?.emailOpenedStatus || 'pending',
-      emailOpenedSentAtISO:
-        ticket.emailOpenedSentAtISO || existing?.emailOpenedSentAtISO,
-      emailOpenedError:
-        ticket.emailOpenedError !== undefined
-          ? String(ticket.emailOpenedError)
-          : existing?.emailOpenedError,
-      emailClosedStatus:
-        ticket.emailClosedStatus || existing?.emailClosedStatus,
-      emailClosedSentAtISO:
-        ticket.emailClosedSentAtISO || existing?.emailClosedSentAtISO,
-      emailClosedError:
-        ticket.emailClosedError !== undefined
-          ? String(ticket.emailClosedError)
-          : existing?.emailClosedError,
       createdAtISO: String(
-        ticket.createdAtISO || existing?.createdAtISO || new Date().toISOString()
+        ticket.createdAtISO ||
+          existing?.createdAtISO ||
+          new Date().toISOString()
       ),
       updatedAtISO: new Date().toISOString(),
     };
@@ -836,14 +608,41 @@ export function registerSupportRoutes(app: Express): void {
       }
     }
 
+    let createdNotification: ServerSupportNotification | undefined;
     if (notification && notification.id) {
-      if (!supportStore.notifications.some((n) => n.id === notification.id)) {
-        supportStore.notifications.unshift(notification);
+      const normalizedNotif = normalizeStoredNotification({
+        ...notification,
+        recipientRole: notification.recipientRole || 'staff',
+      });
+      createdNotification = normalizedNotif;
+      if (
+        !supportStore.notifications.some((n) => n.id === normalizedNotif.id)
+      ) {
+        supportStore.notifications.unshift(normalizedNotif);
       }
+    } else if (!existing) {
+      // Automatically generate a staff notification when a new ticket is synced without an explicit notification object
+      createdNotification = {
+        id: `NOTIF-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        recipientUid: 'ALL_SUPPORT_STAFF',
+        recipientRole: 'staff',
+        ticketId,
+        ticketNumber: merged.ticketNumber,
+        type: 'ticket_created',
+        title: `New Support Ticket (${merged.ticketNumber})`,
+        message: `${merged.userName} created "${merged.subject}" (${merged.category}).`,
+        read: false,
+        createdAtISO: merged.createdAtISO,
+      };
+      supportStore.notifications.unshift(createdNotification);
     }
 
     savePersistedStore();
-    res.json({ ok: true, ticket: merged });
+    res.json({
+      ok: true,
+      ticket: merged,
+      notification: createdNotification,
+    });
   });
 
   // 3. Atomic Server-Side Ticket Claiming Endpoint (Prevents simultaneous claiming race conditions)
@@ -997,22 +796,27 @@ export function registerSupportRoutes(app: Express): void {
       };
       supportStore.auditLogs.unshift(auditLog);
 
+      let claimNotification: ServerSupportNotification | undefined;
       const customerUid = supportStore.tickets[cleanTicketId]?.userId;
       if (customerUid) {
-        supportStore.notifications.unshift({
+        claimNotification = {
           id: `NOTIF-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           recipientUid: customerUid,
+          recipientRole: 'customer',
           ticketId: cleanTicketId,
           ticketNumber:
             supportStore.tickets[cleanTicketId]?.ticketNumber || cleanTicketId,
           type: 'ticket_claimed',
-          title: 'Support Ticket Claimed',
-          message: `${staffName} has taken responsibility for your ticket (${
+          title: `Ticket Claimed (${
             supportStore.tickets[cleanTicketId]?.ticketNumber || cleanTicketId
-          }) and it is now In Progress.`,
+          })`,
+          message: `${staffName} has claimed your support ticket "${
+            supportStore.tickets[cleanTicketId]?.subject || cleanTicketId
+          }" and it is now In Progress.`,
           read: false,
           createdAtISO: claimedAtISO,
-        });
+        };
+        supportStore.notifications.unshift(claimNotification);
       }
 
       savePersistedStore();
@@ -1027,6 +831,7 @@ export function registerSupportRoutes(app: Express): void {
         status: 'in_progress',
         historyEvent: claimEvent,
         auditLog,
+        notification: claimNotification,
       });
     } finally {
       activeClaimMutex.delete(cleanTicketId);
@@ -1232,32 +1037,42 @@ export function registerSupportRoutes(app: Express): void {
       historyList.unshift(historyEvent);
       supportStore.historyByTicket[ticketId] = historyList;
 
-      // Dispatch in-app notification for non-internal replies
+      // Dispatch website in-app notification ONLY for public replies (never for internal notes)
+      let createdNotification: ServerSupportNotification | undefined;
       if (!msgRecord.isInternal && stored) {
+        const excerpt =
+          msgRecord.message.length > 120
+            ? `${msgRecord.message.slice(0, 117)}...`
+            : msgRecord.message;
+
         if (senderRole !== 'customer' && stored.userId) {
-          supportStore.notifications.unshift({
+          createdNotification = {
             id: `NOTIF-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             recipientUid: stored.userId,
+            recipientRole: 'customer',
             ticketId,
             ticketNumber: stored.ticketNumber || ticketId,
             type: 'staff_replied',
             title: `New Support Reply (${stored.ticketNumber || ticketId})`,
-            message: `${senderName} replied to your support ticket "${stored.subject}".`,
+            message: `${senderName} replied to "${stored.subject}": "${excerpt}"`,
             read: false,
             createdAtISO: nowISO,
-          });
+          };
+          supportStore.notifications.unshift(createdNotification);
         } else if (senderRole === 'customer') {
-          supportStore.notifications.unshift({
+          createdNotification = {
             id: `NOTIF-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             recipientUid: stored.assignedTo || 'ALL_SUPPORT_STAFF',
+            recipientRole: 'staff',
             ticketId,
             ticketNumber: stored.ticketNumber || ticketId,
             type: 'customer_replied',
             title: `Customer Replied (${stored.ticketNumber || ticketId})`,
-            message: `${senderName} replied on ticket "${stored.subject}".`,
+            message: `${senderName} replied on "${stored.subject}": "${excerpt}"`,
             read: false,
             createdAtISO: nowISO,
-          });
+          };
+          supportStore.notifications.unshift(createdNotification);
         }
       }
 
@@ -1267,11 +1082,12 @@ export function registerSupportRoutes(app: Express): void {
         message: msgRecord,
         historyEvent,
         ticket: stored,
+        notification: createdNotification,
       });
     }
   );
 
-  // 5. Update Ticket Status, Priority, Resolution Summary, or Perform Admin Override (Reassign / Release Claim / Reopen)
+  // 5. Update Ticket Status, Resolution Summary, or Perform Admin Override (Reassign / Release Claim / Reopen)
   app.post(
     '/api/support/tickets/:ticketId/update',
     (req: Request, res: Response) => {
@@ -1281,9 +1097,8 @@ export function registerSupportRoutes(app: Express): void {
         actorName = '',
         actorEmail = '',
         actorRole = '',
-        operation = 'status_change', // 'status_change' | 'priority_change' | 'reassign' | 'release_claim' | 'reopen' | 'update_notes'
+        operation = 'status_change', // 'status_change' | 'reassign' | 'release_claim' | 'reopen' | 'update_notes'
         newStatus,
-        newPriority,
         newAssignedTo,
         newAssignedStaffName,
         newAssignedToEmail,
@@ -1334,6 +1149,7 @@ export function registerSupportRoutes(app: Express): void {
       let previousVal = '';
       let newVal = '';
       let summaryText = '';
+      let createdNotification: ServerSupportNotification | undefined;
 
       if (stored) {
         if (operation === 'reassign') {
@@ -1351,9 +1167,10 @@ export function registerSupportRoutes(app: Express): void {
           summaryText = `Administrator ${actorName} reassigned ticket from ${previousVal} to ${newVal}.`;
 
           if (stored.assignedTo) {
-            supportStore.notifications.unshift({
+            createdNotification = {
               id: `NOTIF-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
               recipientUid: stored.assignedTo,
+              recipientRole: 'staff',
               ticketId,
               ticketNumber: stored.ticketNumber,
               type: 'ticket_reassigned',
@@ -1361,7 +1178,8 @@ export function registerSupportRoutes(app: Express): void {
               message: `Administrator ${actorName} assigned ticket "${stored.subject}" to you.`,
               read: false,
               createdAtISO: nowISO,
-            });
+            };
+            supportStore.notifications.unshift(createdNotification);
           }
         } else if (operation === 'release_claim') {
           previousVal = stored.assignedStaffName || 'Claimed';
@@ -1381,9 +1199,10 @@ export function registerSupportRoutes(app: Express): void {
           historyAction = 'reopened';
           summaryText = `Administrator ${actorName} reopened ticket from ${previousVal} to ${newVal}.`;
 
-          supportStore.notifications.unshift({
+          createdNotification = {
             id: `NOTIF-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             recipientUid: stored.assignedTo || 'ALL_SUPPORT_STAFF',
+            recipientRole: 'staff',
             ticketId,
             ticketNumber: stored.ticketNumber,
             type: 'ticket_reopened',
@@ -1391,7 +1210,8 @@ export function registerSupportRoutes(app: Express): void {
             message: `Ticket "${stored.subject}" was reopened by ${actorName}.`,
             read: false,
             createdAtISO: nowISO,
-          });
+          };
+          supportStore.notifications.unshift(createdNotification);
         } else if (operation === 'update_notes') {
           previousVal = 'Internal notes';
           if (typeof internalNotes === 'string') {
@@ -1403,6 +1223,7 @@ export function registerSupportRoutes(app: Express): void {
           newVal = 'Updated';
           historyAction = 'internal_note_added';
           summaryText = `Internal notes / resolution summary updated by ${actorName}.`;
+          // Never create a customer notification for internal note updates
         } else if (newStatus) {
           previousVal = stored.status;
           stored.status = newStatus as ServerTicketStatus;
@@ -1423,31 +1244,52 @@ export function registerSupportRoutes(app: Express): void {
           summaryText = `Status changed from ${previousVal} to ${newVal} by ${actorName}.`;
 
           if (stored.userId) {
-            const notifType =
-              newStatus === 'waiting_for_user'
-                ? 'status_waiting_for_user'
-                : newStatus === 'resolved'
-                ? 'ticket_resolved'
-                : newStatus === 'closed'
-                ? 'ticket_closed'
-                : null;
-            if (notifType) {
-              supportStore.notifications.unshift({
+            if (newStatus === 'closed') {
+              createdNotification = {
                 id: `NOTIF-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                 recipientUid: stored.userId,
+                recipientRole: 'customer',
                 ticketId,
                 ticketNumber: stored.ticketNumber,
-                type: notifType,
+                type: 'ticket_closed',
+                title: `Ticket Closed (${stored.ticketNumber})`,
+                message: `Your ticket "${stored.subject}" has been closed by ${actorName}. Resolution Summary: ${stored.resolutionSummary}`,
+                resolutionSummary: stored.resolutionSummary,
+                read: false,
+                createdAtISO: nowISO,
+              };
+              supportStore.notifications.unshift(createdNotification);
+            } else if (
+              newStatus === 'waiting_for_user' ||
+              newStatus === 'resolved'
+            ) {
+              createdNotification = {
+                id: `NOTIF-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                recipientUid: stored.userId,
+                recipientRole: 'customer',
+                ticketId,
+                ticketNumber: stored.ticketNumber,
+                type:
+                  newStatus === 'waiting_for_user'
+                    ? 'status_waiting_for_user'
+                    : 'ticket_resolved',
                 title: `Ticket Status Updated: ${newStatus
                   .replace(/_/g, ' ')
                   .toUpperCase()}`,
-                message: `Your ticket ${stored.ticketNumber} ("${stored.subject}") is now ${newStatus.replace(
-                  /_/g,
-                  ' '
-                )}.`,
+                message: `Your ticket ${stored.ticketNumber} ("${
+                  stored.subject
+                }") is now ${newStatus.replace(/_/g, ' ')}.${
+                  newStatus === 'resolved' && stored.resolutionSummary
+                    ? ` Resolution Summary: ${stored.resolutionSummary}`
+                    : ''
+                }`,
+                ...(stored.resolutionSummary
+                  ? { resolutionSummary: stored.resolutionSummary }
+                  : {}),
                 read: false,
                 createdAtISO: nowISO,
-              });
+              };
+              supportStore.notifications.unshift(createdNotification);
             }
           }
         }
@@ -1483,7 +1325,9 @@ export function registerSupportRoutes(app: Express): void {
           ? 'Released Ticket Claim (Admin Override)'
           : operation === 'reopen'
           ? 'Reopened Support Ticket (Admin Override)'
-          : `Updated Ticket Status to ${String(newVal || newStatus || '').toUpperCase()}${
+          : `Updated Ticket Status to ${String(
+              newVal || newStatus || ''
+            ).toUpperCase()}${
               isCrossStaffAdminOverride ? ' (Admin Override)' : ''
             }`;
 
@@ -1511,182 +1355,72 @@ export function registerSupportRoutes(app: Express): void {
         ticket: stored,
         historyEvent,
         auditLog,
+        notification: createdNotification,
       });
     }
   );
 
-  // 6. Mandatory Backend Email Notification Endpoint (Strictly TICKET_OPENED & TICKET_CLOSED with Idempotency & Retry)
-  app.post('/api/support/send-email', async (req: Request, res: Response) => {
-    const {
-      ticketId = '',
-      ticketNumber = '',
-      eventType = '', // Strictly 'TICKET_OPENED' | 'TICKET_CLOSED'
-      customerName = 'Customer',
-      customerEmail = '',
-      subject = '',
-      category = 'General Enquiry',
-      priority = 'normal',
-      description = '',
-      assignedStaffName = 'BorrowBox Support Team',
-      resolutionSummary = '',
-      closedAtISO = new Date().toISOString(),
-      forceRetry = false,
-    } = req.body || {};
-
-    if (!isAllowedSupportEmailEvent(eventType)) {
-      res.status(400).json({
-        sent: false,
-        error:
-          'Invalid email eventType. Emails are only sent for TICKET_OPENED (ticket created) and TICKET_CLOSED (admin closes ticket).',
-      });
-      return;
-    }
-
-    const cleanTicketId = String(ticketId || ticketNumber).trim();
-    const cleanTicketNumber = String(ticketNumber || ticketId).trim();
-    if (!cleanTicketId || !customerEmail) {
-      res.status(400).json({
-        sent: false,
-        error: 'ticketId and customerEmail are required for email notifications.',
-      });
-      return;
-    }
-
-    const idempotencyKey = `${cleanTicketId}:${eventType}`;
-    const existingLog = supportStore.emailLogs[idempotencyKey];
-
-    // Idempotency guard: never send duplicate emails for the same ticket event unless admin retries
-    if (existingLog && existingLog.status === 'sent' && !forceRetry) {
-      res.json({
-        sent: true,
-        idempotentDuplicateSkipped: true,
-        emailLog: existingLog,
-      });
-      return;
-    }
-
-    const emailPayload =
-      eventType === 'TICKET_CLOSED'
-        ? buildTicketClosedEmailPayload({
-            ticketNumber: cleanTicketNumber,
-            customerName: String(customerName),
-            customerEmail: String(customerEmail),
-            subject: String(subject),
-            assignedStaffName: String(assignedStaffName),
-            resolutionSummary:
-              String(resolutionSummary) ||
-              'Your support request has been resolved by our team.',
-            closedAtISO: String(closedAtISO),
-          })
-        : buildTicketOpenedEmailPayload({
-            ticketNumber: cleanTicketNumber,
-            customerName: String(customerName),
-            customerEmail: String(customerEmail),
-            subject: String(subject),
-            category: String(category),
-            description: String(description),
-          });
-
-    const dispatchResult = await dispatchTransactionalEmail({
-      recipientEmail: String(customerEmail).trim(),
-      recipientName: String(customerName).trim(),
-      subject: emailPayload.subject,
-      textBody: emailPayload.textBody,
-      htmlBody: emailPayload.htmlBody,
-    });
-
-    const nowISO = new Date().toISOString();
-    const logRecord: ServerEmailDeliveryLog = {
-      id: existingLog?.id || `EML-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      idempotencyKey,
-      ticketId: cleanTicketId,
-      ticketNumber: cleanTicketNumber,
-      eventType,
-      fromEmail: dispatchResult.fromEmail,
-      replyToEmail: dispatchResult.replyToEmail,
-      recipientEmail: String(customerEmail).trim(),
-      recipientName: String(customerName).trim(),
-      subject: emailPayload.subject,
-      textBody: emailPayload.textBody,
-      htmlBody: emailPayload.htmlBody,
-      status: dispatchResult.status,
-      provider: dispatchResult.provider,
-      providerMessageId: dispatchResult.providerMessageId,
-      sentAtISO: nowISO,
-      errorMessage: dispatchResult.errorMessage,
-      retryCount: existingLog ? existingLog.retryCount + 1 : 0,
-    };
-
-    supportStore.emailLogs[idempotencyKey] = logRecord;
-
-    const storedTicket = supportStore.tickets[cleanTicketId];
-    if (storedTicket) {
-      if (eventType === 'TICKET_OPENED') {
-        storedTicket.emailOpenedStatus = dispatchResult.status;
-        storedTicket.emailOpenedSentAtISO = nowISO;
-        storedTicket.emailOpenedError = dispatchResult.errorMessage || '';
-      } else {
-        storedTicket.emailClosedStatus = dispatchResult.status;
-        storedTicket.emailClosedSentAtISO = nowISO;
-        storedTicket.emailClosedError = dispatchResult.errorMessage || '';
-      }
-    }
-
-    const historyEvent: ServerSupportHistoryEvent = {
-      id: `HIS-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      ticketId: cleanTicketId,
-      action: dispatchResult.status === 'sent' ? 'email_sent' : 'email_failed',
-      actorId: 'system_mailer',
-      actorName: 'BorrowBox Email Service',
-      actorEmail: dispatchResult.fromEmail,
-      actorRole: 'system',
-      previousValue: eventType,
-      newValue: `${dispatchResult.status} (${dispatchResult.provider}${
-        dispatchResult.providerMessageId
-          ? `:${dispatchResult.providerMessageId}`
-          : ''
-      })`,
-      summary:
-        dispatchResult.status === 'sent'
-          ? `Automated ${
-              eventType === 'TICKET_OPENED' ? 'Ticket Opened' : 'Ticket Closed'
-            } email dispatched to ${customerEmail} (${emailPayload.subject}).`
-          : `Automated ${eventType} email failed for ${customerEmail}: ${dispatchResult.errorMessage}`,
-      createdAtISO: nowISO,
-    };
-
-    const historyList = supportStore.historyByTicket[cleanTicketId] || [];
-    historyList.unshift(historyEvent);
-    supportStore.historyByTicket[cleanTicketId] = historyList;
-
-    savePersistedStore();
-
-    res.json({
-      sent: dispatchResult.status === 'sent',
-      idempotentDuplicateSkipped: false,
-      emailLog: logRecord,
-      historyEvent,
-    });
-  });
-
-  // 7. Mark In-App Support Notification as Read
+  // 6. Mark In-App Support Notification(s) as Read
   app.post('/api/support/notifications/read', (req: Request, res: Response) => {
-    const { notificationId = '', recipientUid = '' } = req.body || {};
+    const {
+      notificationId = '',
+      recipientUid = '',
+      role = 'customer',
+    } = req.body || {};
+    const cleanNotifId = String(notificationId || '').trim();
+    const cleanUid = String(recipientUid || '').trim();
+    const isStaff = [
+      'super_admin',
+      'admin',
+      'moderator',
+      'support_admin',
+      'staff',
+    ].includes(String(role || '').trim());
+
     let updatedCount = 0;
     for (const notif of supportStore.notifications) {
-      if (
-        (notificationId && notif.id === notificationId) ||
-        (!notificationId && recipientUid && notif.recipientUid === recipientUid)
-      ) {
-        notif.read = true;
-        updatedCount += 1;
+      if (cleanNotifId) {
+        if (notif.id === cleanNotifId) {
+          // Verify customer cannot mark another customer's or staff's notification
+          if (
+            !isStaff &&
+            cleanUid &&
+            (notif.recipientUid !== cleanUid ||
+              notif.recipientRole !== 'customer')
+          ) {
+            res.status(403).json({
+              ok: false,
+              error: 'Cannot modify another user notification.',
+            });
+            return;
+          }
+          notif.read = true;
+          updatedCount += 1;
+        }
+      } else if (cleanUid) {
+        if (
+          isStaff &&
+          notif.recipientRole === 'staff' &&
+          (notif.recipientUid === cleanUid ||
+            notif.recipientUid === 'ALL_SUPPORT_STAFF')
+        ) {
+          notif.read = true;
+          updatedCount += 1;
+        } else if (
+          !isStaff &&
+          notif.recipientRole === 'customer' &&
+          notif.recipientUid === cleanUid
+        ) {
+          notif.read = true;
+          updatedCount += 1;
+        }
       }
     }
     savePersistedStore();
     res.json({ ok: true, updatedCount });
   });
 
-  // 8. Upload Support Attachment (Validates MIME type & 5 MB size, persists file & returns storagePath + downloadUrl)
+  // 7. Upload Support Attachment (Validates MIME type & 5 MB size, persists file & returns storagePath + downloadUrl)
   app.post('/api/support/attachments', (req: Request, res: Response) => {
     const {
       fileName = '',
@@ -1795,7 +1529,7 @@ export function registerSupportRoutes(app: Express): void {
     });
   });
 
-  // 9. Serve Support Attachment by ID and Filename
+  // 8. Serve Support Attachment by ID and Filename
   app.get(
     '/api/support/attachments/:attachmentId/:fileName',
     (req: Request, res: Response) => {
@@ -1831,7 +1565,8 @@ export function registerSupportRoutes(app: Express): void {
         contentType = 'application/pdf';
       }
 
-      const isDownload = req.query.download === '1' || req.query.download === 'true';
+      const isDownload =
+        req.query.download === '1' || req.query.download === 'true';
       res.setHeader('Content-Type', contentType);
       res.setHeader(
         'Content-Disposition',
