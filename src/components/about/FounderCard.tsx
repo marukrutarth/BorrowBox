@@ -43,14 +43,16 @@ export const FounderCard: React.FC<FounderCardProps> = ({ founder, index }) => {
             </h3>
           </div>
 
-          <p className="text-sm text-[#94A3B8] leading-relaxed">
+          <p className="text-sm text-[#94A3B8] leading-relaxed min-h-[7.125rem]">
             {founder.bio}
           </p>
         </div>
 
         <div className="pt-3 border-t border-white/[0.08] flex items-center justify-between text-[11px] text-[#94A3B8]">
-          <span>The Founding Team</span>
-          <span className="font-mono text-[#A78BFA]">0{index + 1} / 04</span>
+          <span>{founder.groupLabel}</span>
+          <span className="font-mono text-[#A78BFA]">
+            0{index + 1} / {founder.category === 'contributor' ? '01' : '04'}
+          </span>
         </div>
       </div>
     </motion.article>

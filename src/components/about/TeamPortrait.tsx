@@ -45,10 +45,7 @@ export const TeamPortrait: React.FC<TeamPortraitProps> = ({
     setHasFailedAll(true);
   };
 
-  const objectPositionClass =
-    member.category === 'contributor'
-      ? 'object-[50%_58%]'
-      : 'object-[50%_18%]';
+  const objectPositionClass = 'object-[50%_18%]';
 
   return (
     <div
