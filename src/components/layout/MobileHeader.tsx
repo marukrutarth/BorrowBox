@@ -7,14 +7,18 @@ import {
   Heart,
   HelpCircle,
   Home,
+  Info,
   LayoutDashboard,
+  LifeBuoy,
   LogOut,
+  Mail,
   MapPin,
   Menu,
   Plus,
   Search,
   Shield,
   User,
+  Users,
   X,
 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
@@ -29,9 +33,10 @@ import {
   ROLE_DEFINITIONS,
   shouldShowAdminPanelOption,
 } from '../../utils/adminRbac';
-import { ALL_CATEGORIES, ALL_CITIES } from '../../utils/rentalLogic';
+import { SECONDARY_INFO_NAV_ITEMS } from '../../utils/headerNavigation';
 import { BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH } from '../../utils/introAnimation';
 import { mobileMenuPanelTransition } from '../../utils/motionVariants';
+import { ALL_CATEGORIES } from '../../utils/rentalLogic';
 import { PageRoute } from '../Navbar';
 import { CitySelectorModal } from '../location/CitySelectorModal';
 
@@ -56,10 +61,17 @@ export interface MobileHeaderProps {
   onMarkAllNotificationsRead?: () => void;
 }
 
+const MOBILE_SECONDARY_ICONS: Record<string, React.ReactNode> = {
+  'how-it-works': <HelpCircle className="w-4 h-4 text-[#8B5CF6] shrink-0" />,
+  about: <Info className="w-4 h-4 text-[#8B5CF6] shrink-0" />,
+  team: <Users className="w-4 h-4 text-[#8B5CF6] shrink-0" />,
+  support: <LifeBuoy className="w-4 h-4 text-[#8B5CF6] shrink-0" />,
+  contact: <Mail className="w-4 h-4 text-[#8B5CF6] shrink-0" />,
+};
+
 export const MobileHeader: React.FC<MobileHeaderProps> = ({
   currentRoute,
   onNavigate,
-  onOpenHowItWorks,
   onOpenWishlist,
   wishlistCount,
   userProfile,
@@ -110,72 +122,104 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleMobileNavigate = (route: PageRoute) => {
+    setMenuOpen(false);
+    setSearchBarOpen(false);
+    onNavigate(route);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <div className="md:hidden">
-      {/* Compact 56px Mobile Header Bar: Logo on Left, Search Icon & Profile/Menu Button on Right */}
-      <div className="bb-container h-14 flex items-center justify-between gap-2">
+      {/* Compact 56px Mobile Header Bar: [Logo] on Left, [Login] [Sign Up] [Menu] on Right */}
+      <div
+        data-testid="mobile-header-bar"
+        className="bb-container h-14 flex items-center justify-between gap-2"
+      >
         <a
           href="/"
           onClick={(e) => {
             e.preventDefault();
-            setMenuOpen(false);
-            setSearchBarOpen(false);
-            onNavigate({ page: 'home' });
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            handleMobileNavigate({ page: 'home' });
           }}
-          className="inline-flex items-center gap-1.5 text-base font-bold tracking-tight text-[#F8FAFC] min-h-[44px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8B5CF6]"
+          className="inline-flex items-center gap-1.5 text-sm sm:text-base font-bold tracking-tight text-[#F8FAFC] min-h-[40px] shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8B5CF6]"
         >
           <img
             src={BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH}
             alt=""
-            className="w-9 h-9 object-contain shrink-0 -mx-1"
+            className="w-8 h-8 sm:w-9 sm:h-9 object-contain shrink-0 -mx-1"
           />
           <span className="truncate">
             Borrow<span className="text-[#8B5CF6]">Box</span>
           </span>
         </a>
 
-        {/* Right: Search Icon & Profile/Menu Button (Minimum 44px touch targets) */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            aria-label="Toggle search bar"
-            aria-expanded={searchBarOpen}
-            onClick={() => {
-              setSearchBarOpen((prev) => !prev);
-              setMenuOpen(false);
-            }}
-            className={`inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-xl border bb-btn-interactive cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8B5CF6] ${
-              searchBarOpen
-                ? 'bg-[#1D293B] border-[#8B5CF6]/45 text-[#F8FAFC]'
-                : 'bg-[#161E2E] border-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC]'
-            }`}
-          >
-            <Search className="w-4 h-4" />
-          </button>
+        {/* Right: Directly Visible Auth Actions (or Authenticated Controls) + Hamburger Menu */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {!userProfile ? (
+            <>
+              <button
+                type="button"
+                data-testid="mobile-login-button"
+                onClick={() => handleMobileNavigate({ page: 'login' })}
+                className={`min-h-[36px] px-2.5 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold bb-btn-interactive cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8B5CF6] ${
+                  currentRoute.page === 'login'
+                    ? 'bg-[#1D293B] border-[#8B5CF6]/45 text-[#F8FAFC]'
+                    : 'bg-[#161E2E] hover:bg-[#1D293B] border-white/[0.08] text-[#F8FAFC]'
+                }`}
+              >
+                Login
+              </button>
+
+              <button
+                type="button"
+                data-testid="mobile-signup-button"
+                onClick={() => handleMobileNavigate({ page: 'signup' })}
+                className="min-h-[36px] px-3 sm:px-3.5 py-1.5 rounded-lg bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold bb-glow-button cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8B5CF6]"
+              >
+                Sign Up
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              aria-label="Toggle search bar"
+              aria-expanded={searchBarOpen}
+              onClick={() => {
+                setSearchBarOpen((prev) => !prev);
+                setMenuOpen(false);
+              }}
+              className={`inline-flex items-center justify-center min-w-[40px] min-h-[40px] rounded-xl border bb-btn-interactive cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8B5CF6] ${
+                searchBarOpen
+                  ? 'bg-[#1D293B] border-[#8B5CF6]/45 text-[#F8FAFC]'
+                  : 'bg-[#161E2E] border-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC]'
+              }`}
+            >
+              <Search className="w-4 h-4" />
+            </button>
+          )}
 
           <button
             type="button"
+            data-testid="mobile-menu-trigger"
             aria-label={
-              menuOpen ? 'Close menu' : 'Open profile and navigation menu'
+              menuOpen ? 'Close navigation menu' : 'Open navigation menu'
             }
             aria-expanded={menuOpen}
             onClick={() => {
               setMenuOpen((prev) => !prev);
               setSearchBarOpen(false);
             }}
-            className={`inline-flex items-center justify-center gap-1.5 min-w-[44px] min-h-[44px] px-2.5 rounded-xl border bb-btn-interactive cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8B5CF6] ${
+            className={`inline-flex items-center justify-center gap-1.5 min-w-[40px] min-h-[40px] px-2.5 rounded-xl border bb-btn-interactive cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8B5CF6] ${
               menuOpen
                 ? 'bg-[#1D293B] border-[#8B5CF6]/45 text-[#F8FAFC]'
                 : 'bg-[#161E2E] border-white/[0.08] text-[#F8FAFC]'
             }`}
           >
-            {userProfile ? (
+            {userProfile && (
               <span className="w-5 h-5 rounded-full bg-[#8B5CF6] text-white text-[11px] font-bold flex items-center justify-center">
                 {userProfile.name.charAt(0).toUpperCase()}
               </span>
-            ) : (
-              <User className="w-4 h-4 text-[#94A3B8]" />
             )}
             {menuOpen ? (
               <X className="w-4 h-4 text-[#94A3B8]" />
@@ -222,7 +266,9 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                     {selectedCity === 'All' ? 'Select your city' : selectedCity}
                   </span>
                 </div>
-                <span className="text-[11px] text-[#8B5CF6] font-medium shrink-0">Change</span>
+                <span className="text-[11px] text-[#8B5CF6] font-medium shrink-0">
+                  Change
+                </span>
               </button>
               <button
                 type="submit"
@@ -269,6 +315,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                   }
                   transition={mobileMenuPanelTransition}
                   aria-label="Mobile Navigation"
+                  data-testid="mobile-menu-drawer"
                   className="fixed top-0 right-0 bottom-0 w-full max-w-[340px] bg-[#111827] border-l border-white/[0.08] shadow-2xl flex flex-col z-10 overflow-y-auto"
                 >
                   {/* Menu Top Bar with Clear Close Action */}
@@ -288,13 +335,37 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                       type="button"
                       aria-label="Close mobile menu"
                       onClick={() => setMenuOpen(false)}
-                      className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-xl bg-[#161E2E] border border-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] bb-btn-interactive cursor-pointer"
+                      className="inline-flex items-center justify-center min-w-[40px] min-h-[40px] rounded-xl bg-[#161E2E] border border-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] bb-btn-interactive cursor-pointer"
                     >
                       <X className="w-4 h-4" />
                     </button>
                   </div>
 
                   <div className="p-4 space-y-5 flex-1 pb-24">
+                    {/* Quick Search Input Inside Mobile Menu */}
+                    <form
+                      onSubmit={handleMobileSearchSubmit}
+                      className="flex items-center gap-2"
+                    >
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input
+                          type="search"
+                          aria-label="Search rentals from menu"
+                          value={searchQuery}
+                          onChange={(e) => onSearchQueryChange(e.target.value)}
+                          placeholder="Search rentals..."
+                          className="w-full min-h-[40px] pl-9 pr-3 py-1.5 bg-[#161E2E] border border-white/[0.08] rounded-xl text-xs text-[#F8FAFC] placeholder:text-[#64748B] focus:outline-none focus:border-[#8B5CF6]"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="min-h-[40px] px-3.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold bb-glow-button cursor-pointer shrink-0"
+                      >
+                        Go
+                      </button>
+                    </form>
+
                     {/* Account Summary Card (if signed in) */}
                     {userProfile && (
                       <div className="p-3.5 rounded-xl bg-[#161E2E] border border-white/[0.08] space-y-1">
@@ -381,19 +452,15 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                       </div>
                     )}
 
-                    {/* Primary Mobile Navigation Links */}
+                    {/* Primary Marketplace Actions */}
                     <div className="space-y-1">
                       <p className="px-3 text-[11px] font-semibold uppercase tracking-wider text-[#64748B] mb-1.5">
-                        Navigation
+                        Marketplace
                       </p>
 
                       <button
                         type="button"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          onNavigate({ page: 'home' });
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
+                        onClick={() => handleMobileNavigate({ page: 'home' })}
                         className={`w-full min-h-[44px] text-left px-3 py-2.5 rounded-xl text-sm font-medium flex items-center gap-3 bb-btn-interactive cursor-pointer ${
                           currentRoute.page === 'home'
                             ? 'bg-[#1D293B] text-[#F8FAFC]'
@@ -406,11 +473,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
 
                       <button
                         type="button"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          onNavigate({ page: 'browse' });
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
+                        onClick={() => handleMobileNavigate({ page: 'browse' })}
                         className={`w-full min-h-[44px] text-left px-3 py-2.5 rounded-xl text-sm font-medium flex items-center gap-3 bb-btn-interactive cursor-pointer ${
                           currentRoute.page === 'browse'
                             ? 'bg-[#1D293B] text-[#F8FAFC]'
@@ -418,24 +481,18 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                         }`}
                       >
                         <Compass className="w-4 h-4 text-[#8B5CF6] shrink-0" />
-                        <span>Explore Rentals</span>
+                        <span>Browse Rentals</span>
                       </button>
 
                       <button
                         type="button"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          onNavigate({ page: 'how-it-works' });
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                        className={`w-full min-h-[44px] text-left px-3 py-2.5 rounded-xl text-sm font-medium flex items-center gap-3 bb-btn-interactive cursor-pointer ${
-                          currentRoute.page === 'how-it-works'
-                            ? 'bg-[#1D293B] text-[#F8FAFC]'
-                            : 'text-[#F8FAFC] hover:bg-[#161E2E]'
-                        }`}
+                        onClick={() =>
+                          handleMobileNavigate({ page: 'list-item' })
+                        }
+                        className="w-full min-h-[44px] text-left px-3 py-2.5 rounded-xl text-sm font-semibold text-[#8B5CF6] hover:bg-[#161E2E] flex items-center gap-3 bb-btn-interactive cursor-pointer"
                       >
-                        <HelpCircle className="w-4 h-4 text-[#8B5CF6] shrink-0" />
-                        <span>How It Works</span>
+                        <Plus className="w-4 h-4 shrink-0" />
+                        <span>List Your Item</span>
                       </button>
 
                       <button
@@ -448,7 +505,12 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                       >
                         <span className="inline-flex items-center gap-3">
                           <MapPin className="w-4 h-4 text-[#8B5CF6] shrink-0" />
-                          <span>Location: {selectedCity === 'All' ? 'All India' : selectedCity}</span>
+                          <span>
+                            Location:{' '}
+                            {selectedCity === 'All'
+                              ? 'All India'
+                              : selectedCity}
+                          </span>
                         </span>
                         <span className="text-xs text-[#8B5CF6]">Change</span>
                       </button>
@@ -477,19 +539,28 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                           </span>
                         )}
                       </button>
+                    </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          onNavigate({ page: 'list-item' });
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                        className="w-full min-h-[44px] text-left px-3 py-2.5 rounded-xl text-sm font-semibold text-[#8B5CF6] hover:bg-[#161E2E] flex items-center gap-3 bb-btn-interactive cursor-pointer"
-                      >
-                        <Plus className="w-4 h-4 shrink-0" />
-                        <span>List Your Item</span>
-                      </button>
+                    {/* Platform & Support Links */}
+                    <div className="pt-4 border-t border-white/[0.08] space-y-1">
+                      <p className="px-3 text-[11px] font-semibold uppercase tracking-wider text-[#64748B] mb-1.5">
+                        Platform &amp; Help
+                      </p>
+                      {SECONDARY_INFO_NAV_ITEMS.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleMobileNavigate(item.route)}
+                          className={`w-full min-h-[40px] text-left px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-3 bb-btn-interactive cursor-pointer ${
+                            currentRoute.page === item.route.page
+                              ? 'bg-[#1D293B] text-[#F8FAFC]'
+                              : 'text-[#CBD5E1] hover:text-[#F8FAFC] hover:bg-[#161E2E]'
+                          }`}
+                        >
+                          {MOBILE_SECONDARY_ICONS[item.id]}
+                          <span>{item.label}</span>
+                        </button>
+                      ))}
                     </div>
 
                     {/* Separator + Categories */}
@@ -502,11 +573,12 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                           <button
                             key={category}
                             type="button"
-                            onClick={() => {
-                              setMenuOpen(false);
-                              onNavigate({ page: 'browse', category });
-                              window.scrollTo({ top: 0, behavior: 'smooth' });
-                            }}
+                            onClick={() =>
+                              handleMobileNavigate({
+                                page: 'browse',
+                                category,
+                              })
+                            }
                             className="min-h-[36px] px-3 py-1.5 rounded-lg bg-[#161E2E] hover:bg-[#1D293B] border border-white/[0.08] text-xs text-[#94A3B8] hover:text-[#F8FAFC] bb-btn-interactive cursor-pointer"
                           >
                             {category}
@@ -523,11 +595,9 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
 
                       <button
                         type="button"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          onNavigate({ page: 'dashboard' });
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
+                        onClick={() =>
+                          handleMobileNavigate({ page: 'dashboard' })
+                        }
                         className="w-full min-h-[44px] text-left px-3 py-2.5 rounded-xl text-sm font-medium text-[#F8FAFC] hover:bg-[#161E2E] flex items-center gap-3 bb-btn-interactive cursor-pointer"
                       >
                         <LayoutDashboard className="w-4 h-4 text-[#8B5CF6] shrink-0" />
@@ -536,11 +606,9 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
 
                       <button
                         type="button"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          onNavigate({ page: 'profile' });
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
+                        onClick={() =>
+                          handleMobileNavigate({ page: 'profile' })
+                        }
                         className="w-full min-h-[44px] text-left px-3 py-2.5 rounded-xl text-sm font-medium text-[#F8FAFC] hover:bg-[#161E2E] flex items-center gap-3 bb-btn-interactive cursor-pointer"
                       >
                         <User className="w-4 h-4 text-[#94A3B8] shrink-0" />
@@ -555,10 +623,9 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                       {userProfile && hasVerifiedAdminAccess && (
                         <button
                           type="button"
-                          onClick={() => {
-                            setMenuOpen(false);
-                            onNavigate({ page: 'admin' });
-                          }}
+                          onClick={() =>
+                            handleMobileNavigate({ page: 'admin' })
+                          }
                           className="w-full min-h-[44px] text-left px-3 py-2.5 rounded-xl text-sm font-semibold text-[#F8FAFC] bg-[#8B5CF6]/15 border border-[#8B5CF6]/35 flex items-center justify-between gap-2 bb-btn-interactive cursor-pointer mt-1"
                         >
                           <span className="inline-flex items-center gap-2.5">
@@ -604,20 +671,18 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                         <div className="grid grid-cols-2 gap-2 pt-3">
                           <button
                             type="button"
-                            onClick={() => {
-                              setMenuOpen(false);
-                              onNavigate({ page: 'login' });
-                            }}
+                            onClick={() =>
+                              handleMobileNavigate({ page: 'login' })
+                            }
                             className="min-h-[44px] py-2.5 rounded-xl bg-[#161E2E] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-semibold text-[#F8FAFC] bb-btn-interactive cursor-pointer"
                           >
-                            Log In
+                            Login
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              setMenuOpen(false);
-                              onNavigate({ page: 'signup' });
-                            }}
+                            onClick={() =>
+                              handleMobileNavigate({ page: 'signup' })
+                            }
                             className="min-h-[44px] py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-xs font-semibold text-white bb-glow-button cursor-pointer"
                           >
                             Sign Up
