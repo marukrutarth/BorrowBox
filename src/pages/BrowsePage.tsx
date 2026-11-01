@@ -936,27 +936,55 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
               <Search className="w-6 h-6" />
             </div>
             <h3 className="text-lg sm:text-xl font-bold text-white">
-              No matching rental equipment found
+              {selectedCity !== 'All'
+                ? `No items are currently available in ${selectedCity}`
+                : 'No matching rental equipment found'}
             </h3>
             <p className="text-xs sm:text-sm text-[#94A3B8] max-w-md mx-auto leading-relaxed">
-              We couldn&apos;t find gear matching your active filters. Try expanding your search
-              or switching to All India to see nearby alternatives.
+              {selectedCity !== 'All' ? (
+                <>
+                  <strong className="text-white">{selectedCity}</strong> is a supported BorrowBox
+                  launch city, and there are currently no active rental listings matching your
+                  filters here. Be the first owner to list equipment in {selectedCity} or browse
+                  across India.
+                </>
+              ) : (
+                <>
+                  We couldn&apos;t find gear matching your active filters. Try expanding your search
+                  or resetting your filters.
+                </>
+              )}
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              {selectedCity !== 'All' && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate({ page: 'list-item' })}
+                  className="px-5 py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold cursor-pointer"
+                >
+                  List an Item in {selectedCity}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleFullReset}
-                className="px-5 py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold cursor-pointer"
+                className={`px-5 py-2.5 rounded-xl text-white text-xs font-semibold cursor-pointer ${
+                  selectedCity !== 'All'
+                    ? 'bg-white/[0.08] hover:bg-white/[0.12]'
+                    : 'bg-[#8B5CF6] hover:bg-[#7C3AED]'
+                }`}
               >
                 Reset All Filters
               </button>
-              <button
-                type="button"
-                onClick={() => onCityChange('All')}
-                className="px-4 py-2.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] text-white text-xs font-semibold cursor-pointer"
-              >
-                Browse All India
-              </button>
+              {selectedCity !== 'All' && (
+                <button
+                  type="button"
+                  onClick={() => onCityChange('All')}
+                  className="px-4 py-2.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] text-white text-xs font-semibold cursor-pointer"
+                >
+                  Browse All India
+                </button>
+              )}
             </div>
           </div>
         ) : (
@@ -1025,7 +1053,7 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
                   >
                     <span className="flex items-center gap-2">
                       <MapPin className="w-3.5 h-3.5 text-[#8B5CF6]" />
-                      <span>{selectedCity !== 'All' ? selectedCity : 'Select Your City'}</span>
+                      <span>{selectedCity !== 'All' ? selectedCity : 'Select your city'}</span>
                     </span>
                     <span className="text-[11px] text-[#8B5CF6]">Change →</span>
                   </button>
@@ -1187,6 +1215,7 @@ export const BrowsePage: React.FC<BrowsePageProps> = ({
         isOpen={isCityModalOpen}
         onClose={() => setIsCityModalOpen(false)}
         selectedCity={selectedCity !== 'All' ? selectedCity : null}
+        listings={listings}
         onSelectCity={(city) => {
           if (!city) {
             onCityChange('All');

@@ -11,7 +11,11 @@ import {
   RentVsBuyResult,
   ValidationResult,
 } from '../types/marketplace';
-import { INDIA_STATES_AND_UTS } from '../data/indiaLocations';
+import {
+  INDIA_STATES_AND_UTS,
+  areCitiesEquivalent,
+  resolveCanonicalCityName,
+} from '../data/indiaLocations';
 
 export const ALL_CATEGORIES: CategoryName[] = [
   'Electronics',
@@ -263,7 +267,7 @@ export function computePersonalizedRecommendations(
     if (
       options.userCity &&
       options.userCity !== 'All' &&
-      item.city === options.userCity
+      areCitiesEquivalent(item.city, options.userCity)
     ) {
       score += 25;
     }
@@ -321,7 +325,7 @@ export function filterAndSortListings(
     if (category !== 'All' && item.category !== category) {
       return false;
     }
-    if (city !== 'All' && item.city !== city) {
+    if (city !== 'All' && !areCitiesEquivalent(item.city, city)) {
       return false;
     }
     if (
@@ -348,6 +352,7 @@ export function filterAndSortListings(
     }
 
     if (normalizedQuery.length > 0) {
+      const canonicalQueryCity = resolveCanonicalCityName(normalizedQuery).toLowerCase();
       const searchable = [
         item.title,
         item.category,
@@ -359,7 +364,10 @@ export function filterAndSortListings(
       ]
         .join(' ')
         .toLowerCase();
-      if (!searchable.includes(normalizedQuery)) {
+      if (
+        !searchable.includes(normalizedQuery) &&
+        (!canonicalQueryCity || !searchable.includes(canonicalQueryCity))
+      ) {
         return false;
       }
     }
@@ -584,7 +592,8 @@ export function validateAuthInput(
       errors.phone = 'Enter a valid 10-digit Indian mobile number.';
     }
 
-    if (!input.city || !ALL_CITIES.includes(input.city as IndianCity)) {
+    const canonicalSignupCity = resolveCanonicalCityName(input.city || '');
+    if (!canonicalSignupCity || !ALL_CITIES.includes(canonicalSignupCity as IndianCity)) {
       errors.city = 'Select your primary city.';
     }
 
@@ -625,7 +634,8 @@ export function validateProfileUpdateInput(
     errors.name = `Name must be between ${BLUEPRINT_LIMITS.NAME_MIN} and ${BLUEPRINT_LIMITS.NAME_MAX} characters.`;
   }
 
-  if (!input.city || !ALL_CITIES.includes(input.city)) {
+  const canonicalProfileCity = resolveCanonicalCityName(input.city || '');
+  if (!canonicalProfileCity || !ALL_CITIES.includes(canonicalProfileCity as IndianCity)) {
     errors.city = 'Select a valid Indian city.';
   }
 

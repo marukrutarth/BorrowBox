@@ -16,8 +16,12 @@ import {
 } from './rentalLogic';
 import {
   INDIA_STATES_AND_UTS,
+  areCitiesEquivalent,
+  getActiveListingCountForCity,
   getLocalitiesForCity,
   getStateForCity,
+  resolveCanonicalCityName,
+  searchIndianCities,
 } from '../data/indiaLocations';
 import { ProductListing } from '../types/marketplace';
 
@@ -336,7 +340,7 @@ test('calculateRentVsBuy and computePersonalizedRecommendations return accurate 
   assert.equal(recs[0].id, 'item-1');
 });
 
-test('INDIA_STATES_AND_UTS covers all 28 states and 8 union territories with unique ALL_CITIES', () => {
+test('INDIA_STATES_AND_UTS covers all 28 states, 8 UTs, and all specified initial launch cities with zero duplicates', () => {
   const states = INDIA_STATES_AND_UTS.filter((s) => s.type === 'state');
   const uts = INDIA_STATES_AND_UTS.filter((s) => s.type === 'ut');
   assert.equal(states.length, 28, 'Must include all 28 Indian states');
@@ -346,18 +350,119 @@ test('INDIA_STATES_AND_UTS covers all 28 states and 8 union territories with uni
   // Verify ALL_CITIES has zero duplicate keys
   const uniqueCities = new Set(ALL_CITIES);
   assert.equal(uniqueCities.size, ALL_CITIES.length, 'ALL_CITIES must not contain duplicate city names');
-  assert.ok(ALL_CITIES.length > 200, 'Should support over 200 recognised Indian cities and towns');
+  assert.ok(ALL_CITIES.length >= 100 && ALL_CITIES.length <= 200, 'Should focus on major metropolitan cities and popular urban centres');
 
-  // Verify helper lookups across metro and non-metro cities
-  assert.equal(getStateForCity('Jaipur'), 'Rajasthan');
-  assert.equal(getStateForCity('Kochi'), 'Kerala');
-  assert.equal(getStateForCity('Guwahati'), 'Assam');
-  const gujarat = INDIA_STATES_AND_UTS.find((s) => s.name === 'Gujarat');
-  assert.ok(gujarat?.cities.includes('Ahmedabad'));
-  assert.ok(getLocalitiesForCity('Jaipur').length >= 3);
+  // Verify every initial launch city from North, West, South, East, and Central India is included and mapped to the right State/UT
+  const expectedLaunchCitiesByState: Array<[string, string]> = [
+    // North India
+    ['Delhi', 'Delhi NCR'],
+    ['Gurugram', 'Haryana'],
+    ['Noida', 'Uttar Pradesh'],
+    ['Chandigarh', 'Chandigarh'],
+    ['Jaipur', 'Rajasthan'],
+    ['Lucknow', 'Uttar Pradesh'],
+    ['Kanpur', 'Uttar Pradesh'],
+    ['Agra', 'Uttar Pradesh'],
+    ['Dehradun', 'Uttarakhand'],
+    ['Amritsar', 'Punjab'],
+    ['Ludhiana', 'Punjab'],
+    ['Jammu', 'Jammu and Kashmir'],
+    ['Srinagar', 'Jammu and Kashmir'],
+    // West India
+    ['Ahmedabad', 'Gujarat'],
+    ['Surat', 'Gujarat'],
+    ['Vadodara', 'Gujarat'],
+    ['Rajkot', 'Gujarat'],
+    ['Mumbai', 'Maharashtra'],
+    ['Pune', 'Maharashtra'],
+    ['Nagpur', 'Maharashtra'],
+    ['Nashik', 'Maharashtra'],
+    ['Thane', 'Maharashtra'],
+    ['Navi Mumbai', 'Maharashtra'],
+    ['Indore', 'Madhya Pradesh'],
+    ['Bhopal', 'Madhya Pradesh'],
+    ['Udaipur', 'Rajasthan'],
+    ['Jodhpur', 'Rajasthan'],
+    // South India
+    ['Bengaluru', 'Karnataka'],
+    ['Chennai', 'Tamil Nadu'],
+    ['Hyderabad', 'Telangana'],
+    ['Kochi', 'Kerala'],
+    ['Thiruvananthapuram', 'Kerala'],
+    ['Kozhikode', 'Kerala'],
+    ['Coimbatore', 'Tamil Nadu'],
+    ['Madurai', 'Tamil Nadu'],
+    ['Mysuru', 'Karnataka'],
+    ['Mangaluru', 'Karnataka'],
+    ['Visakhapatnam', 'Andhra Pradesh'],
+    ['Vijayawada', 'Andhra Pradesh'],
+    ['Tirupati', 'Andhra Pradesh'],
+    // East India
+    ['Kolkata', 'West Bengal'],
+    ['Bhubaneswar', 'Odisha'],
+    ['Cuttack', 'Odisha'],
+    ['Patna', 'Bihar'],
+    ['Ranchi', 'Jharkhand'],
+    ['Jamshedpur', 'Jharkhand'],
+    ['Dhanbad', 'Jharkhand'],
+    ['Guwahati', 'Assam'],
+    ['Siliguri', 'West Bengal'],
+    // Central India
+    ['Raipur', 'Chhattisgarh'],
+    ['Bilaspur', 'Chhattisgarh'],
+    ['Gwalior', 'Madhya Pradesh'],
+    ['Jabalpur', 'Madhya Pradesh'],
+    ['Ujjain', 'Madhya Pradesh'],
+  ];
+
+  for (const [city, expectedState] of expectedLaunchCitiesByState) {
+    assert.ok(ALL_CITIES.includes(city), `Launch city ${city} must be in ALL_CITIES`);
+    assert.equal(
+      getStateForCity(city),
+      expectedState,
+      `Launch city ${city} must belong to ${expectedState}`
+    );
+    assert.ok(
+      getLocalitiesForCity(city).length >= 3,
+      `Launch city ${city} must have curated localities`
+    );
+  }
 });
 
-test('validateAuthInput and validateProfileUpdateInput accept non-metro Indian cities across states and UTs', () => {
+test('Location alias resolution, Delhi/Delhi NCR compatibility, and active listing count distinction work accurately', () => {
+  // Alternative spellings and historical names
+  assert.equal(resolveCanonicalCityName('Bangalore'), 'Bengaluru');
+  assert.equal(resolveCanonicalCityName('Gurgaon'), 'Gurugram');
+  assert.equal(resolveCanonicalCityName('Bombay'), 'Mumbai');
+  assert.equal(resolveCanonicalCityName('Calcutta'), 'Kolkata');
+  assert.equal(resolveCanonicalCityName('Madras'), 'Chennai');
+  assert.equal(resolveCanonicalCityName('Cochin'), 'Kochi');
+  assert.equal(resolveCanonicalCityName('Trivandrum'), 'Thiruvananthapuram');
+  assert.equal(resolveCanonicalCityName('Calicut'), 'Kozhikode');
+  assert.equal(resolveCanonicalCityName('Mysore'), 'Mysuru');
+  assert.equal(resolveCanonicalCityName('Mangalore'), 'Mangaluru');
+  assert.equal(resolveCanonicalCityName('Vizag'), 'Visakhapatnam');
+  assert.equal(resolveCanonicalCityName('Baroda'), 'Vadodara');
+
+  // Search by alternative names finds canonical launch city
+  assert.ok(searchIndianCities('Bangalore').some((r) => r.city === 'Bengaluru'));
+  assert.ok(searchIndianCities('Gurgaon').some((r) => r.city === 'Gurugram'));
+  assert.ok(searchIndianCities('Vizag').some((r) => r.city === 'Visakhapatnam'));
+  assert.ok(searchIndianCities('Trivandrum').some((r) => r.city === 'Thiruvananthapuram'));
+
+  // Existing Delhi NCR records and Delhi launch city are equivalent
+  assert.equal(areCitiesEquivalent('Delhi', 'Delhi NCR'), true);
+  assert.equal(areCitiesEquivalent('Bangalore', 'Bengaluru'), true);
+  assert.equal(areCitiesEquivalent('Jaipur', 'Udaipur'), false);
+
+  // Distinguish between cities with active listings and supported cities with 0 active listings
+  assert.equal(getActiveListingCountForCity('Bengaluru', sampleListings), 2);
+  assert.equal(getActiveListingCountForCity('Mumbai', sampleListings), 1);
+  assert.equal(getActiveListingCountForCity('Raipur', sampleListings), 0);
+  assert.equal(getActiveListingCountForCity('Bhubaneswar', sampleListings), 0);
+});
+
+test('validateAuthInput and validateProfileUpdateInput accept non-metro Indian cities and resolve aliases', () => {
   const jaipurSignup = validateAuthInput('signup', {
     fullName: 'Aarav Verma',
     email: 'aarav@example.in',
@@ -367,6 +472,16 @@ test('validateAuthInput and validateProfileUpdateInput accept non-metro Indian c
     password: 'securePassword123',
   });
   assert.equal(jaipurSignup.valid, true);
+
+  const gurgaonSignup = validateAuthInput('signup', {
+    fullName: 'Neha Kapoor',
+    email: 'neha@example.in',
+    phone: '9876543210',
+    city: 'Gurgaon',
+    neighborhood: 'DLF Cyber City',
+    password: 'securePassword123',
+  });
+  assert.equal(gurgaonSignup.valid, true);
 
   const kochiProfile = validateProfileUpdateInput({
     name: 'Meera Nair',
@@ -378,5 +493,6 @@ test('validateAuthInput and validateProfileUpdateInput accept non-metro Indian c
   });
   assert.equal(kochiProfile.valid, true);
 });
+
 
 

@@ -2,18 +2,17 @@ import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Check,
-  ChevronRight,
   Globe2,
   MapPin,
   Search,
-  Sparkles,
   X,
 } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
+import { motion } from 'motion/react';
 import {
   INDIA_STATES_AND_UTS,
   MAJOR_METROS,
-  StateLocation,
+  areCitiesEquivalent,
+  getActiveListingCountForCity,
   searchIndianCities,
 } from '../../data/indiaLocations';
 
@@ -22,6 +21,7 @@ export interface CitySelectorModalProps {
   onClose: () => void;
   selectedCity: string | null;
   onSelectCity: (city: string | null) => void; // null represents 'All India' or unselected
+  listings?: ReadonlyArray<{ city: string; status?: string }>;
 }
 
 export const CitySelectorModal: React.FC<CitySelectorModalProps> = ({
@@ -29,11 +29,12 @@ export const CitySelectorModal: React.FC<CitySelectorModalProps> = ({
   onClose,
   selectedCity,
   onSelectCity,
+  listings = [],
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeStateTab, setActiveStateTab] = useState<string>('Karnataka');
 
-  // Search results if user is typing in search bar
+  // Search results if user is typing in search bar (supports canonical names & historical aliases)
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
     return searchIndianCities(searchQuery, 24);
@@ -57,6 +58,32 @@ export const CitySelectorModal: React.FC<CitySelectorModalProps> = ({
   const handlePickAllIndia = () => {
     onSelectCity(null);
     onClose();
+  };
+
+  const renderCityAvailabilityLabel = (cityName: string) => {
+    if (!listings || listings.length === 0) {
+      return (
+        <p className="text-[10px] text-[#94A3B8]">
+          Supported launch city
+        </p>
+      );
+    }
+    const activeCount = getActiveListingCountForCity(cityName, listings);
+    if (activeCount > 0) {
+      return (
+        <p className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+          <span>
+            {activeCount} active {activeCount === 1 ? 'listing' : 'listings'}
+          </span>
+        </p>
+      );
+    }
+    return (
+      <p className="text-[10px] text-[#94A3B8]">
+        Supported city · No active listings yet
+      </p>
+    );
   };
 
   if (typeof document === 'undefined') return null;
@@ -97,7 +124,7 @@ export const CitySelectorModal: React.FC<CitySelectorModalProps> = ({
               {selectedCity ? `City: ${selectedCity}` : 'Select Your City'}
             </h2>
             <p className="text-xs text-[#94A3B8]">
-              BorrowBox never uses automatic browser geolocation. Explicitly pick your home hub or browse all India.
+              BorrowBox never uses automatic IP or browser geolocation. Choose your city or browse all India.
             </p>
           </div>
 
@@ -119,7 +146,7 @@ export const CitySelectorModal: React.FC<CitySelectorModalProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by city or state name (e.g., Bengaluru, Mumbai, Pune, Kochi, Patna)..."
+              placeholder="Search city, state, or alias (e.g., Bengaluru, Bangalore, Delhi, Gurugram, Vizag, Kochi)..."
               className="w-full pl-10 pr-9 py-2.5 bg-[#0B0F19] border border-white/[0.12] focus:border-[#8B5CF6] rounded-xl text-sm text-[#F8FAFC] placeholder:text-[#64748B] focus:outline-none transition-colors"
               autoFocus
             />
@@ -136,7 +163,7 @@ export const CitySelectorModal: React.FC<CitySelectorModalProps> = ({
 
           {/* Quick All-India Discovery Switcher */}
           <div className="flex items-center justify-between gap-3 text-xs">
-            <span className="text-[#94A3B8]">Want to see listings across all cities?</span>
+            <span className="text-[#94A3B8]">Want to view listings across all cities?</span>
             <button
               type="button"
               onClick={handlePickAllIndia}
@@ -157,7 +184,7 @@ export const CitySelectorModal: React.FC<CitySelectorModalProps> = ({
         {!searchQuery && (
           <div className="px-5 py-3 bg-[#0E1526] border-b border-white/[0.06] flex items-center gap-2 overflow-x-auto no-scrollbar">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B] shrink-0">
-              Popular Metros:
+              Popular Cities:
             </span>
             {MAJOR_METROS.map((metro) => (
               <button
@@ -194,7 +221,9 @@ export const CitySelectorModal: React.FC<CitySelectorModalProps> = ({
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                   {searchResults.map(({ city, state }) => {
-                    const isSelected = selectedCity === city;
+                    const isSelected = Boolean(
+                      selectedCity && areCitiesEquivalent(selectedCity, city)
+                    );
                     return (
                       <button
                         key={`${state}-${city}`}
@@ -206,9 +235,12 @@ export const CitySelectorModal: React.FC<CitySelectorModalProps> = ({
                             : 'bg-[#161E2E] border-white/[0.06] text-[#F8FAFC] hover:border-white/[0.16] hover:bg-[#1D293B]'
                         }`}
                       >
-                        <div>
+                        <div className="min-w-0">
                           <p className="text-sm font-semibold truncate">{city}</p>
                           <p className="text-[11px] text-[#94A3B8] truncate">{state}</p>
+                          <div className="mt-0.5">
+                            {renderCityAvailabilityLabel(city)}
+                          </div>
                         </div>
                         {isSelected && <Check className="w-4 h-4 text-[#8B5CF6] shrink-0" />}
                       </button>
@@ -259,7 +291,7 @@ export const CitySelectorModal: React.FC<CitySelectorModalProps> = ({
                       {selectedStateObj.name}
                     </h3>
                     <p className="text-xs text-[#94A3B8]">
-                      {selectedStateObj.type === 'ut' ? 'Union Territory' : 'State'} · {selectedStateObj.cities.length} cities
+                      {selectedStateObj.type === 'ut' ? 'Union Territory' : 'State'} · {selectedStateObj.cities.length} launch cities
                     </p>
                   </div>
                   <span className="text-[11px] text-[#64748B] font-mono">{selectedStateObj.code}</span>
@@ -267,7 +299,9 @@ export const CitySelectorModal: React.FC<CitySelectorModalProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {selectedStateObj.cities.map((city) => {
-                    const isSelected = selectedCity === city;
+                    const isSelected = Boolean(
+                      selectedCity && areCitiesEquivalent(selectedCity, city)
+                    );
                     return (
                       <button
                         key={city}
@@ -281,7 +315,7 @@ export const CitySelectorModal: React.FC<CitySelectorModalProps> = ({
                       >
                         <div className="min-w-0">
                           <p className="text-xs sm:text-sm font-semibold truncate">{city}</p>
-                          <p className="text-[10px] text-[#94A3B8]">Peer-to-peer available</p>
+                          {renderCityAvailabilityLabel(city)}
                         </div>
                         {isSelected && <Check className="w-3.5 h-3.5 text-[#8B5CF6] shrink-0" />}
                       </button>
@@ -297,7 +331,12 @@ export const CitySelectorModal: React.FC<CitySelectorModalProps> = ({
         <div className="p-4 border-t border-white/[0.08] bg-[#0E1526] flex items-center justify-between text-xs text-[#94A3B8]">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span>Currently active: <strong className="text-white">{selectedCity || 'All India (National)'}</strong></span>
+            <span>
+              Selected location:{' '}
+              <strong className="text-white">
+                {selectedCity || 'Select your city (All India)'}
+              </strong>
+            </span>
           </div>
 
           <button

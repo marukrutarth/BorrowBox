@@ -1,7 +1,7 @@
 import React from 'react';
-import { ArrowRight, RefreshCw } from 'lucide-react';
+import { ArrowRight, Globe2, MapPin, Plus, RefreshCw } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ProductListing } from '../../types/marketplace';
+import { IndianCity, ProductListing } from '../../types/marketplace';
 import {
   SCROLL_VIEWPORT_CONFIG,
   sectionScrollRevealVariants,
@@ -10,20 +10,26 @@ import { ProductCard } from '../products/ProductCard';
 
 export interface FeaturedProductsProps {
   listings: ProductListing[];
+  selectedCity?: IndianCity | 'All';
   isLoading?: boolean;
   error?: string | null;
   onRetry?: () => void;
   onSelectListing: (listingId: string) => void;
   onViewAll: () => void;
+  onBrowseAllIndia?: () => void;
+  onListInCity?: () => void;
 }
 
 export const FeaturedProducts: React.FC<FeaturedProductsProps> = ({
   listings,
+  selectedCity = 'All',
   isLoading = false,
   error = null,
   onRetry,
   onSelectListing,
   onViewAll,
+  onBrowseAllIndia,
+  onListInCity,
 }) => {
   const prefersReducedMotion = useReducedMotion();
 
@@ -40,10 +46,14 @@ export const FeaturedProducts: React.FC<FeaturedProductsProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4">
           <div>
             <h2 className="text-xl sm:text-2xl font-bold text-[#F8FAFC] tracking-tight">
-              Popular Rentals
+              {selectedCity !== 'All'
+                ? `Popular Rentals in ${selectedCity}`
+                : 'Popular Rentals'}
             </h2>
             <p className="text-xs sm:text-sm text-[#94A3B8] mt-1">
-              Discover items people are renting.
+              {selectedCity !== 'All'
+                ? `Verified peer-to-peer equipment currently listed in ${selectedCity}.`
+                : 'Discover items people are renting across India.'}
             </p>
           </div>
 
@@ -88,6 +98,40 @@ export const FeaturedProducts: React.FC<FeaturedProductsProps> = ({
                 </div>
               </div>
             ))}
+          </div>
+        ) : listings.length === 0 ? (
+          <div className="rounded-2xl bg-[#161E2E] border border-white/[0.08] p-8 sm:p-10 text-center space-y-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-[#8B5CF6]/15 border border-[#8B5CF6]/30 flex items-center justify-center text-[#A78BFA] mx-auto">
+              <MapPin className="w-5 h-5" />
+            </div>
+            <h3 className="text-base sm:text-lg font-bold text-[#F8FAFC]">
+              No items are currently available in {selectedCity}
+            </h3>
+            <p className="text-xs sm:text-sm text-[#94A3B8] max-w-md mx-auto leading-relaxed">
+              {selectedCity} is a supported BorrowBox launch city, but there are no active rental listings published here yet. Be the first owner to list gear in {selectedCity} or browse available equipment across India.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+              {onListInCity && (
+                <button
+                  type="button"
+                  onClick={onListInCity}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>List an Item in {selectedCity}</span>
+                </button>
+              )}
+              {onBrowseAllIndia && (
+                <button
+                  type="button"
+                  onClick={onBrowseAllIndia}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-[#F8FAFC] text-xs font-semibold cursor-pointer"
+                >
+                  <Globe2 className="w-3.5 h-3.5 text-[#8B5CF6]" />
+                  <span>Browse All India</span>
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           /* Desktop: 4-column grid | Mobile (350px+): compact 2-column grid | Ultra-narrow (320px): 1-column */

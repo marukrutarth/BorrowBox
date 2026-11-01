@@ -74,7 +74,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
               className="w-full bg-transparent text-xs sm:text-sm font-medium text-[#F8FAFC] focus:outline-none cursor-pointer truncate"
             >
               <option value="All" className="bg-[#111827]">
-                All India
+                Select your city
               </option>
               {ALL_CITIES.map((city) => (
                 <option key={city} value={city} className="bg-[#111827]">

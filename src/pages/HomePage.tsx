@@ -36,23 +36,25 @@ export const HomePage: React.FC<HomePageProps> = ({
 }) => {
   const [isCityModalOpen, setIsCityModalOpen] = useState(false);
 
-  // Active listings filtered by selected city (falling back to all active listings if city has none)
+  // Strictly filter active listings by the selected city without substituting fake inventory
   const activeCityListings = useMemo(() => {
-    const filtered = filterAndSortListings(listings, {
+    return filterAndSortListings(listings, {
       city: selectedCity,
       sortBy: 'featured',
     });
-    return filtered.length > 0
-      ? filtered
-      : filterAndSortListings(listings, { sortBy: 'featured' });
   }, [listings, selectedCity]);
+
+  // All active listings across India (for Hero visual & Lender spotlight fallback)
+  const allActiveListings = useMemo(() => {
+    return filterAndSortListings(listings, { sortBy: 'featured' });
+  }, [listings]);
 
   // Hero visual product
   const heroFeaturedListing = useMemo(() => {
-    return activeCityListings[0] || listings[0];
-  }, [activeCityListings, listings]);
+    return activeCityListings[0] || allActiveListings[0] || listings[0];
+  }, [activeCityListings, allActiveListings, listings]);
 
-  // 2. Featured Rental Items (Top 4 featured products)
+  // 2. Featured Rental Items (Top 4 featured products strictly in selectedCity or All India)
   const popularRentals = useMemo(() => {
     return activeCityListings.slice(0, 4);
   }, [activeCityListings]);
@@ -60,9 +62,10 @@ export const HomePage: React.FC<HomePageProps> = ({
   // 3. Recently Listed Items (Sorted by recency, distinct from featured)
   const recentlyAddedListings = useMemo(() => {
     const popularIds = new Set(popularRentals.map((item) => item.id));
-    const allActive = listings.filter((item) => item.status !== 'archived');
+    const sourcePool =
+      selectedCity !== 'All' ? activeCityListings : allActiveListings;
 
-    const sortedByRecency = [...allActive].sort((a, b) => {
+    const sortedByRecency = [...sourcePool].sort((a, b) => {
       if (a.isDemoData !== b.isDemoData) {
         return a.isDemoData ? 1 : -1;
       }
@@ -75,13 +78,19 @@ export const HomePage: React.FC<HomePageProps> = ({
     if (distinct.length >= 4) {
       return distinct.slice(0, 4);
     }
-    return sortedByRecency.slice(0, 4);
-  }, [listings, popularRentals]);
+    return distinct;
+  }, [selectedCity, activeCityListings, allActiveListings, popularRentals]);
 
   // Become a Lender spotlight item
   const lenderSpotlightListing = useMemo(() => {
-    return activeCityListings[1] || activeCityListings[0] || listings[0];
-  }, [activeCityListings, listings]);
+    return (
+      activeCityListings[1] ||
+      activeCityListings[0] ||
+      allActiveListings[1] ||
+      allActiveListings[0] ||
+      listings[0]
+    );
+  }, [activeCityListings, allActiveListings, listings]);
 
   const handleSelectListing = (listingId: string) => {
     onNavigate({ page: 'details', itemId: listingId });
@@ -138,11 +147,17 @@ export const HomePage: React.FC<HomePageProps> = ({
       {/* 2. Featured Rental Items */}
       <FeaturedProducts
         listings={popularRentals}
+        selectedCity={selectedCity}
         isLoading={isLoadingListings}
         error={listingsError}
         onRetry={onRetryListings}
         onSelectListing={handleSelectListing}
         onViewAll={handleViewAll}
+        onBrowseAllIndia={() => onCityChange('All')}
+        onListInCity={() => {
+          onNavigate({ page: 'list-item' });
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
       />
 
       {/* 3. Recently Listed Items */}
@@ -169,6 +184,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         isOpen={isCityModalOpen}
         onClose={() => setIsCityModalOpen(false)}
         selectedCity={selectedCity !== 'All' ? selectedCity : null}
+        listings={listings}
         onSelectCity={(city) => {
           if (!city) {
             onCityChange('All');

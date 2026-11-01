@@ -340,7 +340,7 @@ export const DesktopHeader: React.FC<DesktopHeaderProps> = ({
                       className="w-full bg-transparent text-xs text-[#F8FAFC] focus:outline-none"
                     >
                       <option value="All" className="bg-[#111827]">
-                        All India
+                        Select your city
                       </option>
                       {ALL_CITIES.map((city) => (
                         <option key={city} value={city} className="bg-[#111827]">

@@ -95,8 +95,10 @@ import { PageRoute } from '../components/Navbar';
 import { AdminTicketsModule } from '../components/support/AdminTicketsModule';
 import {
   INDIA_STATES_AND_UTS,
+  areCitiesEquivalent,
   getStateForCity,
   getLocalitiesForCity,
+  resolveCanonicalCityName,
 } from '../data/indiaLocations';
 import { ALL_CITIES } from '../utils/rentalLogic';
 import {
@@ -1329,7 +1331,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       const userState = getStateForCity(u.city);
       if (userState !== adminStateFilter) return false;
     }
-    if (adminCityFilter !== 'all' && u.city !== adminCityFilter) {
+    if (adminCityFilter !== 'all' && !areCitiesEquivalent(u.city, adminCityFilter)) {
       return false;
     }
     if (adminLocalityFilter.trim()) {
@@ -1338,10 +1340,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     }
     if (userSearch.trim()) {
       const q = userSearch.trim().toLowerCase();
+      const canonicalSearchCity = resolveCanonicalCityName(q).toLowerCase();
       return (
         u.name.toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q) ||
         u.city.toLowerCase().includes(q) ||
+        (canonicalSearchCity !== q && u.city.toLowerCase().includes(canonicalSearchCity)) ||
         u.neighborhood.toLowerCase().includes(q) ||
         u.uid.toLowerCase().includes(q)
       );
@@ -1358,7 +1362,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       const itemState = getStateForCity(item.city);
       if (itemState !== adminStateFilter) return false;
     }
-    if (adminCityFilter !== 'all' && item.city !== adminCityFilter) {
+    if (adminCityFilter !== 'all' && !areCitiesEquivalent(item.city, adminCityFilter)) {
       return false;
     }
     if (adminLocalityFilter.trim()) {
@@ -1367,10 +1371,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     }
     if (productSearch.trim()) {
       const q = productSearch.trim().toLowerCase();
+      const canonicalSearchCity = resolveCanonicalCityName(q).toLowerCase();
       return (
         item.title.toLowerCase().includes(q) ||
         item.category.toLowerCase().includes(q) ||
         item.city.toLowerCase().includes(q) ||
+        (canonicalSearchCity !== q && item.city.toLowerCase().includes(canonicalSearchCity)) ||
         item.neighborhood.toLowerCase().includes(q) ||
         item.owner.name.toLowerCase().includes(q)
       );
@@ -1386,16 +1392,18 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       const bookingState = getStateForCity(b.listingCity);
       if (bookingState !== adminStateFilter) return false;
     }
-    if (adminCityFilter !== 'all' && b.listingCity !== adminCityFilter) {
+    if (adminCityFilter !== 'all' && !areCitiesEquivalent(b.listingCity, adminCityFilter)) {
       return false;
     }
     if (bookingSearch.trim()) {
       const q = bookingSearch.trim().toLowerCase();
+      const canonicalSearchCity = resolveCanonicalCityName(q).toLowerCase();
       return (
         b.listingTitle.toLowerCase().includes(q) ||
         b.borrowerName.toLowerCase().includes(q) ||
         b.ownerName.toLowerCase().includes(q) ||
         b.listingCity.toLowerCase().includes(q) ||
+        (canonicalSearchCity !== q && b.listingCity.toLowerCase().includes(canonicalSearchCity)) ||
         b.id.toLowerCase().includes(q)
       );
     }
@@ -1404,9 +1412,16 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
   const filteredReports = reports.filter((r) => {
     if (reportFilter !== 'all' && r.status !== reportFilter) return false;
-    if (adminCityFilter !== 'all') {
+    if (adminStateFilter !== 'all' || adminCityFilter !== 'all') {
       const targetListing = combinedListings.find((l) => l.id === r.targetId);
-      if (targetListing && targetListing.city !== adminCityFilter) return false;
+      if (targetListing) {
+        if (adminStateFilter !== 'all' && getStateForCity(targetListing.city) !== adminStateFilter) {
+          return false;
+        }
+        if (adminCityFilter !== 'all' && !areCitiesEquivalent(targetListing.city, adminCityFilter)) {
+          return false;
+        }
+      }
     }
     return true;
   });
@@ -1489,14 +1504,22 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           ))}
         </select>
 
-        {/* Locality Input */}
+        {/* Locality Input with City-Dependent Suggestions */}
         <input
           type="text"
+          list="admin-city-localities-list"
           value={adminLocalityFilter}
           onChange={(e) => setAdminLocalityFilter(e.target.value)}
           placeholder="Filter locality..."
           className="bg-[#161E2E] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-[#F8FAFC] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#8B5CF6] w-36 sm:w-44"
         />
+        {adminCityFilter !== 'all' && (
+          <datalist id="admin-city-localities-list">
+            {getLocalitiesForCity(adminCityFilter).map((loc) => (
+              <option key={loc} value={loc} />
+            ))}
+          </datalist>
+        )}
 
         {(adminStateFilter !== 'all' ||
           adminCityFilter !== 'all' ||
@@ -2663,6 +2686,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   </button>
                 </div>
 
+                {renderAdminLocationFilterBar(
+                  `Showing ${filteredReports.length} of ${reports.length} reports`
+                )}
+
                 {filteredReports.length === 0 ? (
                   <div className="p-8 rounded-2xl bg-[#161E2E] border border-white/[0.08] text-center space-y-2">
                     <Flag className="w-6 h-6 text-[#94A3B8] mx-auto" />
@@ -2949,6 +2976,16 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           {activeSection === 'analytics' &&
             hasAdminPermission(effectiveAdmin, 'analytics.view') && (
               <div className="space-y-6">
+                {renderAdminLocationFilterBar(
+                  `Analytics filtered for ${
+                    adminCityFilter !== 'all'
+                      ? adminCityFilter
+                      : adminStateFilter !== 'all'
+                      ? adminStateFilter
+                      : 'All India'
+                  }`
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="p-5 rounded-2xl bg-[#161E2E] border border-white/[0.08] space-y-4">
                     <h2 className="text-sm font-bold text-[#F8FAFC]">
@@ -2987,26 +3024,28 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                           { listings: number; users: number; state: string }
                         >();
 
-                        for (const item of combinedListings) {
+                        for (const item of filteredListings) {
                           if (!item.city) continue;
-                          const cur = cityStats.get(item.city) || {
+                          const canonicalCity = resolveCanonicalCityName(item.city);
+                          const cur = cityStats.get(canonicalCity) || {
                             listings: 0,
                             users: 0,
-                            state: getStateForCity(item.city) || 'India',
+                            state: getStateForCity(canonicalCity) || 'India',
                           };
                           cur.listings += 1;
-                          cityStats.set(item.city, cur);
+                          cityStats.set(canonicalCity, cur);
                         }
 
-                        for (const user of combinedUsers) {
+                        for (const user of filteredUsers) {
                           if (!user.city) continue;
-                          const cur = cityStats.get(user.city) || {
+                          const canonicalCity = resolveCanonicalCityName(user.city);
+                          const cur = cityStats.get(canonicalCity) || {
                             listings: 0,
                             users: 0,
-                            state: getStateForCity(user.city) || 'India',
+                            state: getStateForCity(canonicalCity) || 'India',
                           };
                           cur.users += 1;
-                          cityStats.set(user.city, cur);
+                          cityStats.set(canonicalCity, cur);
                         }
 
                         const entries = Array.from(cityStats.entries())
@@ -3020,12 +3059,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         if (entries.length === 0) {
                           return (
                             <div className="p-4 text-center text-xs text-[#94A3B8]">
-                              No active cities recorded yet.
+                              No active cities recorded for the selected filter.
                             </div>
                           );
                         }
 
-                        return entries.slice(0, 10).map((entry) => (
+                        return entries.slice(0, 12).map((entry) => (
                           <div
                             key={entry.cityName}
                             className="p-3 rounded-xl bg-[#111827] border border-white/[0.06] flex items-center justify-between text-xs"
@@ -3056,6 +3095,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           {activeSection === 'finance' &&
             hasAdminPermission(effectiveAdmin, 'finance.view') && (
               <div className="space-y-6">
+                {renderAdminLocationFilterBar(
+                  `Financial ledger across ${filteredBookings.length} bookings`
+                )}
+
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-[#161E2E] border border-white/[0.08]">
                   <div>
                     <h2 className="text-sm font-bold text-[#F8FAFC]">
