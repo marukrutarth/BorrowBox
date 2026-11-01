@@ -19,6 +19,9 @@ import { motion, useReducedMotion } from 'motion/react';
 import { PageRoute } from '../components/Navbar';
 import { PRODUCT_IMAGES } from '../assets/imageRegistry';
 import { BORROWBOX_TRANSPARENT_SYMBOL_ASSET_PATH } from '../utils/introAnimation';
+import { TEAM_MEMBERS, TEAM_PAGE_CONTENT } from '../data/teamMembers';
+import { TeamIntroduction } from '../components/about/TeamIntroduction';
+import { TeamScrollShowcase } from '../components/about/TeamScrollShowcase';
 
 interface AboutUsPageProps {
   onNavigate: (route: PageRoute) => void;
@@ -94,7 +97,7 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
   const prefersReducedMotion = useReducedMotion();
 
   return (
-    <div className="min-h-screen bg-[#0B0F19] text-[#F8FAFC] relative overflow-hidden">
+    <div className="min-h-screen bg-[#0B0F19] text-[#F8FAFC] relative overflow-x-clip">
       {/* Ambient Lighting */}
       <div
         className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[1200px] h-[400px] rounded-full bg-[#8B5CF6]/12 blur-[160px]"
@@ -438,7 +441,23 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
         </section>
 
         {/* =========================================================================
-            6. FINAL CALL TO ACTION
+            6. OUR TEAM SECTION
+           ========================================================================= */}
+        <section
+          id="our-team-section"
+          className="py-16 sm:py-24 border-b border-white/[0.08]"
+        >
+          <TeamIntroduction
+            eyebrow={TEAM_PAGE_CONTENT.intro.eyebrow}
+            heading={TEAM_PAGE_CONTENT.intro.heading}
+            description={TEAM_PAGE_CONTENT.intro.description}
+            headingTag="h2"
+          />
+          <TeamScrollShowcase members={TEAM_MEMBERS} />
+        </section>
+
+        {/* =========================================================================
+            7. FINAL CALL TO ACTION
            ========================================================================= */}
         <section className="py-16 sm:py-20 text-center">
           <div className="max-w-3xl mx-auto p-8 sm:p-12 rounded-3xl bg-gradient-to-b from-[#161E2E] to-[#111827] border border-white/[0.12] space-y-6 shadow-2xl relative overflow-hidden">

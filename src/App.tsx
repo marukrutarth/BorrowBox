@@ -1245,7 +1245,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0B0F19] text-[#F8FAFC] bb-ambient-canvas relative overflow-x-hidden">
+    <div className="min-h-screen flex flex-col bg-[#0B0F19] text-[#F8FAFC] bb-ambient-canvas relative overflow-x-clip">
       <BorrowBoxIntro
         isActive={isIntroActive}
         onComplete={() => {
@@ -1281,10 +1281,10 @@ export default function App() {
           <motion.div
             key={routeTransitionKey}
             initial={false}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{
-              duration: 0.34,
+              duration: 0.28,
               ease: [0.22, 1, 0.36, 1],
             }}
           >

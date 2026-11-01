@@ -17,17 +17,18 @@ export const FoundingTeam: React.FC<FoundingTeamProps> = ({
   return (
     <section
       aria-labelledby="founding-team-heading"
-      className="py-10 sm:py-14 lg:py-16 border-b border-white/[0.10]"
+      className="py-10 sm:py-14 border-b border-white/[0.08]"
     >
       <motion.div
-        initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1], delay: 0.28 }}
-        className="mb-7 sm:mb-9 flex flex-col sm:flex-row sm:items-end justify-between gap-3"
+        initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.3 }}
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        className="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-3"
       >
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#A78BFA] mb-1.5">
-            Core Leadership
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#A78BFA] mb-1.5">
+            Primary Leadership · 01–04
           </p>
           <h2
             id="founding-team-heading"
@@ -36,14 +37,13 @@ export const FoundingTeam: React.FC<FoundingTeamProps> = ({
             {sectionHeading}
           </h2>
         </div>
-        <p className="text-xs sm:text-sm text-[#9292AB] max-w-md">
-          Four co-founders shaping product strategy, design, marketplace
-          operations and growth.
+        <p className="text-xs sm:text-sm text-[#94A3B8] max-w-md">
+          Four co-founders establishing BorrowBox&apos;s marketplace vision,
+          community focus and everyday accessibility.
         </p>
       </motion.div>
 
-      {/* Desktop: 4 columns in a single balanced row; Tablet & Mobile: 2 columns */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
         {founders.map((founder, idx) => (
           <FounderCard key={founder.id} founder={founder} index={idx} />
         ))}

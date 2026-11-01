@@ -1,134 +1,91 @@
 import React from 'react';
-import { ArrowLeft } from 'lucide-react';
-import { motion, useReducedMotion } from 'motion/react';
+import { ArrowLeft, Compass } from 'lucide-react';
 import { PageRoute } from '../components/Navbar';
-import {
-  TEAM_PAGE_CONTENT,
-  getContributorMember,
-  getFounderMembers,
-  getGuideMember,
-} from '../data/teamMembers';
-import { ContributorProfile } from '../components/about/ContributorProfile';
-import { FoundingTeam } from '../components/about/FoundingTeam';
-import { GuideProfile } from '../components/about/GuideProfile';
+import { TEAM_MEMBERS, TEAM_PAGE_CONTENT } from '../data/teamMembers';
 import { TeamIntroduction } from '../components/about/TeamIntroduction';
+import { TeamScrollShowcase } from '../components/about/TeamScrollShowcase';
 
 export interface AboutProps {
   onNavigate: (route: PageRoute) => void;
 }
 
-const COSMIC_PARTICLES = [
-  { top: '8%', left: '14%', size: '2px', opacity: 0.45 },
-  { top: '16%', left: '84%', size: '2.5px', opacity: 0.55 },
-  { top: '29%', left: '7%', size: '1.5px', opacity: 0.35 },
-  { top: '44%', left: '92%', size: '2px', opacity: 0.4 },
-  { top: '63%', left: '11%', size: '2px', opacity: 0.35 },
-  { top: '78%', left: '88%', size: '2.5px', opacity: 0.45 },
-  { top: '91%', left: '22%', size: '1.5px', opacity: 0.3 },
-];
-
 export const About: React.FC<AboutProps> = ({ onNavigate }) => {
-  const prefersReducedMotion = useReducedMotion();
-  const guide = getGuideMember();
-  const founders = getFounderMembers();
-  const contributor = getContributorMember();
-
   return (
-    <div className="relative min-h-screen bg-[#05050B] text-[#F8FAFC] py-8 sm:py-12 lg:py-16 px-4 sm:px-6 lg:px-8 overflow-hidden">
-      {/* Outer Cosmic Purple Atmospheric Lighting */}
+    <div className="relative min-h-screen bg-[#0B0F19] text-[#F8FAFC] py-8 sm:py-12 lg:py-14 px-4 sm:px-6 lg:px-8 overflow-x-clip">
+      {/* Restrained Atmospheric Illumination */}
       <div
-        className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[920px] h-[420px] rounded-full bg-[#8B5CF6]/16 blur-[130px]"
+        className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[960px] h-[360px] rounded-full bg-[#8B5CF6]/10 blur-[140px]"
         aria-hidden="true"
       />
-      <div
-        className="pointer-events-none absolute bottom-0 left-1/2 -translate-x-1/2 w-[860px] h-[380px] rounded-full bg-[#A78BFA]/12 blur-[140px]"
-        aria-hidden="true"
-      />
-
-      {/* Very subtle cosmic light points */}
-      {COSMIC_PARTICLES.map((dot, idx) => (
-        <span
-          key={idx}
-          style={{
-            top: dot.top,
-            left: dot.left,
-            width: dot.size,
-            height: dot.size,
-            opacity: dot.opacity,
-          }}
-          className="pointer-events-none absolute rounded-full bg-[#D8B4FE] shadow-[0_0_8px_#A78BFA]"
-          aria-hidden="true"
-        />
-      ))}
 
       <div className="relative z-10 max-w-[1280px] mx-auto">
         {/* Top Back Navigation */}
-        <div className="mb-5 sm:mb-6 flex items-center justify-between">
+        <div className="mb-6 sm:mb-8 flex items-center justify-between">
           <button
             type="button"
             onClick={() => {
               onNavigate({ page: 'home' });
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className="inline-flex items-center gap-2 text-xs sm:text-sm font-medium text-[#9292AB] hover:text-[#F8FAFC] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 text-xs sm:text-sm font-medium text-[#94A3B8] hover:text-[#F8FAFC] transition-colors cursor-pointer"
           >
-            <ArrowLeft className="w-4 h-4 text-[#A78BFA]" />
+            <ArrowLeft className="w-4 h-4 text-[#8B5CF6]" />
             <span>Back to BorrowBox</span>
           </button>
 
-          <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-[#9292AB]">
-            BorrowBox · Editorial Dossier
+          <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-[#94A3B8]">
+            BorrowBox · Our Team
           </span>
         </div>
 
-        {/* Main Central Panel (#080817, 20px radius, thin lavender border, top & bottom ambient glow) */}
-        <motion.div
-          initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-          className="relative rounded-[20px] bg-[#080817] border border-white/[0.10] shadow-[0_32px_90px_rgba(0,0,0,0.85),0_0_0_1px_rgba(167,139,250,0.08)] overflow-hidden px-5 sm:px-8 md:px-12 lg:px-16 py-8 sm:py-12 lg:py-16"
-        >
-          {/* Top and Bottom Ambient Panel Illumination */}
-          <div
-            className="pointer-events-none absolute -top-28 left-1/2 -translate-x-1/2 w-[75%] h-56 rounded-full bg-gradient-to-b from-[#8B5CF6]/20 via-[#A78BFA]/8 to-transparent blur-3xl"
-            aria-hidden="true"
-          />
-          <div
-            className="pointer-events-none absolute top-0 inset-x-12 h-px bg-gradient-to-r from-transparent via-[#D8B4FE]/45 to-transparent"
-            aria-hidden="true"
-          />
-          <div
-            className="pointer-events-none absolute -bottom-28 left-1/2 -translate-x-1/2 w-[70%] h-56 rounded-full bg-gradient-to-t from-[#8B5CF6]/18 via-[#A78BFA]/6 to-transparent blur-3xl"
-            aria-hidden="true"
-          />
-          <div
-            className="pointer-events-none absolute bottom-0 inset-x-12 h-px bg-gradient-to-r from-transparent via-[#A78BFA]/35 to-transparent"
-            aria-hidden="true"
+        {/* Main Team Container (#111827 secondary background, rgba(255,255,255,0.08) border) */}
+        <div className="relative rounded-2xl bg-[#111827]/70 border border-white/[0.08] px-5 sm:px-8 md:px-10 lg:px-12 py-8 sm:py-10 lg:py-12">
+          <TeamIntroduction
+            eyebrow={TEAM_PAGE_CONTENT.intro.eyebrow}
+            heading={TEAM_PAGE_CONTENT.intro.heading}
+            description={TEAM_PAGE_CONTENT.intro.description}
           />
 
-          <div className="relative z-10">
-            <TeamIntroduction
-              eyebrow={TEAM_PAGE_CONTENT.intro.eyebrow}
-              heading={TEAM_PAGE_CONTENT.intro.heading}
-              description={TEAM_PAGE_CONTENT.intro.description}
-            />
+          <TeamScrollShowcase members={TEAM_MEMBERS} />
 
-            <GuideProfile
-              sectionHeading={TEAM_PAGE_CONTENT.sections.guideHeading}
-              guide={guide}
-            />
+          {/* Restrained Bottom Navigation Footer */}
+          <div className="mt-12 pt-8 border-t border-white/[0.08] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-[#F8FAFC]">
+                Built for everyday access across India
+              </p>
+              <p className="text-xs text-[#94A3B8]">
+                Explore verified peer-to-peer rentals or read more about the
+                BorrowBox mission.
+              </p>
+            </div>
 
-            <FoundingTeam
-              sectionHeading={TEAM_PAGE_CONTENT.sections.foundersHeading}
-              founders={founders}
-            />
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  onNavigate({ page: 'about' });
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#161E2E] hover:bg-[#1D293B] border border-white/[0.08] text-xs font-semibold text-[#F8FAFC] transition-colors cursor-pointer"
+              >
+                <span>About BorrowBox</span>
+              </button>
 
-            <ContributorProfile
-              sectionHeading={TEAM_PAGE_CONTENT.sections.contributorHeading}
-              contributor={contributor}
-            />
+              <button
+                type="button"
+                onClick={() => {
+                  onNavigate({ page: 'browse' });
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <Compass className="w-4 h-4" />
+                <span>Explore Marketplace</span>
+              </button>
+            </div>
           </div>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

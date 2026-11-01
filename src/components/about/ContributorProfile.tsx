@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { TeamMember } from '../../data/teamMembers';
+import { TeamPortrait } from './TeamPortrait';
 
 export interface ContributorProfileProps {
   sectionHeading: string;
@@ -11,82 +12,75 @@ export const ContributorProfile: React.FC<ContributorProfileProps> = ({
   sectionHeading,
   contributor,
 }) => {
-  const [imageError, setImageError] = useState(false);
   const prefersReducedMotion = useReducedMotion();
 
   return (
     <motion.section
       aria-labelledby="contributor-section-heading"
       initial={prefersReducedMotion ? false : { opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.52, ease: [0.22, 1, 0.36, 1], delay: 0.55 }}
-      className="pt-10 sm:pt-14 lg:pt-16"
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.25 }}
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+      className="pt-10 sm:pt-14"
     >
-      <div className="mb-6 sm:mb-7">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#A78BFA] mb-1.5">
-          Engineering &amp; Architecture
+      <div className="mb-6 sm:mb-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#A78BFA] mb-1">
+          Platform Engineering &amp; Architecture · 06
         </p>
         <h2
           id="contributor-section-heading"
-          className="text-xl sm:text-2xl font-bold tracking-tight text-[#F8FAFC]"
+          className="text-2xl sm:text-3xl font-bold tracking-tight text-[#F8FAFC]"
         >
           {sectionHeading}
         </h2>
       </div>
 
-      <motion.article
-        whileHover={
-          prefersReducedMotion
-            ? undefined
-            : {
-                y: -3,
-                transition: { duration: 0.24, ease: 'easeOut' },
-              }
-        }
-        className="group relative rounded-2xl bg-[#17172D]/90 hover:bg-[#20203A]/85 border border-white/[0.10] hover:border-[#A78BFA]/35 transition-colors duration-250 p-5 sm:p-6 lg:p-7 max-w-3xl"
+      <article
+        data-testid={`team-card-${contributor.id}`}
+        className="group relative rounded-2xl bg-[#161E2E] border border-white/[0.08] hover:border-[#8B5CF6]/40 transition-colors duration-300 overflow-hidden"
       >
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 sm:gap-6">
-          {/* Smaller, dignified 4:5 portrait */}
-          <div className="relative aspect-[4/5] w-28 sm:w-32 shrink-0 rounded-xl overflow-hidden bg-[#20203A] border border-white/[0.10]">
-            {!imageError ? (
-              <img
-                src={contributor.image}
-                alt={contributor.name}
-                onError={() => setImageError(true)}
-                className="w-full h-full object-cover object-center transition-transform duration-250 ease-out group-hover:scale-[1.03]"
+        <div
+          className="pointer-events-none absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-[#A78BFA] via-[#8B5CF6] to-transparent"
+          aria-hidden="true"
+        />
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-8 p-5 sm:p-7 lg:p-9 items-center">
+          <div className="md:col-span-5 lg:col-span-4">
+            <div className="relative aspect-[4/5] w-full max-w-[320px] mx-auto md:mx-0 rounded-xl overflow-hidden bg-[#111827] border border-white/[0.08]">
+              <TeamPortrait
+                member={contributor}
+                className="w-full h-full"
+                imageClassName="transition-transform duration-500 ease-out group-hover:scale-[1.03]"
               />
-            ) : (
-              <div
-                className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-[#20203A] to-[#17172D] p-2 text-center"
-                role="img"
-                aria-label={contributor.name}
-              >
-                <span className="text-xs font-semibold text-[#D8B4FE]">TC</span>
-              </div>
-            )}
-            <div
-              className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#080817]/60 via-transparent to-transparent"
-              aria-hidden="true"
-            />
+            </div>
           </div>
 
-          {/* Contributor Text Details */}
-          <div className="space-y-2.5">
-            <div className="space-y-0.5">
-              <h3 className="text-lg sm:text-xl font-semibold tracking-tight text-[#F8FAFC]">
+          <div className="md:col-span-7 lg:col-span-8 space-y-5">
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#A78BFA]">
+                {contributor.role}
+              </p>
+              <h3 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#F8FAFC] leading-tight">
                 {contributor.name}
               </h3>
-              <p className="text-xs sm:text-sm font-medium text-[#D8B4FE]">
-                {contributor.designation}
-              </p>
             </div>
 
-            <p className="text-xs sm:text-sm text-[#9292AB] leading-relaxed max-w-xl">
+            <div className="h-px w-16 bg-[#8B5CF6]/50" aria-hidden="true" />
+
+            <p className="text-sm sm:text-base text-[#94A3B8] leading-relaxed max-w-2xl">
               {contributor.bio}
             </p>
+
+            <div className="pt-3 border-t border-white/[0.08] flex flex-wrap items-center justify-between gap-4 text-xs text-[#94A3B8]">
+              <div>
+                <span className="text-[#F8FAFC] font-medium">Scope: </span>
+                Architecture, Frontend, Backend &amp; Database Integrations
+              </div>
+              <div className="font-mono text-[#A78BFA]">06 / 06</div>
+            </div>
           </div>
         </div>
-      </motion.article>
+      </article>
     </motion.section>
   );
 };
